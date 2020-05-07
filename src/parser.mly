@@ -144,7 +144,7 @@ stms1:
 
 stm:
   | anyId modop exp
-    { Assign($1, ModAdd, $3) } // x += e
+    { Assign($1, $2, $3) } // x (+,-,^)= e
   | IF exp THEN stms1 ELSE stms1 FI exp
     { Conditional($2, $4, $6, $8) } // if e then s else s fi e
   | FROM exp DO stms1 LOOP stms1 UNTIL exp
