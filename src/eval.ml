@@ -1,6 +1,7 @@
 open Syntax
 open Value
-
+open Invert
+   
 (*環境：変数名とロケーションのリストを拡張する関数*)
 let ext_envs env x v = (x,v) :: env
 
