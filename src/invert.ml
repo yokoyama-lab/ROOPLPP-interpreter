@@ -1,5 +1,4 @@
 open Syntax
-open Value
 
 let rec invert = function
   | [] -> []

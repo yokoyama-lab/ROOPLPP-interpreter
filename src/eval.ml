@@ -2,12 +2,12 @@ open Syntax
 open Value
 open Invert
    
-(*環境：変数名とロケーションのリストを拡張する関数*)
-let ext_envs env x v = (x,v) :: env
+(*環境：変数名とロケーションのリストを拡張する関数(同じ識別子がある場合古いものを削除し、新しいものを追加する*)
+let ext_envs env x v = (x,v) :: (List.remove_assoc x env)
 
 (*ストア：ロケーションと値のリストを拡張する関数*)
-let ext_st st x v = (x,v) :: st
-
+let ext_st st x v =  (x,v) :: (List.remove_assoc x st)
+                     
 (*環境に指定されたメソッドのフィールドを使われていないロケーションに追加する。eval_stateのOBJBLOKで使用*)
 let rec ext_env_field f n =
    match f with
@@ -262,7 +262,7 @@ let rec eval_state stml env map st =
        (*LocalCALL*)
        | LocalCall(mid,objl) ->
           let locs = lookup_envs "this" env in
-          let IntVal(locs2) = lookup_st locs st in
+          let LocsVal(locs2) = lookup_st locs st in
           let ObjVal(id, envf)  = lookup_st locs2 st in
           let aidl = List.map fst objl in (*aidl = 実引数のidリスト*)
           let (f, meth) = lookup_map id map in
@@ -274,24 +274,45 @@ let rec eval_state stml env map st =
           let st2 = eval_state mstml env4 map st in
           eval_state tl env map st2
        (*LocalUNCALL*)
-       (*| LocalUncall(mid, objl) ->考え中*)
-       (*CALLOBJ*)
-       | ObjectCall((id, n), mid, objl) ->
-          let IntVal(locs) = lookup_st (lookup_envs id env) st in
-          let ObjVal(id, envf) = lookup_st locs st in
-          let aidl = List.map fst objl in
+       | LocalUncall(mid, objl) ->
+          let locs = lookup_envs "this" env in
+          let LocsVal(locs2) = lookup_st locs st in
+          let ObjVal(id, envf)  = lookup_st locs2 st in
+          let aidl = List.map fst objl in (*aidl = 実引数のidリスト*)
           let (f, meth) = lookup_map id map in
           let MDecl(mid, para, mstml) = lookup_meth mid meth in
           let pidl = id_list para in
           let env2 = ext_envs envf "this" locs in
           let env3 = ext_env_meth env envf pidl aidl in
           let env4 = env2 @ env3 in
-          let st2 = eval_state mstml env4 map st in
+          let st2 = eval_state (invert mstml) env4 map st in
+          eval_state tl env map st2
+       (*CALLOBJ*)
+       | ObjectCall((id, n), mid, objl) ->
+          let locs = lookup_envs id env in
+          let LocsVal(locs2) = lookup_st locs st in
+          let ObjVal(id2, envf) = lookup_st locs2 st in
+          let aidl = List.map fst objl in
+          let (f, meth) = lookup_map id2 map in
+          let MDecl(mid, para, mstml) = lookup_meth mid meth in
+          let pidl = id_list para in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs in
+          let st2 = eval_state mstml env3 map st in
           eval_state tl env map st2
       (*UNCALLOBJ*)
-(*       | ObjectUncall(obj, mid, objl) ->
-          let st2 = eval_state [ObjectCall(obj, mid, objl)] env map st in
-          eval_state tl env map st2 考え中*)
+       | ObjectUncall((id, n), mid, objl) ->
+          let locs = lookup_envs id env in
+          let LocsVal(locs2) = lookup_st locs st in
+          let ObjVal(id2, envf) = lookup_st locs2 st in
+          let aidl = List.map fst objl in
+          let (f, meth) = lookup_map id2 map in
+          let MDecl(mid, para, mstml) = lookup_meth mid meth in
+          let pidl = id_list para in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs in
+          let st2 = eval_state (invert mstml) env3 map st in
+          eval_state tl env map st2
        (*OBJBLOCK*)
        | ObjectBlock(tid, id, stml) ->
           let (fl, ml) = lookup_map tid map in
@@ -299,7 +320,7 @@ let rec eval_state stml env map st =
           let envf = ext_env_field fl (List.length st + 3)(*a1*) in
           let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
           let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) (*l'->(c,γ')*) in
-          let st4 = ext_st st3 (lookup_envs id env2) (LocsVal(List.length st + 2)) (*r->l'*) in
+          let st4 = ext_st st3 (lookup_envs id env2) (LocsVal(List.length st + 1)) (*r->l'*) in
           let st5 = eval_state stml env2 map st4 in
           let st6 = ext_st_zero st5 (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
           eval_state tl env map st6
@@ -313,7 +334,7 @@ let rec eval_state stml env map st =
           let st4 = ext_st st3 locs (LocsVal(List.length st + 1)) in
           eval_state tl env map st4
        (*OBJDELETE*)
-       (*考え中（inverterが必要かも)       | ObjectDestruction(tid, (id, None)->*)
+       (*| ObjectDestruction(tid, (id, None))-> *)
        (*ARRNEW*)
        | ArrayConstruction((tid, e), id) ->
           let IntVal(n) = eval_exp e env st in
@@ -322,7 +343,7 @@ let rec eval_state stml env map st =
           let st3 = ext_st_zero st2 (List.length st2 + 1) ((List.length st2 + 1) + n) in
           eval_state tl env map st3
        (*ARRDELETE*)
-       (*考え中       | ArrayDestruction((tid, e), id) ->*)
+       (*| ArrayDestruction((tid, e), id) -> *)
        (*COPY*)
        | CopyReference(dt, (id1, None), (id2, None)) ->
           let locs1 = lookup_envs id1 env in
@@ -342,11 +363,19 @@ let rec eval_state stml env map st =
           eval_state tl env map st4 
      end
 let eval_prog (Prog(cl)) =
+  (*マップ生成*)
   let map = gen_map cl in
+  (*mainメソッドを含んでいるクラスidとメソッドの文を取得*)
   let (mid, mainstml) = lookup_class "main" map in
+  (*mainメソッドを含んでいるクラスのフィールドを取得*)
   let (field, _) = lookup_map mid map in
+  (*フィールドを識別子のみのリストに変換*)
   let fid = id_list field in
+  (*フィールドから環境を生成*)
   let env = gen_env fid in
+  (*環境からストアを生成*)
   let st = gen_st env (ObjVal(mid, env)) in
+  (*mainメソッドの処理を実行*)
   let st2 = eval_state mainstml env map st in
-  gen_result env st2
+  (*結果を生成*)
+  List.remove_assoc "this" (gen_result env st2)
