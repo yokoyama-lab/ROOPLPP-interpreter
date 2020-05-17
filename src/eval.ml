@@ -193,10 +193,20 @@ let gen_st env1 objval =
 
 (*結果を生成する関数：eval_progでのみ使用*)
 let rec gen_result env st =
+  let rec gen_result_vec vec st f n =
+    match vec with
+    | [] -> []
+    | l :: tl -> (f ^ "[" ^ (string_of_int n) ^ "]", lookup_st l st) :: (gen_result_vec tl st f (n + 1))
+  in
   match env with
   | [] -> []
-  | (f, locs) :: tl -> let v = lookup_st locs st in
-                       (f, v) :: (gen_result tl st)
+  | (f, locs) :: tl ->
+     let v = lookup_st locs st in
+     begin
+       match v with
+       | LocsVec(vec) -> (gen_result_vec vec st f 0) @ (gen_result tl st)
+       | _ -> (f, v) :: (gen_result tl st)
+     end
                        
 (*eval_expを簡潔にするための関数
 第一引数に演算子、第２第３引数にvalue型を受け取りIntValを返す。　*)
@@ -248,8 +258,8 @@ let rec eval_exp exp env st =
        | Bor  -> bin_op (lor)
        | And  -> comp_op (&&)
        | Or   -> comp_op (||)
-       | Lt   -> rel_op (>)
-       | Gt   -> rel_op (<)
+       | Lt   -> rel_op (<)
+       | Gt   -> rel_op (>)
        | Eq   -> rel_op (=)
        | Ne   -> rel_op (<>)
        | Le   -> rel_op (<=)
