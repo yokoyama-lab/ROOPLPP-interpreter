@@ -1,4 +1,5 @@
 open Syntax ;;
+open Print
 
 let parse str =
   Parser.main Lexer.token

@@ -60,19 +60,22 @@ let rec lookup_map id map =
 let rec lookup_class id1 map =
   let rec lookup_class_2 id2 ml =
     match ml with
-    | MDecl(mid, paral, stml) :: tl2 -> if mid = id2 then Some(stml)
-                                        else lookup_class_2 id2 tl2 
+    | MDecl(mid, paral, stml) :: tl2 ->
+       if mid = id2 then Some(stml)
+       else lookup_class_2 id2 tl2 
     | [] -> None
   in
   match map with
-  | (cid, (fl, ml)) :: tl1 -> let result =  (lookup_class_2 id1 ml) in
-                              if result = None
-                              then lookup_class id1 tl1
-                              else
-                                begin
-                                  match result with
-                                  | Some(stm) -> (cid, stm)
-                                end
+  | (cid, (fl, ml)) :: tl1 ->
+     let result =  (lookup_class_2 id1 ml) in
+     if result = None
+     then lookup_class id1 tl1
+     else
+       begin
+         match result with
+         | Some(stm) -> (cid, stm)
+         | _ -> failwith "error in lookup_class"
+       end
   | [] -> failwith ("error, not found")
 
 (*ロケーションのベクトルから指定されたインデックスのロケーションを返す（添字は0から）*)
@@ -252,6 +255,7 @@ let rec eval_exp exp env st =
        | Le   -> rel_op (<=)
        | Ge   -> rel_op (>=)
      in f b (eval_exp e1 env st) (eval_exp e2 env st)
+
       
 (*文statementを評価する関数。
 第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
@@ -315,21 +319,25 @@ let rec eval_state stml env map st =
           let st3 = ext_st st2 locsy2 v1 in
           eval_state tl env map st3
        | Loop(e1, stml1, stml2, e2) ->
+          let rec eval_loop (e1, stml1, stml2, e2) env map st =
+            (*LOOPREC*)
+            if (eval_exp e2 env st) = IntVal(0) then
+              let st2 = eval_state stml2 env map st in
+              if(eval_exp e1 env st2) = IntVal(0) then
+                let st3 = eval_state stml1 env map st2 in
+                eval_loop (e1, stml1, stml2, e2) env map st3
+              else failwith "error in LOOPREC"
+             (*LOOPBASE*)
+            else if (eval_exp e2 env st) <> IntVal(0) then
+              st
+            else failwith "error in LOOPBASE"
+          in
           (* LOOPMAIN *)
           if (eval_exp e1 env st) <> IntVal(0) then
             let st2 = eval_state stml1 env map st in
-            eval_state stml env map st2
-          (*LOOPREC*)
-          else if (eval_exp e2 env st) = IntVal(0) then
-            let st2 = eval_state stml2 env map st in
-            if(eval_exp e1 env st2) = IntVal(0) then
-              let st3 = eval_state stml1 env map st2 in
-              eval_state stml env map st3
-            else failwith "error in LOOPREC"
-          (*LOOPBASE*)
-          else if (eval_exp e2 env st) <> IntVal(0) then
-            eval_state tl env map st
-          else failwith "error in LOOPBASE"
+            let st3 = eval_loop (e1, stml1, stml2, e2) env map st2 in
+            eval_state tl env map st3
+          else failwith "error in LOOPMAIN"
        | Conditional(e1, stml1, stml2, e2) ->
           (*IFTRUE*)
           if (eval_exp e1 env st) <> IntVal(0) then
@@ -445,7 +453,6 @@ let rec eval_state stml env map st =
           eval_state tl env map st2
        (*UNCOPY*)
        | UncopyReference(dt, (id1, None), (id2, None)) ->
-          let locs1 = lookup_envs id1 env in
           let locs2 = lookup_envs id2 env in
           let st2 = List.remove_assoc locs2 st in
           eval_state tl env map st2

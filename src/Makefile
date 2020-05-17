@@ -2,8 +2,8 @@
 # Makefile
 #
 
-SRC= syntax.ml value.ml inver.ml eval.ml parser.mly lexer.mll main.ml
-COMPONENT= syntax.ml value.ml invert.ml eval.ml parser.mli parser.ml lexer.ml main.ml
+SRC= syntax.ml value.ml inver.ml eval.ml print.ml parser.mly lexer.mll main.ml
+COMPONENT= syntax.ml value.ml invert.ml eval.ml print.ml parser.mli parser.ml lexer.ml main.ml
 TARGET= test
 
 all:	$(TARGET)
