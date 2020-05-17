@@ -167,13 +167,13 @@ let rec map_method clist1 cl =
      
 (*マップを生成する関数*)     
 let gen_map clist =
-let rec en_map clist1 clist2 =
+let rec gen_map2 clist1 clist2 =
   match clist2 with
   | [] -> []
   | cl :: tl ->
-     (lookup_cid cl, (map_field clist1 cl, map_method clist1 cl)) :: (en_map clist1 tl)
+     (lookup_cid cl, (map_field clist1 cl, map_method clist1 cl)) :: (gen_map2 clist1 tl)
 in
-en_map clist clist
+gen_map2 clist clist
 
 (*mainメソッドがあるクラスのフィールドから環境を生成する関数　eval_progでのみ使用*)
 let gen_env fid1 : env =
