@@ -43,7 +43,7 @@ let rec ext_env_meth env envf pidl aidl =
   | pid :: ptl, aid :: atl ->
      let aid2 = lookup_envs aid env in
      ext_envs (ext_env_meth env envf ptl atl) pid aid2
-  | _, _ -> failwith "error"
+  | _, _ -> failwith "error in ext_env_meth"
 
 
 (*メソッドのリストから指定したメソッド名のメソッドを返す関数*)
@@ -54,7 +54,7 @@ let rec lookup_meth x meth =
 (*マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
 let rec lookup_map id map =
   try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith "error"
+  with Not_found -> failwith "error in lookup_map"
 
 (*マップのリストから指定されたメソッド名を含んでいるクラス名とそのメソッドのstatementのタプルを返す*)
 let rec lookup_class id1 map =
@@ -79,8 +79,8 @@ let rec lookup_class id1 map =
 let rec lookup_vec index vec =
     begin
       match vec with
-      | [] -> failwith "error"
-      | l :: tl -> if index <> (-1) then lookup_vec (index - 1) tl
+      | [] -> failwith "error in lookup_vec"
+      | l :: tl -> if index <> 0 then lookup_vec (index - 1) tl
                    else l
     end
   
@@ -97,7 +97,7 @@ let rec gen_map clist =
   match clist with
   | [] -> []
   | CDecl(id, None, fl, ml) :: tl -> ext_map (gen_map tl) id (fl, ml)
-  | _ -> failwith "error"
+  | _ -> failwith "error in gen_map"
     
 (*mainメソッドがあるクラスのフィールドから環境を生成する関数　eval_progでのみ使用*)
 let gen_env fid1 : env =
@@ -222,13 +222,28 @@ let rec eval_state stml env map st =
           let w2 = bin_op (f op) w v2 in
           let st2 = ext_st st locs2 w2 in
           eval_state tl env map st2
-     (*SWPVAR*)
-     | Swap((x1, None),(x2, None)) ->
-        let v1 = lookup_st (lookup_envs x1 env) st in
-        let v2 = lookup_st (lookup_envs x2 env) st in
-        let st2 = ext_st st (lookup_envs x2 env) v1 in
-        let st3 = ext_st st2 (lookup_envs x1 env) v2 in
-        eval_state tl env map st3
+       (*SWPVAR*)
+       | Swap((x1, None),(x2, None)) ->
+          let v1 = lookup_st (lookup_envs x1 env) st in
+          let v2 = lookup_st (lookup_envs x2 env) st in
+          let st2 = ext_st st (lookup_envs x2 env) v1 in
+          let st3 = ext_st st2 (lookup_envs x1 env) v2 in
+          eval_state tl env map st3
+       (*SWAPARRAYVAR*)
+       | Swap((x, Some(e1)), (y, Some(e2))) ->
+          let IntVal(x_index) = eval_exp e1 env st in
+          let locsx1 = lookup_envs x env in
+          let LocsVec(locsvecx) = lookup_st locsx1 st in
+          let locsx2 = lookup_vec x_index locsvecx in
+          let v1 = lookup_st locsx2 st in
+          let IntVal(y_index) = eval_exp e2 env st in
+          let locsy1 = lookup_envs y env in
+          let LocsVec(locsvecy) = lookup_st locsy1 st in
+          let locsy2 = lookup_vec y_index locsvecy in
+          let v2 = lookup_st locsy2 st in
+          let st2 = ext_st st locsx2 v2 in
+          let st3 = ext_st st2 locsy2 v1 in
+          eval_state tl env map st3
        | Loop(e1, stml1, stml2, e2) ->
           (* LOOPMAIN *)
           if (eval_exp e1 env st) <> IntVal(0) then
@@ -240,25 +255,25 @@ let rec eval_state stml env map st =
             if(eval_exp e1 env st2) = IntVal(0) then
               let st3 = eval_state stml1 env map st2 in
               eval_state stml env map st3
-            else failwith "error"
+            else failwith "error in LOOPREC"
           (*LOOPBASE*)
           else if (eval_exp e2 env st) <> IntVal(0) then
             eval_state tl env map st
-          else failwith "error"
+          else failwith "error in LOOPBASE"
        | Conditional(e1, stml1, stml2, e2) ->
           (*IFTRUE*)
           if (eval_exp e1 env st) <> IntVal(0) then
             let st2 = eval_state stml1 env map st in
             if (eval_exp e2 env st2) <> IntVal(0) then
               eval_state tl env map st2
-            else failwith "error"
+            else failwith "error in IFTRUE"
           (*IFFALSE*)
           else if(eval_exp e1 env st) = IntVal(0) then
             let st2 = eval_state stml2 env map st in
             if (eval_exp e2 env st2) = IntVal(0) then
               eval_state tl env map st2
-            else failwith "error"
-          else failwith "error"
+            else failwith "error in IFFALSE A"
+          else failwith "error in IFFALSE B"
        (*LocalCALL*)
        | LocalCall(mid,objl) ->
           let locs = lookup_envs "this" env in
@@ -268,10 +283,9 @@ let rec eval_state stml env map st =
           let (f, meth) = lookup_map id map in
           let MDecl(mid, para, mstml) = lookup_meth mid meth in
           let pidl = id_list para in
-          let env2 = ext_envs envf "this" locs in
-          let env3 = ext_env_meth env envf pidl aidl in
-          let env4 = env2 @ env3 in
-          let st2 = eval_state mstml env4 map st in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs in
+          let st2 = eval_state mstml env3 map st in
           eval_state tl env map st2
        (*LocalUNCALL*)
        | LocalUncall(mid, objl) ->
@@ -282,13 +296,12 @@ let rec eval_state stml env map st =
           let (f, meth) = lookup_map id map in
           let MDecl(mid, para, mstml) = lookup_meth mid meth in
           let pidl = id_list para in
-          let env2 = ext_envs envf "this" locs in
-          let env3 = ext_env_meth env envf pidl aidl in
-          let env4 = env2 @ env3 in
-          let st2 = eval_state (invert mstml) env4 map st in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs in
+          let st2 = eval_state (invert mstml) env3 map st in
           eval_state tl env map st2
        (*CALLOBJ*)
-       | ObjectCall((id, n), mid, objl) ->
+       | ObjectCall((id, _), mid, objl) ->
           let locs = lookup_envs id env in
           let LocsVal(locs2) = lookup_st locs st in
           let ObjVal(id2, envf) = lookup_st locs2 st in
@@ -301,7 +314,7 @@ let rec eval_state stml env map st =
           let st2 = eval_state mstml env3 map st in
           eval_state tl env map st2
       (*UNCALLOBJ*)
-       | ObjectUncall((id, n), mid, objl) ->
+       | ObjectUncall((id, _), mid, objl) ->
           let locs = lookup_envs id env in
           let LocsVal(locs2) = lookup_st locs st in
           let ObjVal(id2, envf) = lookup_st locs2 st in
@@ -327,23 +340,24 @@ let rec eval_state stml env map st =
        (*OBJNEW*)
        | ObjectConstruction(tid, (id, None)) ->
           let (fl, ml) = lookup_map tid map in
-          let locs = lookup_envs id env in
-          let envf = ext_env_field fl (List.length st + 2)(*l1*) in
-          let st2 = ext_st_zero st (List.length st + 2) ((List.length st + 2) + (List.length fl)) in
+          let env2 = ext_envs env id (List.length st + 2)(*r*) in
+          let locs = lookup_envs id env2 in
+          let envf = ext_env_field fl (List.length st + 3)(*l1*) in
+          let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
           let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) in
           let st4 = ext_st st3 locs (LocsVal(List.length st + 1)) in
-          eval_state tl env map st4
+          eval_state tl env2 map st4
        (*OBJDELETE*)
-       (*| ObjectDestruction(tid, (id, None))-> *)
+       | ObjectDestruction(tid, (id, None))-> st
        (*ARRNEW*)
        | ArrayConstruction((tid, e), id) ->
           let IntVal(n) = eval_exp e env st in
           let locs = lookup_envs id env in
-          let st2 = ext_st st locs (LocsVec(gen_locsvec n (List.length st + 2))) in
+          let st2 = ext_st st locs (LocsVec(gen_locsvec n (List.length st + 1))) in
           let st3 = ext_st_zero st2 (List.length st2 + 1) ((List.length st2 + 1) + n) in
           eval_state tl env map st3
        (*ARRDELETE*)
-       (*| ArrayDestruction((tid, e), id) -> *)
+       | ArrayDestruction((tid, e), id) -> st
        (*COPY*)
        | CopyReference(dt, (id1, None), (id2, None)) ->
           let locs1 = lookup_envs id1 env in
@@ -377,5 +391,5 @@ let eval_prog (Prog(cl)) =
   let st = gen_st env (ObjVal(mid, env)) in
   (*mainメソッドの処理を実行*)
   let st2 = eval_state mainstml env map st in
-  (*結果を生成*)
+  (*結果を生成(mainメソッドを含んでいるクラスのフィールドとそれに対応する値の組を返す)*)
   List.remove_assoc "this" (gen_result env st2)
