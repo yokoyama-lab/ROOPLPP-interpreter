@@ -102,12 +102,6 @@ let rec delete_arr st vec =
 let rec gen_locsvec n locs =
   if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
   else []
-            
-(*let rec gen_map clist = 旧マップ生成関数　使用しない 一応残しておく
-  match clist with
-  | [] -> []
-  | CDecl(id, None, fl, ml) :: tl -> ext_map (gen_map tl) id (fl, ml)
-  | _ -> failwith "error in gen_map"*)
 
 (*クラスからidを取り出す関数 gen_mapで使用*)
 let lookup_cid (CDecl(id, _, _, _)) = id
