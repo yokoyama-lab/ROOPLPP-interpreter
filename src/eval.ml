@@ -103,13 +103,78 @@ let rec gen_locsvec n locs =
   if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
   else []
             
-(*マップを生成する関数：クラスリストを受け取り、マップを返す eval_progでのみ使用*)
-let rec gen_map clist =
+(*let rec gen_map clist = 旧マップ生成関数　使用しない 一応残しておく
   match clist with
   | [] -> []
   | CDecl(id, None, fl, ml) :: tl -> ext_map (gen_map tl) id (fl, ml)
-  | _ -> failwith "error in gen_map"
-    
+  | _ -> failwith "error in gen_map"*)
+
+(*クラスからidを取り出す関数 gen_mapで使用*)
+let lookup_cid (CDecl(id, _, _, _)) = id
+
+(*指定したクラスidのクラスを返す関数　α^-1に相当 map_fieldとmap_methodで使用*)
+let rec lookup_class_map clist cid =
+  match clist with
+  | [] -> failwith "unbound class"
+  | CDecl(id, tid, fl, m) :: tl ->
+     if cid = id then CDecl(id, tid, fl, m)
+     else lookup_class_map tl cid
+
+(*gen_mapで使用する関数 ROOPL++26ページの関数fieldに相当*)
+let rec map_field clist1 cl =
+  match cl with
+  | CDecl(id, None, fl, m) -> fl
+  | CDecl(id, Some(cid), fl, m) ->
+     let parent_class = lookup_class_map clist1 cid in (*a^-1(c')*)
+     let parent_method = map_field clist1 parent_class in
+     parent_method @ fl
+
+(*下にある関数の説明
+map_method: gen_mapで使用する関数 ROOPL++26ページの関数methodに相当
+lookup_methid: メソッドのリストに指定した名前のメソッド名があるか調べる関数
+method_union: サブクラスに親クラスと同じ名前のメソッドがある場合
+親クラスからそのメソッドを削除し、サブクラスの同じ名前のメソッドを追加する関数(オーバーライド)
+remove_method: 指定したメソッド名のメソッドをリストから削除する関数
+*)
+let rec map_method clist1 cl =
+  let rec lookup_methid id = function
+    | [] -> false
+    | MDecl(mid, _, _) :: tl -> if id = mid then true
+                                else lookup_methid id tl
+  in
+  let rec method_union subm parem =
+    let rec remove_method id ml =
+      match ml with
+      | [] -> []
+      | MDecl(mid, dl, stml) :: tl ->
+         if id = mid then tl
+         else MDecl(mid, dl, stml) :: (remove_method id tl)
+    in
+    match subm with
+    | [] -> parem
+    | MDecl(mid, dl, stml) :: tl ->
+       if (lookup_methid mid parem)
+       then method_union tl ((remove_method mid parem) @
+                             [MDecl(mid, dl, stml)])
+       else method_union tl parem
+  in
+  match cl with
+  | CDecl(id, None, fl, m) -> m
+  | CDecl(id, Some(cid), fl, m) ->
+     let parent_class = lookup_class_map clist1 cid in (*a^-1(c')*)
+     let parent_method = map_method clist1 parent_class in
+     method_union m parent_method
+     
+(*マップを生成する関数*)     
+let gen_map clist =
+let rec en_map clist1 clist2 =
+  match clist2 with
+  | [] -> []
+  | cl :: tl ->
+     (lookup_cid cl, (map_field clist1 cl, map_method clist1 cl)) :: (en_map clist1 tl)
+in
+en_map clist clist
+
 (*mainメソッドがあるクラスのフィールドから環境を生成する関数　eval_progでのみ使用*)
 let gen_env fid1 : env =
   let rec gen_env_2 fid2 n =
