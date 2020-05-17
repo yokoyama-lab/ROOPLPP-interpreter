@@ -87,6 +87,17 @@ let rec lookup_vec index vec =
 (*decl listからidのみのリストへ変換する関数*)
 let id_list = List.map (fun (Decl(_, id)) -> id)
 
+(*OBJDElETEのための関数*)
+let rec delete_st st locs n =
+  if n <> 0 then delete_st (List.remove_assoc locs st) (locs + 1) (n - 1)
+  else st
+
+(*ARRDELETEのための関数*)
+let rec delete_arr st vec =
+  match vec with
+  | [] -> st
+  | l :: tl -> delete_arr (List.remove_assoc l st) tl
+  
 (*ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る。*)
 let rec gen_locsvec n locs =
   if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
@@ -348,7 +359,11 @@ let rec eval_state stml env map st =
           let st4 = ext_st st3 locs (LocsVal(List.length st + 1)) in
           eval_state tl env2 map st4
        (*OBJDELETE*)
-       | ObjectDestruction(tid, (id, None))-> st
+       | ObjectDestruction(tid, (id, None))->
+          let (fl, ml) = lookup_map tid map in
+          let locs = (lookup_envs id env) - 1 (*l'*) in          
+          let st2 = delete_st st locs (2 + List.length fl) in
+          eval_state tl env map st2
        (*ARRNEW*)
        | ArrayConstruction((tid, e), id) ->
           let IntVal(n) = eval_exp e env st in
@@ -357,7 +372,11 @@ let rec eval_state stml env map st =
           let st3 = ext_st_zero st2 (List.length st2 + 1) ((List.length st2 + 1) + n) in
           eval_state tl env map st3
        (*ARRDELETE*)
-       | ArrayDestruction((tid, e), id) -> st
+       | ArrayDestruction((tid, e), id) ->
+          let veclocs = lookup_envs id env in
+          let LocsVec(vec) = lookup_st veclocs st in
+          let st2 = delete_arr st vec in
+          eval_state tl env map st2
        (*COPY*)
        | CopyReference(dt, (id1, None), (id2, None)) ->
           let locs1 = lookup_envs id1 env in
@@ -366,7 +385,11 @@ let rec eval_state stml env map st =
           let st2 = ext_st st locs2 v in
           eval_state tl env map st2
        (*UNCOPY*)
-       (*| UncopyReference(dt, (tid, None), (id2, None)) ->*)
+       | UncopyReference(dt, (id1, None), (id2, None)) ->
+          let locs1 = lookup_envs id1 env in
+          let locs2 = lookup_envs id2 env in
+          let st2 = List.remove_assoc locs2 st in
+          eval_state tl env map st2
        (*LOCALBLOCK*)
        | LocalBlock(dt, id, e1, stml, e2) ->
           let (v1, v2) = (eval_exp e1 env st, eval_exp e2 env st) in
