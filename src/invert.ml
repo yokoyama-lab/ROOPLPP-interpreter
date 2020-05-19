@@ -21,7 +21,7 @@ let rec invert = function
          | ObjectBlock(tid, id, stml) ->
             ObjectBlock(tid, id, invert stml)
          | LocalBlock(dt, id, e1, stml, e2) ->
-            LocalBlock(dt, id, e1, invert stml, e2)
+            LocalBlock(dt, id, e2, invert stml, e1)
          | LocalCall(mid, objl) -> LocalUncall(mid, objl)
          | LocalUncall(mid, objl) -> LocalCall(mid, objl)
          | ObjectCall(obj, mid, objl) -> ObjectUncall(obj, mid, objl)
