@@ -6,7 +6,7 @@ open Invert
 let ext_envs env x v = (x,v) :: (List.remove_assoc x env)
 
 (*ストア：ロケーションと値のリストを拡張する関数*)
-let ext_st st x v =  (x,v) :: (List.remove_assoc x st)
+let ext_st st x v = List.sort (fun x y -> if x < y then -1 else 1) ((x,v) :: (List.remove_assoc x st))
                      
 (*環境に指定されたメソッドのフィールドを使われていないロケーションに追加する。eval_stateのOBJBLOKで使用*)
 let rec ext_env_field f n =
