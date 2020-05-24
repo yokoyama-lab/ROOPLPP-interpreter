@@ -171,7 +171,7 @@ gen_map2 clist clist
 let gen_env fid1 : env =
   let rec gen_env_2 fid2 n =
     match fid2 with
-    | [] -> [("this", n)]
+    | [] -> [("this", n + 1)]
     | id :: tl -> ext_envs (gen_env_2 tl (n + 1)) id n
   in
   gen_env_2 fid1 1
@@ -181,7 +181,7 @@ let gen_st env1 objval =
  let rec gen_st2 env2 objval n =
    match env2 with
    | [] -> failwith "error"
-   | [f] -> [(n, objval)]
+   | [f] -> [(n, objval); (n + 1, LocsVal n)]
    | f :: tl -> ext_st (gen_st2 tl objval (n + 1)) n (IntVal(0))
  in
  gen_st2 env1 objval 1
