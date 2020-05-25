@@ -1,4 +1,4 @@
-open OUnit
+open OUnit2
 open Syntax
 open Value
 open Eval
@@ -32,7 +32,7 @@ let tests = "test suite for sum" >::: [
       "from x = 0 do skip loop x += 1 until x = 10"    >:: (fun _ ->
         assert_equal [(1, IntVal 10)]
           (eval_state [Loop(Binary(Eq, Var "x", Const 0), [Skip], [Assign(("x", None), ModAdd, Const 1)], Binary(Eq, Var "x", Const 10))] [("x", 1)] [] [(1, IntVal 0)]) );
-      
+
       "from x = 0 do x += 1 loop skip until x = 10"    >:: (fun _ ->
         assert_equal [(1, IntVal 10)]
           (eval_state [Loop(Binary(Eq, Var "x", Const 0), [Assign(("x", None), ModAdd, Const 1)], [Skip], Binary(Eq, Var "x", Const 10))] [("x", 1)] [] [(1, IntVal 0)]) );
@@ -44,7 +44,6 @@ let tests = "test suite for sum" >::: [
       "if x = 0 then x += 1 else x -= 1 fi x = 1(true)"    >:: (fun _ ->
         assert_equal [(1, IntVal 0)]
           (eval_state [Conditional(Binary(Eq, Var "x", Const 0), [Assign(("x", None), ModAdd, Const 1)], [Assign(("x", None), ModSub, Const 1)], Binary(Eq, Var "x", Const 1))] [("x", 1)] [] [(1, IntVal 1)]) );      
-      
   ]
 
 let _ = run_test_tt_main tests
