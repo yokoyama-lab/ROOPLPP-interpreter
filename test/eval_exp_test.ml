@@ -1,4 +1,4 @@
-open OUnit
+open OUnit2
 open Syntax
 open Value
 open Eval
