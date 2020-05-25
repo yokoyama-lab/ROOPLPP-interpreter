@@ -1,23 +1,21 @@
 #
 # Makefile
 #
+all: test_eval test_invert
 
-all: test_exp test_state
+test_eval: eval_test.byte
+	./eval_test.byte
 
-test_exp: eval_exp_test.byte
-	./eval_exp_test.byte
-
-test_state: eval_state_test.byte
-	./eval_state_test.byte
-
-eval_exp_test.byte: 		eval_exp_test.ml
+eval_test.byte: 		eval_test.ml
 	(cd ../src; make)
-	ocamlfind ocamlc -o $@ -package ounit2 -linkpkg -g -I ../src invert.cmo eval.cmo value.cmo syntax.cmo eval_exp_test.ml
+	ocamlfind ocamlc -o $@ -package oUnit -linkpkg -g -I ../src invert.cmo eval.cmo value.cmo syntax.cmo eval_test.ml
 
-eval_state_test.byte:		eval_state_test.ml
+test_invert: invert_test.byte
+	./invert_test.byte
+
+invert_test.byte: 		invert_test.ml
 	(cd ../src; make)
-	ocamlfind ocamlc -o $@ -package ounit2 -linkpkg -g -I ../src invert.cmo eval.cmo eval_state_test.ml
-
+	ocamlfind ocamlc -o $@ -package oUnit -linkpkg -g -I ../src invert.cmo syntax.cmo invert_test.ml
 clean:
 	/bin/rm -f *.byte
 	/bin/rm -f *.cmi *.cmo *.mli

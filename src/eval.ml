@@ -383,7 +383,7 @@ let rec eval_state stml env map st =
           let st2 = eval_state (invert mstml) env3 map st in
           eval_state tl env map st2
        (*CALLOBJ*)
-       | ObjectCall((id, _), mid, objl) ->
+       | ObjectCall((id, None), mid, objl) ->
           let locs = lookup_envs id env in
           let LocsVal(locs2) = lookup_st locs st in
           let ObjVal(id2, envf) = lookup_st locs2 st in
@@ -395,8 +395,25 @@ let rec eval_state stml env map st =
           let env3 = ext_envs env2 "this" locs in
           let st2 = eval_state mstml env3 map st in
           eval_state tl env map st2
+       (*CALLOBJARRAY*)
+       | ObjectCall((id, Some(e)), mid, objl) ->
+          let veclocs = lookup_envs id env in
+          let LocsVec(vec) = lookup_st veclocs st in
+          let IntVal(index) = eval_exp e env st in
+          let locs = lookup_vec index vec in
+          let LocsVal(locs2) = lookup_st locs st in
+          let LocsVal(locs3) = lookup_st locs2 st in
+          let ObjVal(id2, envf) = lookup_st locs3 st in
+          let aidl = List.map fst objl in
+          let (f, meth) = lookup_map id2 map in
+          let MDecl(mid, para, mstml) = lookup_meth mid meth in
+          let pidl = id_list para in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs2 in
+          let st2 = eval_state mstml env3 map st in
+          eval_state tl env map st2
       (*UNCALLOBJ*)
-       | ObjectUncall((id, _), mid, objl) ->
+       | ObjectUncall((id, None), mid, objl) ->
           let locs = lookup_envs id env in
           let LocsVal(locs2) = lookup_st locs st in
           let ObjVal(id2, envf) = lookup_st locs2 st in
@@ -406,6 +423,23 @@ let rec eval_state stml env map st =
           let pidl = id_list para in
           let env2 = ext_env_meth env envf pidl aidl in
           let env3 = ext_envs env2 "this" locs in
+          let st2 = eval_state (invert mstml) env3 map st in
+          eval_state tl env map st2
+       (*UNCALLOBJARRAY*)
+       | ObjectUncall((id, Some(e)), mid, objl) ->
+          let veclocs = lookup_envs id env in
+          let LocsVec(vec) = lookup_st veclocs st in
+          let IntVal(index) = eval_exp e env st in
+          let locs = lookup_vec index vec in
+          let LocsVal(locs2) = lookup_st locs st in
+          let LocsVal(locs3) = lookup_st locs2 st in
+          let ObjVal(id2, envf) = lookup_st locs3 st in
+          let aidl = List.map fst objl in
+          let (f, meth) = lookup_map id2 map in
+          let MDecl(mid, para, mstml) = lookup_meth mid meth in
+          let pidl = id_list para in
+          let env2 = ext_env_meth env envf pidl aidl in
+          let env3 = ext_envs env2 "this" locs2 in
           let st2 = eval_state (invert mstml) env3 map st in
           eval_state tl env map st2
        (*OBJBLOCK*)
@@ -429,12 +463,38 @@ let rec eval_state stml env map st =
           let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) in
           let st4 = ext_st st3 locs (LocsVal(List.length st + 1)) in
           eval_state tl env2 map st4
+       (*OBJNEWARRAY*)
+       | ObjectConstruction(tid, (id, Some(e))) ->
+          let (fl, ml) = lookup_map tid map in
+          let veclocs = lookup_envs id env in
+          let LocsVec(vec) = lookup_st veclocs st in
+          let IntVal(index) = eval_exp e env st in
+          let locs = lookup_vec index vec in
+          let st = ext_st st locs (LocsVal((List.length st + 2))) in
+          let LocsVal(locs2) = lookup_st locs st in
+          let envf = ext_env_field fl (List.length st + 3)(*l1*) in
+          let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
+          let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) in
+          let st4 = ext_st st3 locs2 (LocsVal(List.length st + 1)) in
+          eval_state tl env map st4
        (*OBJDELETE*)
        | ObjectDestruction(tid, (id, None))->
           let (fl, ml) = lookup_map tid map in
           let locs = (lookup_envs id env) - 1 (*l'*) in          
           let st2 = delete_st st locs (2 + List.length fl) in
           eval_state tl env map st2
+       (*OBJARRAYDLETE*)
+       | ObjectDestruction(tid, (id, Some(e)))->
+          let (fl, ml) = lookup_map tid map in
+          let veclocs = lookup_envs id env in
+          let LocsVec(vec) = lookup_st veclocs st in
+          let IntVal(index) = eval_exp e env st in
+          let locs = lookup_vec index vec in
+          let LocsVal(locs2) = (lookup_st locs st) in
+          let locs3 = locs2 - 1 (*l'*) in
+          let st2 = delete_st st locs3 (2 + List.length fl) in
+          let st3 = ext_st st2 locs (IntVal 0) in
+          eval_state tl env map st3
        (*ARRNEW*)
        | ArrayConstruction((tid, e), id) ->
           let IntVal(n) = eval_exp e env st in
@@ -447,7 +507,8 @@ let rec eval_state stml env map st =
           let veclocs = lookup_envs id env in
           let LocsVec(vec) = lookup_st veclocs st in
           let st2 = delete_arr st vec in
-          eval_state tl env map st2
+          let st3 = ext_st st2 veclocs (IntVal 0) in
+          eval_state tl env map st3
        (*COPY*)
        | CopyReference(dt, (id1, None), (id2, None)) ->
           let locs1 = lookup_envs id1 env in
@@ -458,7 +519,7 @@ let rec eval_state stml env map st =
        (*UNCOPY*)
        | UncopyReference(dt, (id1, None), (id2, None)) ->
           let locs2 = lookup_envs id2 env in
-          let st2 = List.remove_assoc locs2 st in
+          let st2 = ext_st st locs2 (LocsVal (locs2 - 1)) in
           eval_state tl env map st2
        (*LOCALBLOCK*)
        | LocalBlock(dt, id, e1, stml, e2) ->
