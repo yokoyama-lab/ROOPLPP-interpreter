@@ -1,6 +1,5 @@
 open Syntax
 open Value
-open Eval
 
 let print_result result =   
 let rec print_result2 =    
@@ -10,7 +9,7 @@ let rec print_vec = function
 in
 let print_val = function
   | IntVal(n) -> string_of_int n
-  | LocsVal(locs) -> string_of_int locs
+  | LocsVal(locs) -> "location " ^ (string_of_int locs)
   | LocsVec(vec) -> print_vec vec
   | _ -> failwith "error in print_val"
 in
