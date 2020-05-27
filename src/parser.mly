@@ -112,6 +112,7 @@ exp:
   | exp BOR exp  { Binary(Bor,  $1, $3) } // e1 | e2
   | exp AND exp  { Binary(And,  $1, $3) } // e1 && e2
   | exp OR exp   { Binary(Or,   $1, $3) } // e1 && e2
+  | LPAREN exp RPAREN { $2 }              // ( e )
 
 modop:
   | MODADD { ModAdd }
@@ -145,10 +146,10 @@ stms1:
 stm:
   | anyId modop exp
     { Assign($1, $2, $3) } // x (+,-,^)= e
-  | IF exp THEN stms1 ELSE stms1 FI exp
-    { Conditional($2, $4, $6, $8) } // if e then s else s fi e
-  | FROM exp DO stms1 LOOP stms1 UNTIL exp
-    { Loop($2, $4, $6, $8) } // from e do s loop s until e
+  | IF exp THEN stms1 else_opt FI exp
+    { Conditional($2, $4, $5, $7) } // if e then s else s fi e  or  if e then s fi e
+  | FROM exp do_opt loop_opt UNTIL exp
+    { Loop($2, $3, $4, $6) } // from e do s loop s until e or   or  from e do s until e  or  from e loop s until e
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN
@@ -177,6 +178,24 @@ stm:
     { Skip } // skip
   | anyId SWAP anyId
     { Swap($1, $3) } // x <=> x
+
+else_opt:
+  | ELSE stms1
+    { $2 }
+  |
+    { [Skip] }
+
+do_opt:
+  | DO stms1
+    { $2 }
+  |
+    { [Skip] }
+
+loop_opt:
+  | LOOP stms1
+    { $2 }
+  |
+    { [Skip] }
 
 dataType:
   | INT LBRA RBRA    { IntegerArrayType   } // int[]
