@@ -180,22 +180,16 @@ stm:
     { Swap($1, $3) } // x <=> x
 
 else_opt:
-  | ELSE stms1
-    { $2 }
-  |
-    { [Skip] }
+  | ELSE stms1 { $2 }
+  |            { [Skip] }
 
 do_opt:
-  | DO stms1
-    { $2 }
-  |
-    { [Skip] }
+  | DO stms1 { $2 }
+  |          { [Skip] }
 
 loop_opt:
-  | LOOP stms1
-    { $2 }
-  |
-    { [Skip] }
+  | LOOP stms1 { $2 }
+  |            { [Skip] }
 
 dataType:
   | INT LBRA RBRA    { IntegerArrayType   } // int[]
