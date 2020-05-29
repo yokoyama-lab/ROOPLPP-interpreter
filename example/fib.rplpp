@@ -1,3 +1,5 @@
+// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P11
+// computing n(th) Fibonacci pair
 class Fib
     int[] xs
     

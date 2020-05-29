@@ -1,3 +1,11 @@
+// Based on http://topps.diku.dk/pirc/janus-playground/
+// Permutation to code
+// Given an array X that contains a permutation of the integers 0, 1, ...,
+// size(X)-1, it computes the array X' where X'[i] is the number of X[j < i] that
+// are smaller than X[i].
+
+
+
 class Perm
   method perm_to_code(int[] x, int length)
     local int k = length

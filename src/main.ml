@@ -14,8 +14,8 @@ let () =
   let _ = close_in channel in
   eval prog
 
-(*いろいろ試す用)
-open Syntax 
+
+(*open Syntax 
 open Print
 open Eval
 

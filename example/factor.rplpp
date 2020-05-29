@@ -1,4 +1,7 @@
+// Factorization program
+// based on http://topps.diku.dk/pirc/janus-playground/
 // factor num into table in fact[]
+
 class Fact
   method factor(int num, int[] fact)
     local int try = 0   // Attempted factor.

@@ -1,3 +1,4 @@
+// Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P141-142
 class Node
   Node left
   Node right

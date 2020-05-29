@@ -1,4 +1,7 @@
-// Calculates floor(sqrt(num))
+// Factorization program
+// based on http://topps.diku.dk/pirc/janus-playground/
+// factor num into table in fact[]
+
 class Root
   method root(int num, int root)
     local int bit = 1
