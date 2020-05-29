@@ -1,0 +1,34 @@
+class Fib
+    int[] xs
+    
+    method init()
+      new int[2] xs
+  
+  method fib(int n)
+      if n = 0 then
+       xs[0] ^= 1
+       xs[1] ^= 1
+      else 
+        n -= 1
+        call fib(n)
+        xs[0] += xs[1]
+        xs[0] <=> xs[1]
+      fi xs[0] = xs[1]
+   method get (int out)
+      out ^= xs[1]
+  
+  class Program
+    int result
+    int n
+  
+  method main()
+     n ^= 4
+  local Fib f = nil
+  new Fib f
+  call f::init()
+  call f::fib(n)
+  call f::get(result)
+  uncall f::fib(n)
+  uncall f::init()
+  delete Fib f
+  delocal Fib f = nil

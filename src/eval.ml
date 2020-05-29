@@ -16,8 +16,8 @@ let rec ext_env_field f n =
 
 (*eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
 let rec ext_st_zero st locs n =
-  if locs < n then
-    ext_st (ext_st_zero st (locs + 1) n) locs (IntVal(0))
+  if n <> 0 then
+    ext_st (ext_st_zero st (locs + 1) (n - 1)) locs (IntVal(0))
   else
     st
       
@@ -171,7 +171,7 @@ gen_map2 clist clist
 let gen_env fid1 : env =
   let rec gen_env_2 fid2 n =
     match fid2 with
-    | [] -> [("this", n + 1)]
+    | [] -> [("this", n)]
     | id :: tl -> ext_envs (gen_env_2 tl (n + 1)) id n
   in
   gen_env_2 fid1 1
@@ -181,7 +181,7 @@ let gen_st env1 objval =
  let rec gen_st2 env2 objval n =
    match env2 with
    | [] -> failwith "error"
-   | [f] -> [(n, objval); (n + 1, LocsVal n)]
+   | [f] -> [(n, LocsVal (n + 1)); (n + 1, objval)]
    | f :: tl -> ext_st (gen_st2 tl objval (n + 1)) n (IntVal(0))
  in
  gen_st2 env1 objval 1
@@ -202,7 +202,7 @@ let rec gen_result env st =
        | LocsVec(vec) -> (gen_result_vec vec st f 0) @ (gen_result tl st)
        | _ -> (f, v) :: (gen_result tl st)
      end
-                       
+
 (*eval_expを簡潔にするための関数
 第一引数に演算子、第２第３引数にvalue型を受け取りIntValを返す。　*)
 let bin_op f v1 v2 =
@@ -219,10 +219,8 @@ let comp_op f v1 v2 =
 
 (*bin_op同様。関係演算子専用。*)
 let rel_op f v1 v2 =
-  match v1, v2 with
-  | IntVal(n1), IntVal(n2) -> if f n1 n2 = true then IntVal(1)
-                              else IntVal(0)
-  | _ -> failwith "integer values expected"
+  if f v1 v2 = true then IntVal(1)
+  else IntVal(0)
 
 (*式expressionを評価するための関数。envは環境、stはストア。value型を返す。*)
 let rec eval_exp exp env st =
@@ -445,24 +443,23 @@ let rec eval_state stml env map st =
        (*OBJBLOCK*)
        | ObjectBlock(tid, id, stml) ->
           let (fl, ml) = lookup_map tid map in
-          let env2 = ext_envs env id (List.length st + 2)(*r*) in
+          let env2 = ext_envs env id (List.length st + 1)(*r*) in
           let envf = ext_env_field fl (List.length st + 3)(*a1*) in
-          let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
-          let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) (*l'->(c,γ')*) in
-          let st4 = ext_st st3 (lookup_envs id env2) (LocsVal(List.length st + 1)) (*r->l'*) in
+          let st2 = ext_st_zero st (List.length st + 3) (List.length fl) in
+          let st3 = ext_st st2 (List.length st + 2) (ObjVal(tid, envf)) (*l'->(c,γ')*) in
+          let st4 = ext_st st3 (lookup_envs id env2) (LocsVal(List.length st + 2)) (*r->l'*) in
           let st5 = eval_state stml env2 map st4 in
-          let st6 = ext_st_zero st5 (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
+          let st6 = ext_st_zero st5 (List.length st + 3) (List.length fl) in
           eval_state tl env map st6
        (*OBJNEW*)
        | ObjectConstruction(tid, (id, None)) ->
           let (fl, ml) = lookup_map tid map in
-          let env2 = ext_envs env id (List.length st + 2)(*r*) in
-          let locs = lookup_envs id env2 in
-          let envf = ext_env_field fl (List.length st + 3)(*l1*) in
-          let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
+          let locs = lookup_envs id env in
+          let envf = ext_env_field fl (List.length st + 2)(*l1*) in
+          let st2 = ext_st_zero st (List.length st + 2) (List.length fl) in
           let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) in
           let st4 = ext_st st3 locs (LocsVal(List.length st + 1)) in
-          eval_state tl env2 map st4
+          eval_state tl env map st4
        (*OBJNEWARRAY*)
        | ObjectConstruction(tid, (id, Some(e))) ->
           let (fl, ml) = lookup_map tid map in
@@ -470,19 +467,20 @@ let rec eval_state stml env map st =
           let LocsVec(vec) = lookup_st veclocs st in
           let IntVal(index) = eval_exp e env st in
           let locs = lookup_vec index vec in
-          let st = ext_st st locs (LocsVal((List.length st + 2))) in
+          let st = ext_st st locs (LocsVal((List.length st + 1))) in
           let LocsVal(locs2) = lookup_st locs st in
           let envf = ext_env_field fl (List.length st + 3)(*l1*) in
-          let st2 = ext_st_zero st (List.length st + 3) ((List.length st + 3) + (List.length fl)) in
-          let st3 = ext_st st2 (List.length st + 1) (ObjVal(tid, envf)) in
-          let st4 = ext_st st3 locs2 (LocsVal(List.length st + 1)) in
+          let st2 = ext_st_zero st (List.length st + 3) (List.length fl) in
+          let st3 = ext_st st2 (List.length st + 2) (ObjVal(tid, envf)) in
+          let st4 = ext_st st3 locs2 (LocsVal(List.length st + 2)) in
           eval_state tl env map st4
        (*OBJDELETE*)
        | ObjectDestruction(tid, (id, None))->
           let (fl, ml) = lookup_map tid map in
-          let locs = (lookup_envs id env) - 1 (*l'*) in          
+          let locs = (lookup_envs id env) (*l*) in          
           let st2 = delete_st st locs (2 + List.length fl) in
-          eval_state tl env map st2
+          let st3 = ext_st st2 locs (IntVal 0) in
+          eval_state tl env map st3
        (*OBJARRAYDLETE*)
        | ObjectDestruction(tid, (id, Some(e)))->
           let (fl, ml) = lookup_map tid map in
@@ -491,7 +489,7 @@ let rec eval_state stml env map st =
           let IntVal(index) = eval_exp e env st in
           let locs = lookup_vec index vec in
           let LocsVal(locs2) = (lookup_st locs st) in
-          let locs3 = locs2 - 1 (*l'*) in
+          let locs3 = locs2 (*l'*) in
           let st2 = delete_st st locs3 (2 + List.length fl) in
           let st3 = ext_st st2 locs (IntVal 0) in
           eval_state tl env map st3
@@ -500,7 +498,7 @@ let rec eval_state stml env map st =
           let IntVal(n) = eval_exp e env st in
           let locs = lookup_envs id env in
           let st2 = ext_st st locs (LocsVec(gen_locsvec n (List.length st + 1))) in
-          let st3 = ext_st_zero st2 (List.length st2 + 1) ((List.length st2 + 1) + n) in
+          let st3 = ext_st_zero st2 (List.length st2 + 1)  n in
           eval_state tl env map st3
        (*ARRDELETE*)
        | ArrayDestruction((tid, e), id) ->
@@ -523,10 +521,11 @@ let rec eval_state stml env map st =
           eval_state tl env map st2
        (*LOCALBLOCK*)
        | LocalBlock(dt, id, e1, stml, e2) ->
-          let (v1, v2) = (eval_exp e1 env st, eval_exp e2 env st) in
+          let v1 = eval_exp e1 env st in
           let env2 = ext_envs env id (List.length st + 1) in
           let st2 = ext_st st (List.length st + 1) v1 in
           let st3 = eval_state stml env2 map st2 in
+          let v2 = eval_exp e2 env2 st3 in
           let st4 = ext_st st3 (List.length st + 1) v2 in
           eval_state tl env map st4 
      end

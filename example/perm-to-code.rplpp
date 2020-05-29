@@ -1,0 +1,33 @@
+class Perm
+  method perm_to_code(int[] x, int length)
+    local int k = length
+    from k = length loop
+        k -= 1
+        local int j = 0
+        from j = 0 loop
+            if x[j] > x[k] then
+                x[j] -= 1
+            fi x[j] >= x[k]
+            j += 1
+        until j = k
+        delocal int j = k
+    until k = 0
+    delocal int k = 0
+
+class Program
+  int[] x
+  method main()
+    new int[6] x
+    local Perm p = nil
+    new Perm p
+    local int length = 6
+    x[0] += 2
+    x[1] += 0
+    x[2] += 3
+    x[3] += 1
+    x[4] += 5
+    x[5] += 4
+    call p::perm_to_code(x, length)
+    delocal int length = 6
+    delete Perm p
+    delocal Perm p = nil

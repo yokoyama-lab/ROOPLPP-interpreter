@@ -123,113 +123,119 @@ let tests = "test suite for eval.ml" >::: [
           (eval_state [Conditional(Binary(Eq, Var "x", Const 0), [Assign(("x", None), ModAdd, Const 1)], [Assign(("x", None), ModSub, Const 1)], Binary(Eq, Var "x", Const 1))] [("x", 1)] [] [(1, IntVal 1)]) );      
 
       "call Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)])); (3, LocsVal 2)]
+        assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
           (eval_state [LocalCall("Plus1", [("result", None)])]
-             [("result", 1); ("this", 3)]
+             [("result", 1); ("this", 2)]
              [("Program",
     ([Decl (IntegerType, "result")],
      [MDecl ("main", [], [LocalCall ("Plus1", [("result", None)])]);
       MDecl ("Plus1", [Decl (IntegerType, "n")],
        [Assign (("n", None), ModAdd, Const 1)])]))]
-  [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)])); (3, LocsVal 2)] ) );
+  [(1, IntVal 0);  (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))] ) );
 
       "uncall Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)])); (3, LocsVal 2)]
+        assert_equal [(1, IntVal 0);  (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
           (eval_state [LocalUncall("Plus1", [("result", None)])]
-             [("result", 1); ("this", 3)]
+             [("result", 1); ("this", 2)]
              [("Program",
     ([Decl (IntegerType, "result")],
      [MDecl ("main", [], [LocalCall ("Plus1", [("result", None)])]);
       MDecl ("Plus1", [Decl (IntegerType, "n")],
        [Assign (("n", None), ModAdd, Const 1)])]))]
-  [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)])); (3, LocsVal 2)] ) );
+  [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))] ) );
 
       "t::call Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));(3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)]
+        assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5); (5, ObjVal ("Test", []))]
           (eval_state [ObjectCall (("t", None), "Plus1", [("result", None)])]
-             [("t", 5); ("result", 1); ("this", 3)]
-             [("Test",
-               ([],
-                [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                        [Assign (("n", None), ModAdd, Const 1)])]));
-              ("Program",
-               ([Decl (IntegerType, "result")],
-                [MDecl ("main", [],
-                        [ObjectConstruction ("Test", ("t", None));
-                         ObjectCall (("t", None), "Plus1", [("result", None)]);
-                         ObjectDestruction ("Test", ("t", None))])]))]
- [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
- (3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)] ) );
+             [("t", 4); ("result", 1); ("this", 2)]
+          [("Test",
+            ([],
+             [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                     [Assign (("n", None), ModAdd, Const 1)])]));
+           ("Program",
+            ([Decl (IntegerType, "result")],
+             [MDecl ("main", [],
+                     [LocalBlock (ObjectType "Test", "t", Nil,
+                                  [ObjectConstruction ("Test", ("t", None));
+                                   ObjectCall (("t", None), "Plus1", [("result", None)]);
+                                   ObjectDestruction ("Test", ("t", None))],
+                                  Nil)])]))]
+          [(1, IntVal 0); (2, LocsVal 3);
+           (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
+           (5, ObjVal ("Test", []))]
+ ) );
 
-      "t::uncall Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));(3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)]
+           "t::uncall Plus1(result)"    >:: (fun _ ->
+        assert_equal [(1, IntVal 0); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
+                      (5, ObjVal ("Test", []))]
           (eval_state [ObjectUncall (("t", None), "Plus1", [("result", None)])]
-             [("t", 5); ("result", 1); ("this", 3)]
+             [("t", 4); ("result", 1); ("this", 2)]
+          [("Test",
+            ([],
+             [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                     [Assign (("n", None), ModAdd, Const 1)])]));
+           ("Program",
+            ([Decl (IntegerType, "result")],
+             [MDecl ("main", [],
+                     [LocalBlock (ObjectType "Test", "t", Nil,
+                                  [ObjectConstruction ("Test", ("t", None));
+                                   ObjectCall (("t", None), "Plus1", [("result", None)]);
+                                   ObjectDestruction ("Test", ("t", None))],
+                                  Nil)])]))]
+          [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5); (5, ObjVal ("Test", []))]
+ ) );
+             
+      "call ts[0]::Plus1(result)"    >:: (fun _ ->
+        assert_equal [(1, IntVal 1); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                      (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                      (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]
+          (eval_state [ObjectCall (("ts", Some (Const 0)), "Plus1", [("result", None)])]
+             [("result", 1); ("ts", 2); ("this", 3)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
                         [Assign (("n", None), ModAdd, Const 1)])]));
               ("Program",
-               ([Decl (IntegerType, "result")],
-                [MDecl ("main", [],
-                        [ObjectConstruction ("Test", ("t", None));
-                         ObjectCall (("t", None), "Plus1", [("result", None)]);
-                         ObjectDestruction ("Test", ("t", None))])]))]
-             [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-              (3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)] ) );
-      
-      "ts[0]::call Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, LocsVec [5; 6]); (2, IntVal 1);
-                      (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-                      (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-                      (8, LocsVal 7)]                    
-          (eval_state [ ObjectCall (("ts", Some (Const 0)), "Plus1", [("result", None)])]
-             [("ts", 1); ("result", 2); ("this", 4)]
-             [("Test",
-               ([],
-                [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                        [Assign (("n", None), ModAdd, Const 1)])]));
-              ("Program",
-               ([Decl (ObjectArrayType "Test", "ts"); Decl (IntegerType, "result")],
+               ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
                 [MDecl ("main", [],
                         [ArrayConstruction (("Test", Const 2), "ts");
                          ObjectConstruction ("Test", ("ts", Some (Const 0)));
                          ObjectCall (("ts", Some (Const 0)), "Plus1", [("result", None)]);
-                         ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])])]))]
-             [(1, LocsVec [5; 6]); (2, IntVal 0);
-              (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-              (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-              (8, LocsVal 7)]                          
+                         ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])])]))]             
+             [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+              (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+              (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]          
       ) );
       
-      "ts[0]::uncall Plus1(result)"    >:: (fun _ ->
-        assert_equal [(1, LocsVec [5; 6]); (2, IntVal 0);
-                      (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-                      (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-                      (8, LocsVal 7)]             
-          (eval_state [ ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])]
-             [("ts", 1); ("result", 2); ("this", 4)]
-             [("Test",
-               ([],
-                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+      "uncall ts[0]::Plus1(result)"    >:: (fun _ ->
+             assert_equal [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                           (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                           (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]
+               (eval_state [ ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])]
+                  [("result", 1); ("ts", 2); ("this", 3)]
+                  [("Test",
+                    ([],
+                     [MDecl ("Plus1", [Decl (IntegerType, "n")],
                         [Assign (("n", None), ModAdd, Const 1)])]));
-              ("Program",
-               ([Decl (ObjectArrayType "Test", "ts"); Decl (IntegerType, "result")],
-                [MDecl ("main", [],
-                        [ArrayConstruction (("Test", Const 2), "ts");
-                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
-                         ObjectCall (("ts", Some (Const 0)), "Plus1", [("result", None)]);
-                         ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])])]))]
-             [(1, LocsVec [5; 6]); (2, IntVal 1);
-              (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-              (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-              (8, LocsVal 7)]          
+                   ("Program",
+                    ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
+                     [MDecl ("main", [],
+                             [ArrayConstruction (("Test", Const 2), "ts");
+                              ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                              ObjectCall (("ts", Some (Const 0)), "Plus1", [("result", None)]);
+                              ObjectUncall (("ts", Some (Const 0)), "Plus1", [("result", None)])])]))]
+                  [(1, IntVal 1); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                   (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                   (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]  
       ) );
       
       "construct Test t  t::call Plus1(result) destruct t"    >:: (fun _ ->
-        assert_equal [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));(3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)]
+        assert_equal   [(1, IntVal 1); (2, LocsVal 3);
+                        (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
+                        (5, ObjVal ("Test", []))]
           (eval_state [ObjectBlock ("Test", "t",[ObjectCall (("t", None), "Plus1", [("result", None)])])]
-             [("t", 5); ("result", 1); ("this", 3)]
+             [("result", 1); ("this", 2)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
@@ -238,16 +244,17 @@ let tests = "test suite for eval.ml" >::: [
                ([Decl (IntegerType, "result")],
                 [MDecl ("main", [],
                         [ObjectBlock ("Test", "t",
-                                      [ObjectCall (("t", None), "Plus1", [("result", None)])])])]))]             
-             [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-              (3, LocsVal 2)]
+                                      [ObjectCall (("t", None), "Plus1", [("result", None)])])])]))]
+             [(1, IntVal 0); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
       ) );
 
       "new Test t"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
- (3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)]
+        assert_equal [(1, IntVal 0); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
+                      (5, ObjVal ("Test", []))]
           (eval_state [ObjectConstruction ("Test", ("t", None))]
-             [("result", 1); ("this", 3)]
+             [("t", 4); ("result", 1); ("this", 2)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
@@ -255,17 +262,19 @@ let tests = "test suite for eval.ml" >::: [
               ("Program",
                ([Decl (IntegerType, "result")],
                 [MDecl ("main", [],
-                        [ObjectConstruction ("Test", ("t", None));
-                         ObjectCall (("t", None), "Plus1", [("result", None)]);
-                         ObjectDestruction ("Test", ("t", None))])]))]             
-             [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-              (3, LocsVal 2)]
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      ObjectDestruction ("Test", ("t", None))],
+                                     Nil)])]))]             
+             [(1, IntVal 0); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, IntVal 0)] 
       ) );
       
       "delete Test t"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));(3, LocsVal 2)]
+        assert_equal [(1, IntVal 0); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, IntVal 0)] 
           (eval_state [ObjectDestruction ("Test", ("t", None))]
-             [("t", 5); ("result", 1); ("this", 3)]
+             [("t", 4); ("result", 1); ("this", 2)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
@@ -273,14 +282,15 @@ let tests = "test suite for eval.ml" >::: [
               ("Program",
                ([Decl (IntegerType, "result")],
                 [MDecl ("main", [],
-                        [ObjectConstruction ("Test", ("t", None));
-                         ObjectCall (("t", None), "Plus1", [("result", None)]);
-                         ObjectDestruction ("Test", ("t", None))])]))]
-             [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-              (3, LocsVal 2); (4, ObjVal ("Test", [])); (5, LocsVal 4)]
-             
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      ObjectDestruction ("Test", ("t", None))],
+                                     Nil)])]))]
+             [(1, IntVal 0); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
+              (5, ObjVal ("Test", []))]          
       ) );
-
+      
       "new int[2] xs"    >:: (fun _ ->
         assert_equal [(1, LocsVec [4; 5]); (2, ObjVal ("Program", [("xs", 1); ("this", 3)])); (3, LocsVal 2); (4, IntVal 0); (5, IntVal 0)]
           (eval_state [ArrayConstruction (("int", Const 2), "xs")]
@@ -304,50 +314,95 @@ let tests = "test suite for eval.ml" >::: [
                          ArrayDestruction (("int", Const 2), "xs")])]))]
              [(1, LocsVec [4; 5]); (2, ObjVal ("Program", [("xs", 1); ("this", 3)])); (3, LocsVal 2); (4, IntVal 0); (5, IntVal 0)]) );
 
-      "new Test[2] xs"    >:: (fun _ ->
-        assert_equal   [(1, LocsVec [5; 6]); (2, IntVal 0);
-                        (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-                        (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-                        (8, LocsVal 7)]
+      "new Test[2] ts"    >:: (fun _ ->
+        assert_equal [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                      (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                      (5, IntVal 0); (6, IntVal 0)]
+          (eval_state [ArrayConstruction (("Test", Const 2), "ts")]
+             [("result", 1); ("ts", 2); ("this", 3)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         ObjectDestruction ("Test", ("ts", Some (Const 0)));
+                         ArrayDestruction (("Test", Const 2), "ts");
+                         ArrayDestruction (("Test", Const 2), "ts")])]))]
+             [(1, IntVal 0); (2, IntVal 0); (3, LocsVal 4);
+              (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]))]
+      ) );
+
+      "delete Test[2] ts"    >:: (fun _ ->
+        assert_equal [(1, IntVal 0); (2, IntVal 0); (3, LocsVal 4);
+                      (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]))]
+          (eval_state [ArrayDestruction (("Test", Const 2), "ts")]
+             [("result", 1); ("ts", 2); ("this", 3)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         ObjectDestruction ("Test", ("ts", Some (Const 0)));
+                         ArrayDestruction (("Test", Const 2), "ts");
+                         ArrayDestruction (("Test", Const 2), "ts")])]))]
+             [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+              (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+              (5, IntVal 0); (6, IntVal 0)]
+      ) ); 
+
+      "new Test ts[0]"    >:: (fun _ ->
+        assert_equal   [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                        (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                        (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]
           (eval_state [ObjectConstruction ("Test", ("ts", Some (Const 0)))]
-             [("ts", 1); ("result", 2); ("this", 4)]
+             [("result", 1); ("ts", 2); ("this", 3)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
                         [Assign (("n", None), ModAdd, Const 1)])]));
               ("Program",
-               ([Decl (ObjectArrayType "Test", "ts"); Decl (IntegerType, "result")],
+               ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
                 [MDecl ("main", [],
                         [ArrayConstruction (("Test", Const 2), "ts");
                          ObjectConstruction ("Test", ("ts", Some (Const 0)));
-                         ObjectDestruction ("Test", ("ts", Some (Const 0)))])]))]
-             [(1, LocsVec [5; 6]); (2, IntVal 0);
-              (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-              (4, LocsVal 3); (5, IntVal 0); (6, IntVal 0)]         
+                         ObjectDestruction ("Test", ("ts", Some (Const 0)));
+                         ArrayDestruction (("Test", Const 2), "ts");
+                         ArrayDestruction (("Test", Const 2), "ts")])]))]
+             [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+              (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+              (5, IntVal 0); (6, IntVal 0)]
       ) );
 
-      "delete Test[2] xs"    >:: (fun _ ->
-        assert_equal [(1, LocsVec [5; 6]); (2, IntVal 0);
-              (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-              (4, LocsVal 3); (5, IntVal 0); (6, IntVal 0)]
+      "delete Test ts[0]"    >:: (fun _ ->
+        assert_equal [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+                      (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+                      (5, IntVal 0); (6, IntVal 0)]
           (eval_state [ObjectDestruction ("Test", ("ts", Some (Const 0)))]
-             [("ts", 1); ("result", 2); ("this", 4)]
+             [("result", 1); ("ts", 2); ("this", 3)]
              [("Test",
                ([],
                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
                         [Assign (("n", None), ModAdd, Const 1)])]));
               ("Program",
-               ([Decl (ObjectArrayType "Test", "ts"); Decl (IntegerType, "result")],
+               ([Decl (IntegerType, "result"); Decl (ObjectArrayType "Test", "ts")],
                 [MDecl ("main", [],
                         [ArrayConstruction (("Test", Const 2), "ts");
                          ObjectConstruction ("Test", ("ts", Some (Const 0)));
-                         ObjectDestruction ("Test", ("ts", Some (Const 0)))])]))]
-             [(1, LocsVec [5; 6]); (2, IntVal 0);
-                        (3, ObjVal ("Program", [("ts", 1); ("result", 2); ("this", 4)]));
-                        (4, LocsVal 3); (5, LocsVal 8); (6, IntVal 0); (7, ObjVal ("Test", []));
-                        (8, LocsVal 7)]            
+                         ObjectDestruction ("Test", ("ts", Some (Const 0)));
+                         ArrayDestruction (("Test", Const 2), "ts");
+                         ArrayDestruction (("Test", Const 2), "ts")])]))]
+             [(1, IntVal 0); (2, LocsVec [5; 6]); (3, LocsVal 4);
+              (4, ObjVal ("Program", [("result", 1); ("ts", 2); ("this", 3)]));
+              (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]             
       ) );
-
       
       "copy Test1 t1 t2"    >:: (fun _ ->
         assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
@@ -437,18 +492,24 @@ let tests = "test suite for eval.ml" >::: [
        class Program
        int result
        method main()
+       local Test t = nil
        new Test t
-       call t::Plus1(result) "
+       call t::Plus1(result)
+       delete Test t
+       delocal Test t = nil"
       >:: (fun _ ->
         assert_equal [("result", IntVal 1)]
-          (eval_prog  (Prog
-                         [CDecl ("Test", None, [],
-                                 [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                                         [Assign (("n", None), ModAdd, Const 1)])]);
-                          CDecl ("Program", None, [Decl (IntegerType, "result")],
-                                 [MDecl ("main", [],
-                                         [ObjectConstruction ("Test", ("t", None));
-                                          ObjectCall (("t", None), "Plus1", [("result", None)])])])])
+          (eval_prog (Prog
+                        [CDecl ("Test", None, [],
+                                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                                        [Assign (("n", None), ModAdd, Const 1)])]);
+                         CDecl ("Program", None, [Decl (IntegerType, "result")],
+                                [MDecl ("main", [],
+                                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                                     [ObjectConstruction ("Test", ("t", None));
+                                                      ObjectCall (("t", None), "Plus1", [("result", None)]);
+                                                      ObjectDestruction ("Test", ("t", None))],
+                                                     Nil)])])])
       ) );
 
        "class Program
@@ -473,13 +534,17 @@ let tests = "test suite for eval.ml" >::: [
         test += 1
         method get(int n)
         n ^= test
+
         class Program
         int result
         method main()
+        local Test t = nil
         new Test t
         call t::Plus1()
         call t::Plus1()
-        call t::get(result)"
+        call t::get(result)
+        delete Test t
+        delocal Test t = nil"
       >:: (fun _ ->
         assert_equal [("result", IntVal 2)]
           (eval_prog  (Prog
@@ -489,11 +554,13 @@ let tests = "test suite for eval.ml" >::: [
                                          [Assign (("n", None), ModXor, Var "test")])]);
                           CDecl ("Program", None, [Decl (IntegerType, "result")],
                                  [MDecl ("main", [],
-                                         [ObjectConstruction ("Test", ("t", None));
-                                          ObjectCall (("t", None), "Plus1", []);
-                                          ObjectCall (("t", None), "Plus1", []);
-                                          ObjectCall (("t", None), "get", [("result", None)])])])]
-             )
+                                         [LocalBlock (ObjectType "Test", "t", Nil,
+                                                      [ObjectConstruction ("Test", ("t", None));
+                                                       ObjectCall (("t", None), "Plus1", []);
+                                                       ObjectCall (("t", None), "Plus1", []);
+                                                       ObjectCall (("t", None), "get", [("result", None)]);
+                                                       ObjectDestruction ("Test", ("t", None))],
+                                                      Nil)])])])
        ) );
 
        "class Super
@@ -510,10 +577,13 @@ let tests = "test suite for eval.ml" >::: [
         class Program
         int result
         method main()
+        local Sub s = nil
         new Sub s
         call s::Plus1()
         call s::Plus2()
-        call s::get(result)"
+        call s::get(result)
+        delete Sub s
+        delocal Sub s = nil"
       >:: (fun _ ->
         assert_equal [("result", IntVal 3)]
           (eval_prog  (Prog
@@ -522,13 +592,17 @@ let tests = "test suite for eval.ml" >::: [
                                   MDecl ("get", [Decl (IntegerType, "n")],
                                          [Assign (("n", None), ModXor, Var "test")])]);
                           CDecl ("Sub", Some "Super", [],
-         [MDecl ("Plus2", [], [Assign (("test", None), ModAdd, Const 2)])]);
+                                 [MDecl ("Plus2", [], [Assign (("test", None), ModAdd, Const 2)])]);
                           CDecl ("Program", None, [Decl (IntegerType, "result")],
                                  [MDecl ("main", [],
-                                         [ObjectConstruction ("Sub", ("s", None));
-                                          ObjectCall (("s", None), "Plus1", []);
-                                          ObjectCall (("s", None), "Plus2", []);
-                                          ObjectCall (("s", None), "get", [("result", None)])])])])
+                                         [LocalBlock (ObjectType "Sub", "s", Nil,
+                                                      [ObjectConstruction ("Sub", ("s", None));
+                                                       ObjectCall (("s", None), "Plus1", []);
+                                                       ObjectCall (("s", None), "Plus2", []);
+                                                       ObjectCall (("s", None), "get", [("result", None)]);
+                                                       ObjectDestruction ("Sub", ("s", None))],
+                                                      Nil)])])]
+             )
        ) );
 
        "class Super
