@@ -427,58 +427,197 @@ let tests = "test suite for eval.ml" >::: [
               (5, LocsVal 7); (6, IntVal 0); (7, LocsVal 8); (8, ObjVal ("Test", []))]             
       ) );
       
-      "copy Test1 t1 t2"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-                      (3, LocsVal 2); (4, ObjVal ("Test1", [])); (5, LocsVal 4);
-                      (6, ObjVal ("Test2", [])); (7, LocsVal 4)]
-          (eval_state [CopyReference (ObjectType "Test1", ("t1", None), ("t2", None))]
-            [("t2", 7); ("t1", 5); ("result", 1); ("this", 3)]
-            [("Test1",
-              ([],
-               [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                       [Assign (("n", None), ModAdd, Const 1)])]));
-             ("Test2",
-              ([],
-               [MDecl ("Plus2", [Decl (IntegerType, "n")],
-                       [Assign (("n", None), ModAdd, Const 2)])]));
-             ("Program",
-              ([Decl (IntegerType, "result")],
-               [MDecl ("main", [],
-                       [ObjectConstruction ("Test1", ("t1", None));
-                        ObjectConstruction ("Test2", ("t2", None));
-                        CopyReference (ObjectType "Test1", ("t1", None), ("t2", None));
-                        UncopyReference (ObjectType "Test1", ("t1", None), ("t2", None))])]))]            
-            [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-             (3, LocsVal 2); (4, ObjVal ("Test1", [])); (5, LocsVal 4);
-             (6, ObjVal ("Test2", [])); (7, LocsVal 6)]          
+      "copy Test t tcopy"    >:: (fun _ ->
+        assert_equal [(1, LocsVal 2); (2, ObjVal ("Program", [("this", 1)])); (3, LocsVal 4);
+                      (4, ObjVal ("Test", [])); (5, LocsVal 4)]
+          (eval_state [CopyReference (ObjectType "Test", ("t", None), ("tcopy", None))]
+             [("tcopy", 5); ("t", 3); ("this", 1)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([],
+                [MDecl ("main", [],
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      LocalBlock (ObjectType "Test", "tcopy", Nil,
+                                                  [CopyReference (ObjectType "Test", ("t", None), ("tcopy", None));
+                                                   UncopyReference (ObjectType "Test", ("t", None), ("tcopy", None))],
+                                                  Nil)],
+                                     Nil)])]))]
+             [(1, LocsVal 2); (2, ObjVal ("Program", [("this", 1)])); (3, LocsVal 4);
+              (4, ObjVal ("Test", [])); (5, IntVal 0)]       
       ) );
 
-      "uncopy Test1 t1 t2"    >:: (fun _ ->
-        assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-             (3, LocsVal 2); (4, ObjVal ("Test1", [])); (5, LocsVal 4);
-             (6, ObjVal ("Test2", [])); (7, LocsVal 6)]          
-          (eval_state [UncopyReference (ObjectType "Test1", ("t1", None), ("t2", None))]
-            [("t2", 7); ("t1", 5); ("result", 1); ("this", 3)]
-            [("Test1",
-              ([],
-               [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                       [Assign (("n", None), ModAdd, Const 1)])]));
-             ("Test2",
-              ([],
-               [MDecl ("Plus2", [Decl (IntegerType, "n")],
-                       [Assign (("n", None), ModAdd, Const 2)])]));
-             ("Program",
-              ([Decl (IntegerType, "result")],
-               [MDecl ("main", [],
-                       [ObjectConstruction ("Test1", ("t1", None));
-                        ObjectConstruction ("Test2", ("t2", None));
-                        CopyReference (ObjectType "Test1", ("t1", None), ("t2", None));
-                        UncopyReference (ObjectType "Test1", ("t1", None), ("t2", None))])]))]
-            [(1, IntVal 0); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
-                      (3, LocsVal 2); (4, ObjVal ("Test1", [])); (5, LocsVal 4);
-                      (6, ObjVal ("Test2", [])); (7, LocsVal 4)]            
+      "uncopy Test t tcopy"    >:: (fun _ ->
+        assert_equal [(1, LocsVal 2); (2, ObjVal ("Program", [("this", 1)])); (3, LocsVal 4);
+                      (4, ObjVal ("Test", [])); (5, IntVal 0)]       
+          (eval_state [UncopyReference (ObjectType "Test", ("t", None), ("tcopy", None))]
+             [("tcopy", 5); ("t", 3); ("this", 1)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([],
+                [MDecl ("main", [],
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      LocalBlock (ObjectType "Test", "tcopy", Nil,
+                                                  [CopyReference (ObjectType "Test", ("t", None), ("tcopy", None));
+                                                   UncopyReference (ObjectType "Test", ("t", None), ("tcopy", None))],
+                                                  Nil)],
+                                     Nil)])]))]
+             [(1, LocsVal 2); (2, ObjVal ("Program", [("this", 1)])); (3, LocsVal 4);
+              (4, ObjVal ("Test", [])); (5, LocsVal 4)]             
       ) );
 
+      "copy Test ts[0] tcopy"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+                      (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", [])); (8, LocsVal 7)]
+          (eval_state [CopyReference (ObjectType "Test", ("ts", Some (Const 0)), ("tcopy", None))]
+             [("tcopy", 8); ("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         LocalBlock (ObjectType "Test", "tcopy", Nil,
+                                     [CopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                                     ("tcopy", None))],
+                                     Nil)])]))]             
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", [])); (8, IntVal 0)]          
+      ) );
+
+      "uncopy Test ts[0] tcopy"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+                      (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", [])); (8, IntVal 0)]
+          (eval_state [UncopyReference (ObjectType "Test", ("ts", Some (Const 0)), ("tcopy", None))]
+             [("tcopy", 8); ("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         LocalBlock (ObjectType "Test", "tcopy", Nil,
+                                     [CopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                                     ("tcopy", None))],
+                                     Nil)])]))]
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", [])); (8, LocsVal 7)]             
+      ) );
+      
+      "copy Test ts[0] ts[1]"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+                      (5, LocsVal 6); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+          (eval_state [CopyReference (ObjectType "Test", ("ts", Some (Const 0)), ("ts", Some (Const 1)))]
+             [("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         CopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                        ("ts", Some (Const 1)));
+                         UncopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                          ("ts", Some (Const 1)))])]))]
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+      ) );
+      
+      "uncopy Test ts[0] ts[1]"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+                      (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+          (eval_state [UncopyReference (ObjectType "Test", ("ts", Some (Const 0)), ("ts", Some (Const 1)))]
+             [("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         ObjectConstruction ("Test", ("ts", Some (Const 0)));
+                         CopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                        ("ts", Some (Const 1)));
+                         UncopyReference (ObjectType "Test", ("ts", Some (Const 0)),
+                                          ("ts", Some (Const 1)))])]))]
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+              (5, LocsVal 6); (6, LocsVal 7); (7, ObjVal ("Test", []))]             
+      ) );
+
+      "copy Test t ts[0]"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+                      (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+                      (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+          (eval_state [CopyReference (ObjectType "Test", ("t", None), ("ts", Some (Const 0)))]
+             [("t", 6); ("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      CopyReference (ObjectType "Test", ("t", None),
+                                                     ("ts", Some (Const 0)))],
+                                     Nil)])]))]             
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, IntVal 0);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+         
+      ) );
+
+      "uncopy Test t ts[0]"    >:: (fun _ ->
+        assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, IntVal 0);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]
+          (eval_state [UncopyReference (ObjectType "Test", ("t", None), ("ts", Some (Const 0)))]
+             [("t", 6); ("ts", 1); ("this", 2)]
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (ObjectArrayType "Test", "ts")],
+                [MDecl ("main", [],
+                        [ArrayConstruction (("Test", Const 2), "ts");
+                         LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", ("t", None));
+                                      CopyReference (ObjectType "Test", ("t", None),
+                                                     ("ts", Some (Const 0)))],
+                                     Nil)])]))]
+             [(1, LocsVec [4; 5]); (2, LocsVal 3);
+              (3, ObjVal ("Program", [("ts", 1); ("this", 2)])); (4, LocsVal 6);
+              (5, IntVal 0); (6, LocsVal 7); (7, ObjVal ("Test", []))]         
+      ) );      
+      
       "local int i = 0 call::Plusi(result) delocal int i = 0"    >:: (fun _ ->
         assert_equal [(1, IntVal 1); (2, ObjVal ("Program", [("result", 1); ("this", 3)]));
                       (3, LocsVal 2); (4, IntVal 1)]
