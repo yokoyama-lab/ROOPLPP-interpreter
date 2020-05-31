@@ -2,7 +2,7 @@ open OUnit
 open Syntax
 open Value
 open Eval
-
+   
 let tests = "test suite for eval.ml" >::: [
       "Const 1"  >:: (fun _ -> assert_equal (IntVal 1) (eval_exp (Const 1) [] []) );
       "Var x"    >:: (fun _ -> assert_equal (IntVal 1) (eval_exp (Var "x") [("x", 1)] [(1, IntVal 1)]) );
@@ -24,7 +24,6 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal (IntVal 2) (eval_exp (Binary(Add, Const 1, Const 1)) [] []) );
       "x + x"    >:: (fun _ ->
         assert_equal (IntVal 4) (eval_exp (Binary(Add, Var "x", Var "x")) [("x", 1)] [(1, IntVal 2)]) );
-
       "1 - 1"    >:: (fun _ ->
                       assert_equal (IntVal 0) (eval_exp (Binary(Sub, Const 1, Const 1)) [] []) );
       "1 ^ 1"    >:: (fun _ ->
@@ -53,6 +52,10 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal (IntVal 1) (eval_exp (Binary(Lt, Const 5, Const 10)) [] []) );
       "1 < 1"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Lt, Const 1, Const 1)) [] []) );
+      "LocsVal 1 < LovsVal 2"  >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (<) (LocsVal 1) (LocsVal 2)) );
+      "LocsVal 1 < IntVal 2"  >:: (fun _ ->
+        assert_equal (IntVal 0) (comp_op (<) (LocsVal 1) (IntVal 2)) );      
       "1 > 2"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Gt, Const 1, Const 2)) [] []) );
       "2 > 1"    >:: (fun _ ->
@@ -63,22 +66,42 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal (IntVal 1) (eval_exp (Binary(Eq, Const 1, Const 1)) [] []) );
       "1 = 0"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Eq, Const 1, Const 0)) [] []) );
+      "1 = nil"    >:: (fun _ ->
+        assert_equal (IntVal 1) (eval_exp (Binary(Eq, Const 0, Nil)) [] []) );
+      "0 = nil"    >:: (fun _ ->
+        assert_equal (IntVal 0) (eval_exp (Binary(Eq, Const 1, Nil)) [] []) );
+      "LocsVal 1 = LovsVal 1"  >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (=) (LocsVal 1) (LocsVal 1)) );
+      "LocsVal 1 = IntVal 1"  >:: (fun _ ->
+        assert_equal (IntVal 0) (comp_op (=) (LocsVal 1) (IntVal 1)) );
+      "ObjVal(this, []) = IntVal 1"  >:: (fun _ ->
+        assert_equal (IntVal 0) (comp_op (=) (ObjVal("this", [])) (IntVal 1)) );
+      "ObjVal(this, []) = ObjVal(this, [])"  >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (=) (ObjVal("this", [])) (ObjVal("this", []))) );
       "1 <> 1"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Ne, Const 1, Const 1)) [] []) );
       "1 <> 0"    >:: (fun _ ->
         assert_equal (IntVal 1) (eval_exp (Binary(Ne, Const 1, Const 0)) [] []) );
+      "LocsVal 0 <> LovsVal 1"  >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (<>) (LocsVal 0) (LocsVal 1)) );
+      "IntVal 1 <> LovsVal 1"  >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (<>) (IntVal 1) (LocsVal 1)) );      
       "1 <= 1"    >:: (fun _ ->
         assert_equal (IntVal 1) (eval_exp (Binary(Le, Const 1, Const 1)) [] []) );
       "2 <= 1"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Le, Const 2, Const 1)) [] []) );
       "1 <= 2"    >:: (fun _ ->
         assert_equal (IntVal 1) (eval_exp (Binary(Le, Const 1, Const 2)) [] []) );
+      "LocsVal 2 <= LocsVal 2"    >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (<=) (LocsVal 1) (LocsVal 1)) );
       "1 >= 1"    >:: (fun _ ->
         assert_equal (IntVal 1) (eval_exp (Binary(Ge, Const 1, Const 1)) [] []) );
       "2 >= 1"    >:: (fun _ ->
         assert_equal (IntVal 1) (eval_exp (Binary(Ge, Const 2, Const 1)) [] []) );
       "1 >= 2"    >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp (Binary(Ge, Const 1, Const 2)) [] []) );
+      "LocsVal 2 >= LocsVal 2"    >:: (fun _ ->
+        assert_equal (IntVal 1) (comp_op (>=) (LocsVal 1) (LocsVal 1)) );
 
       
       "skip"    >:: (fun _ ->

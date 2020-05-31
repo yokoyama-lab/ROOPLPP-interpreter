@@ -210,15 +210,15 @@ let bin_op f v1 v2 =
     | IntVal(n1), IntVal(n2) -> IntVal(f n1 n2)
     | _ -> failwith "integer values expected"
 
-(*bin_op同様。等価、不等価演算子専用。*)
-let comp_op f v1 v2 =
+(*bin_op同様。関係演算子専用。*)
+let rel_op f v1 v2 =
   match v1, v2 with
   | IntVal(n1), IntVal(n2) ->
      if f (n1 = 1) (n2 = 1) then IntVal(1) else IntVal(0)
   | _ -> failwith "integer values expected"
 
-(*bin_op同様。関係演算子専用。*)
-let rel_op f v1 v2 =
+(*bin_op同様。比較算子専用。*)
+let comp_op f v1 v2 =
   if f v1 v2 = true then IntVal(1)
   else IntVal(0)
 
@@ -249,14 +249,14 @@ let rec eval_exp exp env st =
        | Mod  -> bin_op (mod)
        | Band -> bin_op (land)
        | Bor  -> bin_op (lor)
-       | And  -> comp_op (&&)
-       | Or   -> comp_op (||)
-       | Lt   -> rel_op (<)
-       | Gt   -> rel_op (>)
-       | Eq   -> rel_op (=)
-       | Ne   -> rel_op (<>)
-       | Le   -> rel_op (<=)
-       | Ge   -> rel_op (>=)
+       | And  -> rel_op (&&)
+       | Or   -> rel_op (||)
+       | Lt   -> comp_op (<)
+       | Gt   -> comp_op (>)
+       | Eq   -> comp_op (=)
+       | Ne   -> comp_op (<>)
+       | Le   -> comp_op (<=)
+       | Ge   -> comp_op (>=)
      in f b (eval_exp e1 env st) (eval_exp e2 env st)
 
 (*文statementを評価する関数。
