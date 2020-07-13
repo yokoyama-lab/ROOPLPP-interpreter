@@ -26,6 +26,8 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal (IntVal 4) (eval_exp (Binary(Add, Var "x", Var "x")) [("x", 1)] [(1, IntVal 2)]) );
       "1 - 1"    >:: (fun _ ->
                       assert_equal (IntVal 0) (eval_exp (Binary(Sub, Const 1, Const 1)) [] []) );
+      "x - 1"    >:: (fun _ ->
+                      assert_equal (IntVal 2) (eval_exp (Binary(Sub, Var "x", Const 1)) [("x" , 1)] [(1, IntVal 3)]) );                
       "1 ^ 1"    >:: (fun _ ->
                       assert_equal (IntVal 0) (eval_exp (Binary(Xor, Const 1, Const 1)) [] []) );
       "1 * 1"    >:: (fun _ ->
