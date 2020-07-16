@@ -20,7 +20,7 @@ git clone https://github.com/yokoyama-lab/ROOPLPP-interpreter.git
 sudo apt-get install php
 ```
 
-+ OCamlをインストール
++ OCamlやその他の必要なものをインストール
 ```
 sudo apt update
 sudo apt install opam
