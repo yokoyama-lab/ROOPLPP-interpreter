@@ -55,6 +55,6 @@ chmod 777 programs
 php -S localhost:9000
 ```
 
-+ ブラウザで "http://localhost:9000" を開く
++ ブラウザで "http://localhost:9000" を開くとROOPL++のオンラインインタープリタが表示される
 
 + ページ下のExecuteを押すとプログラムを実行できる
