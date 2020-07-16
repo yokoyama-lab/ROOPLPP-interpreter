@@ -39,7 +39,7 @@ $example = filter_input(INPUT_GET, "example", FILTER_VALIDATE_INT);
 <h3>Execute</h3>
 <input type="submit" value="Execute">
 </form>
-<h2>Sample programs and data</h2>
+<h2>Sample programs</h2>
 <ul>
  <li> <a href="index.php?example=0">Fibonacci</a>
  <li> <a href="index.php?example=1">Square root</a>
