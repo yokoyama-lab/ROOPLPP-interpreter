@@ -30,7 +30,7 @@ opam switch
 opam install extlib ocamlfind
 ```
 
-+ ディレクトリsrcに移動しmakeする
++ ディレクトリsrcに移動し,makeする
 ```
 cd ROOPLPP-interpreter/src
 make
@@ -55,6 +55,6 @@ chmod 777 programs
 php -S localhost:9000
 ```
 
-+ ブラウザで "http://localhost:9000" を開くとROOPL++のオンラインインタープリタが表示される
++ ブラウザで "http://localhost:9000" を開くと,ROOPL++のオンラインインタープリタが表示される
 
 + ページ下のExecuteを押すとプログラムを実行できる
