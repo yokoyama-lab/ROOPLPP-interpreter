@@ -10,7 +10,7 @@ An interpreter for ROOPLPP in OCaml
  + ounit(テストケースを実行する場合)
 
 ## Linux Ubuntuにてインストール例
-+ リポジトリをダウンロード
++ 本リポジトリをダウンロード
 ```
 git clone https://github.com/yokoyama-lab/ROOPLPP-interpreter.git
 ```
