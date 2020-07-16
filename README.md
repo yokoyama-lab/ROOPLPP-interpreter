@@ -8,6 +8,7 @@ An interpreter for ROOPLPP in OCaml
  + ocamlyacc
  + extlib
 
+## Linux Ubuntuにてインストール例
 + リポジトリをダウンロード
 ```
 git clone https://github.com/yokoyama-lab/ROOPLPP-interpreter.git
