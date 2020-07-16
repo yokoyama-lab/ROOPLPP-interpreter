@@ -7,6 +7,7 @@ An interpreter for ROOPLPP in OCaml
  + ocamlfind
  + ocamlyacc
  + extlib
+ + ounit(テストケースを実行する場合)
 
 ## Linux Ubuntuにてインストール例
 + リポジトリをダウンロード
