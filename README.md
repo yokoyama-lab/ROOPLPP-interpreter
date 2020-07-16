@@ -1,2 +1,58 @@
 # ROOPLPP-interpreter
-An interpreter for ROOPLPP
+An interpreter for ROOPLPP in OCaml
+
+## Requirements
++ php
++ OCaml
+ + ocamlfind
+ + ocamlyacc
+ + extlib
+
++ リポジトリをダウンロード
+```
+git clone https://github.com/yokoyama-lab/ROOPLPP-interpreter.git
+```
+
++ phpをインストール
+```
+sudo apt-get install php
+```
+
++ OCamlをインストール
+```
+sudo apt update
+sudo apt install opam
+opam init
+opam update
+opam switch
+opam install extlib ocamlfind
+```
+
++ ディレクトリsrcに移動しmakeする
+```
+cd ROOPLPP-interpreter/src
+make
+```
+
++ ディレクトリwebに移動し,ディレクトリprogramsを作成
+
+```
+cd ../web
+mkdir programs
+```
+
++ ディレクトリprogramsのアクセス権を変更
+
+```
+mkdir program
+chmod 777 programs
+```
+
++ ローカルサーバを起動
+```
+php -S localhost:9000
+```
+
++ ブラウザで "http://localhost:9000" を開く
+
++ ページ下のExecuteを押すとプログラムを実行できる
