@@ -7,7 +7,7 @@ An interpreter for ROOPLPP in OCaml
  + ocamlfind
  + ocamlyacc
  + extlib
- + ounit(テストケースを実行する場合)
+ + OUnit(テストケースを実行する場合)
 
 ## Linux Ubuntuにてインストール例
 + 本リポジトリをダウンロード
@@ -58,3 +58,19 @@ php -S localhost:9000
 + ブラウザで "http://localhost:9000" を開くと,ROOPL++のオンラインインタープリタが表示される
 
 + ページ下のExecuteを押すとプログラムを実行できる
+
+## テストケース実行方法
++ 単体テストフレームワークのOUnitをインストール
+```
+opam install ounit
+```
+
++ ディレクトリtestに移動
+```
+cd test
+```
+
++ 以下のようにタイプすると,ファイルeval_test.ml内のテストケースが実行される.他のファイルも同様である.
+```
+make test_eval
+```
