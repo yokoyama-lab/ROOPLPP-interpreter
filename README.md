@@ -70,7 +70,7 @@ opam install ounit
 cd test
 ```
 
-+ 以下のようにタイプすると,ファイルeval_test.ml内のテストケースが実行される.他のファイルも同様である.
++ 以下のようにタイプすると,ファイルeval_test.ml内のテストケースが実行される.
 ```
 make test_eval
 ```
