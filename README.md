@@ -50,7 +50,7 @@ mkdir program
 chmod 777 programs
 ```
 
-+ ローカルサーバを起動
++ ディレクトリweb内で以下のコマンドを打ち,ローカルサーバを起動
 ```
 php -S localhost:9000
 ```
