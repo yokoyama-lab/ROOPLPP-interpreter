@@ -1,5 +1,6 @@
 %{
 open Syntax
+open Util
 
 let parse_error s = print_endline s
 
@@ -11,6 +12,7 @@ let anyId2obj = function
 // リテラル
 %token <string> ID     // x, y, abc, ...
 %token <int> CONST     // 0, 1, 2, ...
+%token <string> STRING
 
 // 演算子
 %token MUL       // '*'
@@ -67,6 +69,8 @@ let anyId2obj = function
 %token DELETE    // "delete"
 %token COPY      // "copy"
 %token UNCOPY    // "uncopy"
+%token SHOW      // "show"
+%token PRINT     // "print"
 
 // 制御記号
 %token EOF       // end_of_file
@@ -90,6 +94,7 @@ let anyId2obj = function
 // 開始記号
 main:
   | prog EOF { Prog $1 }
+  | error { raise (Parse_error (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) };
 
 // 式
 exp:
@@ -178,6 +183,10 @@ stm:
     { Skip } // skip
   | anyId SWAP anyId
     { Swap($1, $3) } // x <=> x
+  | SHOW LPAREN exp RPAREN
+    { Show($3) }
+  | PRINT LPAREN STRING RPAREN
+      { Print($3) }
 
 else_opt:
   | ELSE stms1 { $2 }

@@ -62,6 +62,8 @@ type stm =
   | ArrayConstruction of (typeId * exp) * id
   | ArrayDestruction of (typeId * exp) * id
   | Skip
+  | Show of exp
+  | Print of string
 
 type decl = Decl of dataType * id
 

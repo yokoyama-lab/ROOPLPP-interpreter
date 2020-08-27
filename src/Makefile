@@ -2,8 +2,8 @@
 # Makefile
 #
 
-SRC= syntax.ml value.ml inver.ml eval.ml print.ml parser.mly lexer.mll main.ml
-COMPONENT= syntax.ml value.ml invert.ml eval.ml print.ml parser.mli parser.ml lexer.ml main.ml
+SRC= util.ml syntax.ml value.ml inver.ml print.ml eval.ml parser.mly lexer.mll main.ml
+COMPONENT= util.ml syntax.ml value.ml invert.ml print.ml eval.ml parser.mli parser.ml lexer.ml main.ml
 TARGET= rplpp
 
 all:	$(TARGET)
@@ -26,7 +26,7 @@ backup:
 clean:
 	/bin/rm -f parser.ml parser.mli lexer.ml $(TARGET) *.cmi *.cmo *.mli parser.conflicts parser.output
 
-test:	$(TARGET)	
+test:	$(TARGET)
 	./$(TARGET) ../example/fib.rplpp
 	./$(TARGET) ../example/factor.rplpp
 	./$(TARGET) ../example/sqrt.rplpp
