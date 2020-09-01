@@ -28,7 +28,9 @@ $example = filter_input(INPUT_GET, "example", FILTER_VALIDATE_INT);
   	$filename = "DoublyLinkedList.rplpp";
   } else if ($example == 6) {
   	$filename = "BinaryTree.rplpp";
-  } else {
+  } else if ($example == 7) {      
+        $filename = "BinaryTree_print.rplpp";
+  }else {
   	$filename = "fib.rplpp";
   }
   $dir = dirname(__FILE__);
@@ -36,7 +38,7 @@ $example = filter_input(INPUT_GET, "example", FILTER_VALIDATE_INT);
   echo($con);
    ?>
 </textarea>
-<h3>Execute</h3>
+</br>
 <input type="submit" value="Execute">
 </form>
 <h2>Sample programs</h2>
@@ -48,6 +50,7 @@ $example = filter_input(INPUT_GET, "example", FILTER_VALIDATE_INT);
  <li> <a href="index.php?example=4">LinkedList</a>
  <li> <a href="index.php?example=5">DoublyLinkedList</a>
  <li> <a href="index.php?example=6">BinaryTree</a>
+ <li> <a href="index.php?example=7">BinaryTree_print</a>
 </ul>
 
   </body>

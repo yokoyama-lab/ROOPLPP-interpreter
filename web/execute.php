@@ -47,7 +47,7 @@ if (is_resource($process)) {
       echo "Execution timed out!\n";
     }
 ?>
-<h3>Output data</h3>
+<h3>Result</h3>
 <textarea name="output" rows="30" cols="100">
 <?php
     echo $output;
