@@ -264,8 +264,8 @@ let rec eval_exp exp env st =
 （OBJBLOCK部分がまだ未完成*)
 let rec eval_state stml env map st0 =
   let isTrue = function
-    | IntVal(0) -> true
-    | IntVal(_) -> false
+    | IntVal(0) -> false
+    | IntVal(_) -> true
     | _ -> failwith "error in isTrue" in
   let f = function
     | ModAdd -> (+)
