@@ -237,6 +237,13 @@ let rec eval_exp exp env st =
      lookup_st locs2 st
   (*NIL*)
   | Nil -> IntVal(0)
+  (* DOT *)
+  | Dot (Var(x), Var(xi')) ->
+     let l = lookup_envs x env in
+     let LocsVal(l') = lookup_st l st in
+     let ObjVal(c, env') = lookup_st l' st in
+     let li = lookup_envs xi' env' in
+     lookup_st li st
   (*BINOP*)
   | Binary(b, e1, e2) ->
      let f = function

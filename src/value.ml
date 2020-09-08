@@ -2,12 +2,12 @@ open Syntax
 
 type locs = int
 
+type env = (id * locs) list
+
 type value =
   | IntVal of int  (*整数*)
-  | ObjVal of typeId * (id * int) list (*オブジェクト*)
+  | ObjVal of typeId * env (*オブジェクト*)
   | LocsVal of locs (*ロケーション*)
   | LocsVec of locs list (*ロケーションのベクトルを表す*)
 
-type env = (id * locs) list
-
-type state =(locs * value) list
+type state = (locs * value) list

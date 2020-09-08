@@ -1,0 +1,17 @@
+// A sample program for accessing an instance variable.
+class A
+  int x
+
+  method m1()
+    x += 1
+
+class Program
+  A a
+  int y
+
+  method main()
+    new A a
+
+    call a::m1()
+    y ^= a.x
+    show(a.x)
