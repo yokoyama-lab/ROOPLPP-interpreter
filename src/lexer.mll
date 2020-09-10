@@ -70,6 +70,7 @@ rule token = parse
   | "+="      { MODADD }
   | "-="      { MODSUB }
   | "^="      { MODXOR }
+  | '.'       { DOT }
 
   (* 括弧 *)
   | '('       { LPAREN }

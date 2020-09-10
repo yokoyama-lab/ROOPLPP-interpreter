@@ -41,6 +41,7 @@ type exp =
   | ArrayElement of id * exp
   | Nil
   | Binary of binOp * exp * exp
+  | Dot of exp * exp
 
 type obj = id * exp option
 

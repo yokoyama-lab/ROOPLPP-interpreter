@@ -40,6 +40,7 @@ let anyId2obj = function
 %token MODADD    // "+="
 %token MODSUB    // "-="
 %token MODXOR    // "^="
+%token DOT       // '.'
 
 // 括弧
 %token LPAREN    // '('
@@ -93,7 +94,8 @@ let anyId2obj = function
 %nonassoc LT LE GT GE
 %nonassoc EQ NE
 %left ADD SUB
-%left MUL DIV MOD       /* highest precedence */
+%left MUL DIV MOD
+%left DOT               /* highest precedence */
 
 %start main
 %type <Syntax.prog> main
@@ -127,6 +129,7 @@ exp:
   | exp AND exp  { Binary(And,  $1, $3) } // e1 && e2
   | exp OR exp   { Binary(Or,   $1, $3) } // e1 && e2
   | LPAREN exp RPAREN { $2 }              // ( e )
+  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
 
 modop:
   | MODADD { ModAdd }
