@@ -1,0 +1,21 @@
+class Test
+  method show_array(int[] xs)
+    for array in xs do
+      show(array)
+    end
+
+class Program
+int[] xs
+ method main()
+   new int[3] xs
+   xs[0] ^= 1
+   xs[1] ^= 2
+   xs[2] ^= 3
+   local Test t = nil
+   new Test t
+   call t::show_array(xs)
+   print("\n")
+   uncall t::show_array(xs)
+   print("\n")
+   delete Test t
+   delocal Test t = nil

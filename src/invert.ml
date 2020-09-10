@@ -13,6 +13,14 @@ let rec invert_stm = function
      Conditional(e2, invert stml1, invert stml2, e1)
   | Loop(e1, stml1, stml2, e2) ->
      Loop(e2, invert stml1, invert stml2, e1)
+  (*追加部分for*)
+  | FOR(x, NFOR(n1, n2), stml) ->
+     FOR(x, NFOR(n2, n1), invert stml)
+  | FOR(x1, AFOR(rev, x2), stml) ->
+     let flag = if rev = true
+                then false
+                else true in
+     FOR(x1, AFOR(flag, x2), stml)     
   | ObjectBlock(tid, id, stml) ->
      ObjectBlock(tid, id, invert stml)
   | LocalBlock(dt, id, e1, stml, e2) ->

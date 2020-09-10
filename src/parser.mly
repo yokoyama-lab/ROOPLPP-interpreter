@@ -33,6 +33,9 @@ let anyId2obj = function
 %token OR        // "||"
 %token SWAP      // "<=>"
 %token COMMA     // ','
+// 追加部分for
+%token WDOT      // ".."
+
 %token WCOLON    // "::"
 %token MODADD    // "+="
 %token MODSUB    // "-="
@@ -57,6 +60,12 @@ let anyId2obj = function
 %token DO        // "do"
 %token LOOP      // "loop"
 %token UNTIL     // "until"
+// 追加部分for
+%token FOR       // "for"
+%token IN        // "in"
+%token REV       // "rev"
+%token END       // "end"
+
 %token INT       // "int"
 %token NIL       // "nil"
 %token IF        // "if"
@@ -143,6 +152,15 @@ anyId:
   | ID LBRA exp RBRA { ($1, Some $3) }
   | ID               { ($1, None) }
 
+// 追加部分for
+myfor:
+  | LPAREN exp WDOT exp RPAREN
+    { NFOR($2, $4) }
+  | LPAREN REV RPAREN ID
+    { AFOR(true, $4) }
+  | ID
+    { AFOR(false, $1) }
+
 // statement
 stms1:
   | stms1 stm { $1 @ [$2]}
@@ -155,6 +173,9 @@ stm:
     { Conditional($2, $4, $5, $7) } // if e then s else s fi e  or  if e then s fi e
   | FROM exp do_opt loop_opt UNTIL exp
     { Loop($2, $3, $4, $6) } // from e do s loop s until e or   or  from e do s until e  or  from e loop s until e
+  //追加部分for
+  | FOR ID IN myfor DO stms1 END // for x in {(e..e) | (rev)?x } do s end
+    { FOR($2, $4, $6) }
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN

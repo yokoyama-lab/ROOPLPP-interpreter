@@ -44,11 +44,17 @@ type exp =
 
 type obj = id * exp option
 
+type myfor = (*追加部分for*)
+  | NFOR of exp * exp (*回数指定*)
+  | AFOR of bool * id (*配列要素 bool=trueなら逆順*)
+
+         
 type stm =
   | Assign of obj * modOp * exp
   | Swap of obj * obj
   | Conditional of exp * stm list * stm list * exp
   | Loop of exp * stm list * stm list * exp
+  | FOR of id * myfor * stm list (*追加部分for*)
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
   | LocalCall of methodId * obj list

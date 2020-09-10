@@ -1,0 +1,19 @@
+class Test
+  method add(int n)
+    for i in (1..10) do
+      n += 1
+    end
+
+class Program
+int result  
+  method main()
+   local Test t = nil
+   new Test t
+   show(result)
+   call t::add(result)
+   show(result)
+   uncall t::add(result)
+   show(result)
+   delete Test t
+   delocal Test t = nil
+   print("\n")

@@ -63,6 +63,8 @@ rule token = parse
   | "&&"      { AND }
   | "||"      { OR }
   | "<=>"     { SWAP }
+  (* 追加部分for *)
+  | ".."      { WDOT }
   | ','       { COMMA }
   | "::"      { WCOLON }
   | "+="      { MODADD }
@@ -88,6 +90,12 @@ rule token = parse
   | "do"        { DO }
   | "loop"      { LOOP }
   | "until"     { UNTIL }
+  (* 追加部分for *)
+  | "for"	{ FOR }
+  | "in"	{ IN }
+  | "rev"	{ REV }
+  | "end"	{ END }
+
   | "int"       { INT }
   | "nil"       { NIL }
   | "if"        { IF }

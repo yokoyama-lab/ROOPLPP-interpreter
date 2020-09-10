@@ -321,6 +321,51 @@ let rec eval_state stml env map st0 =
          let st2 = eval_state stml1 env map st in
          eval_loop (e1, stml1, stml2, e2) env map st2
        else failwith "error in LOOPMAIN"
+    (*FOR CONST: for x in (e1..e2) do stml end *)
+    | FOR(x, NFOR(n1, n2), stml) ->
+       let rec for_con (x, (e1, e2), stml) env map st =                          (*意味関数F*)
+         let IntVal n1,IntVal n2 = (eval_exp e1 env st, eval_exp e2 env st) in (*e1,e2を評価*)
+         if n1 = n2 then List.remove_assoc (lookup_envs x env) st  (* ストアからロケーションxを取り除く *)
+         else
+           let v = if n1 < n2 then (n1 + 1)
+                   else (n1 - 1)
+           in
+           let st2 = ext_st st (lookup_envs x env) (IntVal v) in (* μ[γ(x) -> n1 + 1 or n1 - 1 *)
+           let st3 = eval_state stml env map st2 in           (* stml1回実行 *)
+           for_con (x, (Const v, Const n2), stml) env map st3 (* 再帰 *)
+       in
+       let locs = (List.length st) + 1 in                     (* 未使用のロケーションを取得 *)
+       let env2 = ext_envs env x locs in                      (* γ[x->l] *)
+       let st2 = ext_st st locs (eval_exp n1 env st) in         (* μ[l->n1 *)
+       let st3 = eval_state stml env2 map st2 in                (*stml1回実行*)
+       for_con (x, (n1, n2), stml) env2 map st3                 (*意味関数Fへ*)
+    (* FOR ARRAY: for x1 in (x2 or (rev)x2) do s end *)
+    | FOR(x1, AFOR(rev, x2), stml) ->                (* rev:bool trueの場合(rev)x2 falseの場合x2 *)
+       let LocsVec(vec) = lookup_val x2 env st in    (* ベクトルを求める μ(γ(x2)) *)
+       let rec for_array (x1, x2, stml, n) env map st =           (*意味関数A or B*)
+         let flag, index = if rev = true 
+                           then 0, (n - 1)
+                           else (List.length vec) - 1, (n + 1)
+         in
+         if n = flag (* if n = x2.length - 1 or n = 0 *)
+         then List.remove_assoc (lookup_envs x1 env) st      (*ストアstからx1のロケーションを解除*)
+         else
+           let locs = lookup_vec index vec in                (* ベクトルとindexからロケーションを求める *)
+           let w = lookup_st locs st in                      (* 求めたロケーションｎ値を取得 *)
+           let st2 = ext_st st (lookup_envs x1 env) w in     (* γ(x1) -> w *)
+           let st3 = eval_state stml env map st2 in          (* stml1回実行 *)
+           for_array (x1, x2, stml, index) env map st3       (* 再帰 *)
+       in
+       let index = if rev = true then (List.length vec) - 1  (* index求める *)
+               else 0
+       in
+       let locs1 = lookup_vec index vec in
+       let w = lookup_st locs1 st in
+       let locs2 = (List.length st) + 1 in
+       let env2 = ext_envs env x1 locs2 in
+       let st2 = ext_st st locs2 w in
+       let st3 = eval_state stml env2 map st2 in
+       for_array (x1, x2, stml, index) env2 map st3
     | Conditional(e1, stml1, stml2, e2) ->
        (*IFTRUE*)
        if (eval_exp e1 env st) <> IntVal(0) then
