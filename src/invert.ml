@@ -2,6 +2,12 @@ open Syntax
 
 let rec invert_stm = function
   | Skip -> Skip
+  | DotAssign(e1, modOp, e2) ->
+     let invert_op = function
+       | ModAdd -> ModSub
+       | ModSub -> ModAdd
+       | ModXor -> ModXor
+     in DotAssign(e1, invert_op modOp, e2)
   | Assign(obj, modOp, e) ->
      let invert_op = function
        | ModAdd -> ModSub

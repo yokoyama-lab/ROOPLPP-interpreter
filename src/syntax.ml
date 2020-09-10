@@ -51,6 +51,7 @@ type myfor = (*追加部分for*)
 
          
 type stm =
+  | DotAssign of exp * modOp * exp (*exp.exp modOp = exp*)
   | Assign of obj * modOp * exp
   | Swap of obj * obj
   | Conditional of exp * stm list * stm list * exp

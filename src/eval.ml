@@ -267,8 +267,7 @@ let rec eval_exp exp env st =
 
 (*文statementを評価する関数。
 第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
-第三引数にマップ、第四引数にストアを受け取る。この関数はストアを返す。
-（OBJBLOCK部分がまだ未完成*)
+第三引数にマップ、第四引数にストアを受け取る。この関数はストアを返す。*)
 let rec eval_state stml env map st0 =
   let isTrue = function
     | IntVal(0) -> false
@@ -297,6 +296,16 @@ let rec eval_state stml env map st0 =
        (Print.print_value_rec v; st)
     (*SKIP*)
     | Skip -> st
+    (*インスタンス変数更新*)
+    | DotAssign(Dot(Var x, Var xi'), op, e) (*x1.x2 += -= ^= e*) ->
+       let rv = eval_exp e env st in
+       let l = lookup_envs x env in
+       let LocsVal(l') = lookup_st l st in
+       let ObjVal(c, env') = lookup_st l' st in
+       let li = lookup_envs xi' env' in
+       let lv = lookup_st li st in
+       let v = bin_op (f op) lv rv in
+       ext_st st li v
     (*ASSVAR*) (*ASSARRELEMVAR*)
     | Assign(y, op, e) (*y op= e2*) ->
        let lvx, vx = lval_val y in

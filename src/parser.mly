@@ -170,6 +170,8 @@ stms1:
   | stm       { [$1] }
 
 stm:
+  | exp modop exp // exp.exp += -= ^= exp
+    { DotAssign($1, $2, $3) }
   | anyId modop exp
     { Assign($1, $2, $3) } // x (+,-,^)= e
   | IF exp THEN stms1 else_opt FI exp

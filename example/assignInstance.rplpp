@@ -1,0 +1,28 @@
+// A sample program for assigning an instance variable.
+class A
+  int x
+
+  method a()
+    skip
+    
+class B inherits A
+  int y
+  method b()
+    skip
+    
+class Program
+  A a
+  B b
+
+  method main()
+    new A a
+    new B b
+    a.x += 10
+    show(a.x)
+    print("\n")
+    b.x ^= 11
+    b.y ^= 12
+    show(b.x)
+    print("\n")
+    show(b.y)
+    print("\n")
