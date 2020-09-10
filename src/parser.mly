@@ -5,8 +5,9 @@ open Util
 let parse_error s = print_endline s
 
 let anyId2obj = function
-  | x, None   -> Var x
-  | x, Some e -> ArrayElement (x,e)
+  | VarArray(x, None)   -> Var x
+  | VarArray(x, Some e) -> ArrayElement (x,e)
+  | InstVar(x1, x2) -> Dot(Var x1, Var x2)
 %}
 
 // リテラル
@@ -129,7 +130,7 @@ exp:
   | exp AND exp  { Binary(And,  $1, $3) } // e1 && e2
   | exp OR exp   { Binary(Or,   $1, $3) } // e1 && e2
   | LPAREN exp RPAREN { $2 }              // ( e )
-  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
+//  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
 
 modop:
   | MODADD { ModAdd }
@@ -144,16 +145,17 @@ arrayTypeName:
   | INT    LBRA exp RBRA { ("int", $3) }
 
 anyIds1:
-  | anyIds1 COMMA anyId { $1 @ [$3]}
-  | anyId               { [$1] }
+  | anyIds1 COMMA ID { $1 @ [$3]}
+  | ID               { [$1] }
 
 anyIds:
   | anyIds1 { $1 }
   |         { [] }
 
 anyId:
-  | ID LBRA exp RBRA { ($1, Some $3) }
-  | ID               { ($1, None) }
+  | ID LBRA exp RBRA { VarArray($1, Some $3) }
+  | ID               { VarArray($1, None) }
+  | ID DOT ID       { InstVar($1, $3) }
 
 // 追加部分for
 myfor:
@@ -170,8 +172,6 @@ stms1:
   | stm       { [$1] }
 
 stm:
-  | exp modop exp // exp.exp += -= ^= exp
-    { DotAssign($1, $2, $3) }
   | anyId modop exp
     { Assign($1, $2, $3) } // x (+,-,^)= e
   | IF exp THEN stms1 else_opt FI exp

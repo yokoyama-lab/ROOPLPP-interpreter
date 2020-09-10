@@ -1,0 +1,28 @@
+class A
+int a
+ method Plus2(int n)
+   n += 2
+
+class B
+int b
+method b()
+  skip
+  
+class Program
+A a
+B b
+ method main()
+ new A a
+ new B b
+ a.a ^= 10
+ b.b ^= 20
+ show(a.a)
+ print("\n")
+ show(b.b)
+ print("\n")
+ a.a <=> b.b
+ show(a.a)
+ print("\n")
+ show(b.b)
+ print("\n")
+   

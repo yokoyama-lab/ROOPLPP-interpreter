@@ -43,7 +43,9 @@ type exp =
   | Binary of binOp * exp * exp
   | Dot of exp * exp
 
-type obj = id * exp option
+type obj =
+  | VarArray of id * exp option
+  | InstVar  of id * id
 
 type myfor = (*追加部分for*)
   | NFOR of exp * exp (*回数指定*)
@@ -51,7 +53,6 @@ type myfor = (*追加部分for*)
 
          
 type stm =
-  | DotAssign of exp * modOp * exp (*exp.exp modOp = exp*)
   | Assign of obj * modOp * exp
   | Swap of obj * obj
   | Conditional of exp * stm list * stm list * exp
@@ -59,10 +60,10 @@ type stm =
   | FOR of id * myfor * stm list (*追加部分for*)
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
-  | LocalCall of methodId * obj list
-  | LocalUncall of methodId * obj list
-  | ObjectCall of obj * methodId * obj list
-  | ObjectUncall of obj * methodId * obj list
+  | LocalCall of methodId * id list
+  | LocalUncall of methodId * id list
+  | ObjectCall of obj * methodId * id list
+  | ObjectUncall of obj * methodId * id list
   | ObjectConstruction of typeId * obj
   | ObjectDestruction of typeId * obj
   | CopyReference of dataType * obj * obj

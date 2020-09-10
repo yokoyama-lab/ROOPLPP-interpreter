@@ -1,0 +1,20 @@
+class A
+int x
+ method Plus2(int n)
+   n += 2
+
+class Program
+A a
+int result
+ method main()
+ new A a
+ a.x ^= 10
+ show(result)
+ print("\n")
+ show(a.x)
+ print("\n")
+ result <=> a.x
+ show(result)
+ print("\n")
+ show(a.x)
+ print("\n")

@@ -280,13 +280,20 @@ let rec eval_state stml env map st0 =
   let update st stm =
     (* y (= x or x[n]) を受けとり左辺値と値を返す *)
     let lval_val = function
-      | x, None -> let lv = lookup_envs x env in lv, lookup_st lv st
-      | x, Some(e) ->
+      | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
+      | VarArray(x, Some(e)) ->
          let IntVal(x_index) = eval_exp e env st in
          let LocsVec(locsvecx) = lookup_val x env st in
          let locsx' = lookup_vec x_index locsvecx in
          let v = lookup_st locsx' st in (*the value of x[e1]*)
-         locsx', v in
+         locsx', v
+      | InstVar(x, xi') ->
+         let l = lookup_envs x env in
+         let LocsVal(l') = lookup_st l st in
+         let ObjVal(c, env') = lookup_st l' st in
+         let li = lookup_envs xi' env' in
+         let v = lookup_st li st in
+         li, v in
     match stm with
     (*PRINT*)
     | Print str -> (print_string str; st)
@@ -296,16 +303,6 @@ let rec eval_state stml env map st0 =
        (Print.print_value_rec v; st)
     (*SKIP*)
     | Skip -> st
-    (*インスタンス変数更新*)
-    | DotAssign(Dot(Var x, Var xi'), op, e) (*x1.x2 += -= ^= e*) ->
-       let rv = eval_exp e env st in
-       let l = lookup_envs x env in
-       let LocsVal(l') = lookup_st l st in
-       let ObjVal(c, env') = lookup_st l' st in
-       let li = lookup_envs xi' env' in
-       let lv = lookup_st li st in
-       let v = bin_op (f op) lv rv in
-       ext_st st li v
     (*ASSVAR*) (*ASSARRELEMVAR*)
     | Assign(y, op, e) (*y op= e2*) ->
        let lvx, vx = lval_val y in
@@ -397,85 +394,49 @@ let rec eval_state stml env map st0 =
          else failwith "error in IFFALSE A"
        else failwith "error in IFFALSE B"
     (*LocalCALL*)
-    | LocalCall(mid,objl) (* call q(y1,...,yn) *)->
+    | LocalCall(mid,idl) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                  (* γ(this) = l *)
        let LocsVal(locs2) = lookup_st locs st in             (* μ(l) = l' *)
        let ObjVal(id, envf)  = lookup_st locs2 st in         (* μ(l') = (c, γ') *)
-       let aidl = List.map fst objl in                       (* aidl = 実引数のidのみのリスト(y1,...,yn) *)
        let (f, meth) = lookup_map id map in                  (* Γ(c) = (field, method) *)
        let MDecl(mid, para, mstml) = lookup_meth mid meth in (* メソッド名がmidのメソッドを求める(q) *)
        let pidl = id_list para in                            (* pidl=仮引数のidのみのリスト(z1,...,zk)b *)
-       let env2 = ext_env_meth env envf pidl aidl in         (* 環境拡張 γ''=γ'[z1->γ(y1),...,zk->γ(yn)] *)
+       let env2 = ext_env_meth env envf pidl idl in         (* 環境拡張 γ''=γ'[z1->γ(y1),...,zk->γ(yn)] *)
        let env3 = ext_envs env2 "this" locs in               (* 環境拡張 γ'''=γ''[this->l]*)
        eval_state mstml env3 map st              (* メソッドの本体を実行 *)
     (*LocalUNCALL*)
-    | LocalUncall(mid, objl) (* uncall q(y1,...,yn) *)->
+    | LocalUncall(mid, idl) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in
        let LocsVal(locs2) = lookup_st locs st in
        let ObjVal(id, envf) = lookup_st locs2 st in
-       let aidl = List.map fst objl in
        let (f, meth) = lookup_map id map in
        let MDecl(mid, para, mstml) = lookup_meth mid meth in
        let pidl = id_list para in
-       let env2 = ext_env_meth env envf pidl aidl in
+       let env2 = ext_env_meth env envf pidl idl in
        let env3 = ext_envs env2 "this" locs in
        eval_state (invert mstml) env3 map st (* メソッド本体を逆実行 *)
     (*CALLOBJ*)
-    | ObjectCall((id, None), mid, objl) (* call x0::q(y1,...,yn) *)->
-       let locs = lookup_envs id env in           (* γ(x0)=l *)
+    | ObjectCall(obj, mid, idl) (* call x0::q(y1,...,yn) *)->
+       let locs, _ = lval_val obj in              (* γ(x0)=l *) 
        let LocsVal(locs2) = lookup_st locs st in  (* 以下からlocalcallと同一 *)
        let ObjVal(id2, envf) = lookup_st locs2 st in
-       let aidl = List.map fst objl in
        let (f, meth) = lookup_map id2 map in
        let MDecl(mid, para, mstml) = lookup_meth mid meth in
        let pidl = id_list para in
-       let env2 = ext_env_meth env envf pidl aidl in
+       let env2 = ext_env_meth env envf pidl idl in
        let env3 = ext_envs env2 "this" locs in
        eval_state mstml env3 map st
     (*UNCALLOBJ*)
-    | ObjectUncall((id, None), mid, objl) (* uncall x0::q(y1,...,yn) *)->
-       let locs = lookup_envs id env in
+    | ObjectUncall(obj, mid, idl) (* uncall x0::q(y1,...,yn) *)->
+       let locs, _ = lval_val obj in
        let LocsVal(locs2) = lookup_st locs st in
        let ObjVal(id2, envf) = lookup_st locs2 st in
-       let aidl = List.map fst objl in
        let (f, meth) = lookup_map id2 map in
        let MDecl(mid, para, mstml) = lookup_meth mid meth in
        let pidl = id_list para in
-       let env2 = ext_env_meth env envf pidl aidl in
+       let env2 = ext_env_meth env envf pidl idl in
        let env3 = ext_envs env2 "this" locs in
        eval_state (invert mstml) env3 map st (* メソッド本体を逆実行 *)
-    (*CALLOBJARRAY*)
-    | ObjectCall((id, Some(e)), mid, objl) (* call x[e]::q(y1,...,yn) *)->
-       let veclocs = lookup_envs id env in
-       let LocsVec(vec) = lookup_st veclocs st in  (* 配列xを求める *)
-       let IntVal(index) = eval_exp e env st in    (* インデックスを求める *)
-       let locs = lookup_vec index vec in          (* インデックスからx[0]のロケーションを求める *)
-       let LocsVal(locs2) = lookup_st locs st in   (* x[0]の値(ロケーション)を求める *)
-       let LocsVal(locs3) = lookup_st locs2 st in  (*以下からCALLOBJと同一*)
-       let ObjVal(id2, envf) = lookup_st locs3 st in
-       let aidl = List.map fst objl in
-       let (f, meth) = lookup_map id2 map in
-       let MDecl(mid, para, mstml) = lookup_meth mid meth in
-       let pidl = id_list para in
-       let env2 = ext_env_meth env envf pidl aidl in
-       let env3 = ext_envs env2 "this" locs2 in
-       eval_state mstml env3 map st
-    (*UNCALLOBJARRAY*)
-    | ObjectUncall((id, Some(e)), mid, objl) (* uncall x[e]::q(y1,...,yn) *)->
-       let veclocs = lookup_envs id env in
-       let LocsVec(vec) = lookup_st veclocs st in
-       let IntVal(index) = eval_exp e env st in
-       let locs = lookup_vec index vec in
-       let LocsVal(locs2) = lookup_st locs st in
-       let LocsVal(locs3) = lookup_st locs2 st in
-       let ObjVal(id2, envf) = lookup_st locs3 st in
-       let aidl = List.map fst objl in
-       let (f, meth) = lookup_map id2 map in
-       let MDecl(mid, para, mstml) = lookup_meth mid meth in
-       let pidl = id_list para in
-       let env2 = ext_env_meth env envf pidl aidl in
-       let env3 = ext_envs env2 "this" locs2 in
-       eval_state (invert mstml) env3 map st
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
        let (fl, ml) = lookup_map tid map in                                                  (* Γ(c)=(f1,...,fn, medhods) *)
@@ -487,41 +448,21 @@ let rec eval_state stml env map st0 =
        let st5 = eval_state stml env2 map st4 in                                             (* sを実行 *)
        ext_st_zero st5 (List.length st + 3) (List.length fl)                                 (*l1'からln'をゼロに*)
     (*OBJNEW*)
-    | ObjectConstruction(tid, (id, None)) (* new c x *)->
+    | ObjectConstruction(tid, obj) (* new c x *)->
        let (fl, ml) = lookup_map tid map in                                    (* Γ(c)=(f1,...,fn, methods) *)
-       let locs = lookup_envs id env in                                        (* γ(x)=l *)
+       (*       let locs = lookup_envs id env in                                        (* γ(x)=l *)*)
+       let locs, _ = lval_val obj in                                        (* γ(x)=l *)
        let envf = ext_env_field fl (List.length st + 2)(*l1'*) in              (* 環境生成 γ'=[f1->l1',...,fn->l'n]*)
        let st2 = ext_st_zero st (List.length st + 2) (List.length fl) in       (* ストア拡張 μ'=μ[l1'->0,...,l'n->0] *)
        let st3 = ext_st st2 (List.length st + 1)(*l0'*) (ObjVal(tid, envf)) in (* ストア拡張 μ''=μ[l0'->(c,γ')] *)
        ext_st st3 locs (LocsVal(List.length st + 1))                           (* ストア拡張 μ'''=μ''[l->l0'] *)
     (*OBJDELETE*)
-    | ObjectDestruction(tid, (id, None)) (* delete c x *)->
-       let (fl, ml) = lookup_map tid map in
-       let locs = (lookup_envs id env) in                  (*l=γ(x)*)
-       let st2 = delete_st st locs (2 + List.length fl) in (*ストアからロケーションl0',...,ln'を削除*)
+    | ObjectDestruction(tid, obj) (* delete c x *)->
+       let (fl, _) = lookup_map tid map in
+       let locs, _ = lval_val obj in                                        (* γ(x)=l *)
+       let LocsVal(locs') = lookup_st locs st in
+       let st2 = delete_st st locs' (1 + List.length fl) in (*ストアからロケーションl0',...,ln'を削除*)
        ext_st st2 locs (IntVal 0)                          (* lの値を初期化 *)
-    (*OBJNEWARRAY*)
-    | ObjectConstruction(tid, (id, Some(e))) (*new c x[e]*)->
-       let (fl, ml) = lookup_map tid map in                                     (* Γ(c)=(f1,...,fn, methods) *)   
-       let veclocs = lookup_envs id env in                                      (* xのロケーションを求める *)
-       let LocsVec(vec) = lookup_st veclocs st in                               (* 配列xを求める *)
-       let IntVal(index) = eval_exp e env st in                                 (* インデックスを求める *)
-       let locs = lookup_vec index vec in                                       (* l=x[index]を求める *)
-       let st = ext_st st locs (LocsVal((List.length st + 1))) in               (* ストア拡張 μ[l->l0]-> *)
-       let LocsVal(locs2) = lookup_st locs st in                                (* l=locs2 *)
-       let envf = ext_env_field fl (List.length st + 3)(*l1*) in                (* 環境生成 γ'=[f1->l1',...,fn->l'n]*)  
-       let st2 = ext_st_zero st (List.length st + 3) (List.length fl) in        (* ストア拡張 μ'=μ[l1'->0,...,l'n->0] *)
-       let st3 = ext_st st2 (List.length st + 2)(*l0'*) (ObjVal(tid, envf)) in  (* ストア拡張 μ''=μ[l0'->(c,γ')] *)
-       ext_st st3 locs2 (LocsVal(List.length st + 2))                           (* ストア拡張 μ'''=μ''[l->l0'] *)
-    (*OBJARRAYDLETE*)
-    | ObjectDestruction(tid, (id, Some(e)))->
-       let (fl, ml) = lookup_map tid map in
-       let LocsVec(vec) = lookup_val id env st in
-       let IntVal(index) = eval_exp e env st in
-       let locs = lookup_vec index vec in
-       let LocsVal(locs2) = (lookup_st locs st) in (*l*)
-       let st2 = delete_st st locs2 (2 + List.length fl) in (*以下OBJDELETEと同一*)
-       ext_st st2 locs (IntVal 0)
     (*ARRNEW*)
     | ArrayConstruction((tid, e), id) ->                                         (* new a[e] x *)
        let IntVal(n) = eval_exp e env st in                                      (* 要素数を求める *)
@@ -535,47 +476,14 @@ let rec eval_state stml env map st0 =
        let st2 = delete_arr st vec in             (* l'1からl'nのロケーションを削除 *)
        ext_st st2 veclocs (IntVal 0)              (* xのロケーションをゼロに初期化 *)
     (*COPY1*)
-    | CopyReference(dt, (id1, None), (id2, None)) -> (* copy c x x' *)
-       let locs1 = lookup_envs id1 env in            (* l=γ(x) *)
-       let locs2 = lookup_envs id2 env in            (* l'=γ(x') *)
-       let v = lookup_st locs1 st in                 (* v=μ(l) *)
-       ext_st st locs2 v                             (* ストア更新μ[l'->v] *)
-    (*COPY2*)
-    | CopyReference(dt, (id1, Some e), (id2, None)) -> (* copy c cs[e] x *)
-       let IntVal(index1) = eval_exp e env st in
-       let LocsVec(vec1) = lookup_val id1 env st in
-       let locs = lookup_vec index1 vec1 in
-       let LocsVal(locs1) = lookup_st locs st in
-       let locs2 = lookup_envs id2 env in
-       let v = lookup_st locs1 st in
-       ext_st st locs2 v
+    | CopyReference(dt, obj1, obj2) -> (* copy c x x' *)
+       let locsx',_ = lval_val obj2 in           (* v=μ(γ(x)) *)
+       let _, vx = lval_val obj1 in                   (* l'=γ(x') *)
+       ext_st st locsx' vx                             (* ストア更新μ[l'->v] *)
     (*UNCOPY*)
-    | UncopyReference(_, (_, _), (id2, None)) -> (* uncopy c _ x *)
-       let locs2 = lookup_envs id2 env in
-       ext_st st locs2 (IntVal 0)
-    (*COPYARR1*)
-    | CopyReference(dt, (id1, Some e1), (id2, Some e2)) -> (* copy c cs[e1] cs[e2] *)
-       let IntVal(index1) = eval_exp e1 env st in
-       let LocsVec(vec1) = lookup_val id1 env st in
-       let locs1 = lookup_vec index1 vec1 in
-       let IntVal(index2) = eval_exp e2 env st in
-       let LocsVec(vec2) = lookup_val id2 env st in
-       let locs2 = lookup_vec index2 vec2 in
-       let v = lookup_st locs1 st in
-       ext_st st locs2 v
-    (*COPYARR2*)
-    | CopyReference(dt, (id1, None), (id2, Some e2)) -> (* copy c x cs[e2] *)
-       let locs1 = lookup_envs id1 env in
-       let IntVal(index2) = eval_exp e2 env st in
-       let LocsVec(vec2) = lookup_val id2 env st in
-       let locs2 = lookup_vec index2 vec2 in
-       ext_st st locs2 (LocsVal locs1)
-    (*UNCOPYARR*)
-    | UncopyReference(_, (_, _), (id2, Some e2)) -> (* copy c _ cs[e2] *)
-       let IntVal(index2) = eval_exp e2 env st in
-       let LocsVec(vec2) = lookup_val id2 env st in
-       let locs2 = lookup_vec index2 vec2 in
-       ext_st st locs2 (IntVal 0)
+    | UncopyReference(_, _, obj) -> (* uncopy c _ x *)
+       let locs,_ = lval_val obj in
+       ext_st st locs (IntVal 0)
     (*LOCALBLOCK*)
     | LocalBlock(dt, id, e1, stml, e2) -> (* local c x = e1  s  delocal x = e2 *)
        let v1 = eval_exp e1 env st in

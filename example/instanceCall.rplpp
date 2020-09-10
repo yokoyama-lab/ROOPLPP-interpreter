@@ -1,0 +1,19 @@
+class A
+ method Plus2(int n)
+   n += 2
+
+class B
+A a
+method b()
+  skip
+  
+class Program
+B b1
+int result
+ method main()
+ new B b1
+ new A b1.a
+ call b1.a::Plus2(result)
+ show(result)
+ print("\n")
+
