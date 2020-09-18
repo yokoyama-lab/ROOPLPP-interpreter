@@ -22,7 +22,7 @@ let rec ext_st_zero st locs n =
     ext_st (ext_st_zero st (locs + 1) (n - 1)) locs (IntVal(0))
   else
     st
-
+  
 (*マップ拡張用 eval_progで使用*)
 let rec ext_map map c fm = (c, fm) :: map
 
@@ -40,6 +40,14 @@ let lookup_st x st =
 
 let lookup_val x env st = lookup_st (lookup_envs x env) st
 
+(*eval_stateで使用：オブジェクトフィールドの値がすべてゼロクリアされているか確認する関数*)
+let rec is_field_zero st locs n =
+  if n <> 0 then
+  let flag = if lookup_st locs st = IntVal(0) then true
+             else false in
+  flag && (is_field_zero st (locs + 1) (n - 1))
+  else true
+  
 (*環境を拡張する関数 CALL,CALLOBJでのみ使用*)
 let rec ext_env_meth env envf pidl aidl =
   match pidl, aidl with
@@ -223,6 +231,23 @@ let comp_op f v1 v2 =
 
 (*式expressionを評価するための関数。envは環境、stはストア。value型を返す。*)
 let rec eval_exp exp env st =
+  let rec lval_val y env =
+    match y with
+    | Var(x) -> let lv = lookup_envs x env in lv, lookup_st lv st
+    | ArrayElement(x, e) ->
+       let IntVal(x_index) = eval_exp e env st in
+       let LocsVec(locsvecx) = lookup_val x env st in
+       let locsx' = lookup_vec x_index locsvecx in
+       let v = lookup_st locsx' st in (*the value of x[e1]*)
+       locsx', v
+    | Dot(x, xi) ->         
+       let _, LocsVal(l) = lval_val x env in
+       let ObjVal(c, env') = lookup_st l st in
+       let li, v = lval_val xi env' in
+       (*         let li = lookup_envs xi' env' in
+                  let v = lookup_st li st in*)
+       li, v
+  in
   match exp with
   (*CON*)
   | Const(n) -> IntVal(n)
@@ -238,12 +263,13 @@ let rec eval_exp exp env st =
   (*NIL*)
   | Nil -> IntVal(0)
   (* DOT *)
-  | Dot (Var(x), Var(xi')) ->
+  | Dot(x, xi) -> let _, v = lval_val (Dot(x, xi)) env in v
+(*  | Dot (Var(x), Var(xi')) ->
      let l = lookup_envs x env in
      let LocsVal(l') = lookup_st l st in
      let ObjVal(c, env') = lookup_st l' st in
      let li = lookup_envs xi' env' in
-     lookup_st li st
+     lookup_st li st*)
   (*BINOP*)
   | Binary(b, e1, e2) ->
      let f = function
@@ -269,6 +295,8 @@ let rec eval_exp exp env st =
 第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
 第三引数にマップ、第四引数にストアを受け取る。この関数はストアを返す。*)
 let rec eval_state stml env map st0 =
+  (* ストアのロケーションの最大値を求める *)
+  let max_locs st = List.fold_left (fun x y -> if x < y then y else x) 0 (List.map fst st) in
   let isTrue = function
     | IntVal(0) -> false
     | IntVal(_) -> true
@@ -279,22 +307,32 @@ let rec eval_state stml env map st0 =
     | ModXor -> (lxor) in
   let update st stm =
     (* y (= x or x[n]) を受けとり左辺値と値を返す *)
-    let lval_val = function
+    let rec lval_val y env =
+    match y with
+    | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
+    | VarArray(x, Some e) ->
+       let IntVal(x_index) = eval_exp e env st in
+       let LocsVec(locsvecx) = lookup_val x env st in
+       let locsx' = lookup_vec x_index locsvecx in
+       let v = lookup_st locsx' st in (*the value of x[e1]*)
+       locsx', v
+    | InstVar(x, xi) ->         
+       let _, LocsVal(l) = lval_val x env in
+       let ObjVal(c, env') = lookup_st l st in
+       let li, v = lval_val xi env' in
+       (*         let li = lookup_envs xi' env' in
+                  let v = lookup_st li st in*)
+       li, v
+    (*let lval_val = function
       | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
       | VarArray(x, Some(e)) ->
          let IntVal(x_index) = eval_exp e env st in
          let LocsVec(locsvecx) = lookup_val x env st in
          let locsx' = lookup_vec x_index locsvecx in
          let v = lookup_st locsx' st in (*the value of x[e1]*)
-         locsx', v
-      | InstVar(x, xi') ->
-         let l = lookup_envs x env in
-         let LocsVal(l') = lookup_st l st in
-         let ObjVal(c, env') = lookup_st l' st in
-         let li = lookup_envs xi' env' in
-         let v = lookup_st li st in
-         li, v in
-    match stm with
+         locsx', v*)
+         in
+  match stm with
     (*PRINT*)
     | Print str -> (print_string str; st)
     (*SHOW*)
@@ -305,14 +343,14 @@ let rec eval_state stml env map st0 =
     | Skip -> st
     (*ASSVAR*) (*ASSARRELEMVAR*)
     | Assign(y, op, e) (*y op= e2*) ->
-       let lvx, vx = lval_val y in
+       let lvx, vx = lval_val y env in
        let v = eval_exp e env st in
        let v' = bin_op (f op) vx v in
        ext_st st lvx v' (* the right value of x *)
     (*SWPVAR*) (*SWAPARRVAR*)
     | Swap(y1, y2) (*y1 <=> y2*)->
-       let lv1, v1 = lval_val y1 in
-       let lv2, v2 = lval_val y2 in
+       let lv1, v1 = lval_val y1 env in
+       let lv2, v2 = lval_val y2 env in
        let st2 = ext_st st lv1 v2 in (*update y2 -> y1*)
        ext_st st2 lv2 v1 (*update y1 -> y2*)
     | Loop(e1, stml1, stml2, e2) ->
@@ -336,26 +374,26 @@ let rec eval_state stml env map st0 =
        else failwith "error in LOOPMAIN"
     (*FOR CONST: for x in (e1..e2) do stml end *)
     | FOR(x, NFOR(n1, n2), stml) ->
-       let rec for_con (x, (e1, e2), stml) env map st =                          (*意味関数F*)
-         let IntVal n1,IntVal n2 = (eval_exp e1 env st, eval_exp e2 env st) in (*e1,e2を評価*)
-         if n1 = n2 then List.remove_assoc (lookup_envs x env) st  (* ストアからロケーションxを取り除く *)
+       let rec for_con (x, (e1, e2), stml) env map st =                         (*意味関数F*)
+         let IntVal n1,IntVal n2 = (eval_exp e1 env st, eval_exp e2 env st) in  (*e1,e2を評価*)
+         if n1 = n2 then List.remove_assoc (lookup_envs x env) st               (* ストアからロケーションxを取り除く *)
          else
            let v = if n1 < n2 then (n1 + 1)
                    else (n1 - 1)
            in
-           let st2 = ext_st st (lookup_envs x env) (IntVal v) in (* μ[γ(x) -> n1 + 1 or n1 - 1 *)
-           let st3 = eval_state stml env map st2 in           (* stml1回実行 *)
-           for_con (x, (Const v, Const n2), stml) env map st3 (* 再帰 *)
+           let st2 = ext_st st (lookup_envs x env) (IntVal v) in  (* μ[γ(x) -> n1 + 1 or n1 - 1 *)
+           let st3 = eval_state stml env map st2 in               (* stml1回実行 *)
+           for_con (x, (Const v, Const n2), stml) env map st3     (* 再帰 *)
        in
-       let locs = (List.length st) + 1 in                     (* 未使用のロケーションを取得 *)
-       let env2 = ext_envs env x locs in                      (* γ[x->l] *)
-       let st2 = ext_st st locs (eval_exp n1 env st) in         (* μ[l->n1 *)
-       let st3 = eval_state stml env2 map st2 in                (*stml1回実行*)
-       for_con (x, (n1, n2), stml) env2 map st3                 (*意味関数Fへ*)
+       let locs = (max_locs st) + 1 in                            (* 未使用のロケーションを取得 *)
+       let env2 = ext_envs env x locs in                          (* γ[x->l] *)
+       let st2 = ext_st st locs (eval_exp n1 env st) in           (* μ[l->n1 *)
+       let st3 = eval_state stml env2 map st2 in                  (*stml1回実行*)
+       for_con (x, (n1, n2), stml) env2 map st3                   (*意味関数Fへ*)
     (* FOR ARRAY: for x1 in (x2 or (rev)x2) do s end *)
-    | FOR(x1, AFOR(rev, x2), stml) ->                (* rev:bool trueの場合(rev)x2 falseの場合x2 *)
-       let LocsVec(vec) = lookup_val x2 env st in    (* ベクトルを求める μ(γ(x2)) *)
-       let rec for_array (x1, x2, stml, n) env map st =           (*意味関数A or B*)
+    | FOR(x1, AFOR(rev, x2), stml) ->                    (* rev:bool trueの場合(rev)x2 falseの場合x2 *)
+       let LocsVec(vec) = lookup_val x2 env st in        (* ベクトルを求める μ(γ(x2)) *)
+       let rec for_array (x1, x2, stml, n) env map st =  (*意味関数A or B*)
          let flag, index = if rev = true 
                            then 0, (n - 1)
                            else (List.length vec) - 1, (n + 1)
@@ -374,11 +412,53 @@ let rec eval_state stml env map st0 =
        in
        let locs1 = lookup_vec index vec in
        let w = lookup_st locs1 st in
-       let locs2 = (List.length st) + 1 in
+       let locs2 = (max_locs st) + 1 in
        let env2 = ext_envs env x1 locs2 in
        let st2 = ext_st st locs2 w in
        let st3 = eval_state stml env2 map st2 in
        for_array (x1, x2, stml, index) env2 map st3
+    (*追加部分SWITCH*)
+    | Switch(rev, obj1, case, obj2) ->
+       let rec is_break n case_list =
+         match case_list with
+         | [] -> failwith "error in switch"
+         | (m1, stml, m2, break) :: tl ->
+            if n = m1 && break then true, stml, tl, case_list, m2
+            else if n = m1 && not break then false, stml, tl,case_list, m2
+            else is_break n tl
+       in
+       let rec fall_through case_list env map st =
+         match case_list with
+         | [] -> failwith "error in switch of fall_through"
+         | (m1, stml, m2, break) :: tl ->
+            let st2 = eval_state stml env map st in
+            if break then st2
+            else fall_through tl env map st2
+       in
+       let rec fall_through_rev case_list env map st =
+         let rec search_case case_list =
+           match case_list with
+           | [] -> failwith "error in (rev)switch of fall_through"
+           | (_, stml, _, break) :: tl ->
+              if break then stml
+              else stml @ (search_case tl)
+         in
+         let stml2 = List.rev(search_case case_list) in
+         eval_state stml2 env map st
+       in
+       let _, IntVal(v1) = lval_val obj1 env in
+       let locs_obj2, _ = lval_val obj2 env  in
+       let flag, stml2, case_list2, case_list3, assertion = is_break v1 case in
+       let st3 =
+         if flag then eval_state stml2 env map st
+         else
+           if rev then fall_through_rev case_list3 env map st
+           else
+             let st2 = eval_state stml2 env map st in
+             fall_through case_list2 env map st2
+       in
+       if (lookup_st locs_obj2 st3) = IntVal(assertion) then st3
+       else failwith "assersion in switch is not correct"
     | Conditional(e1, stml1, stml2, e2) ->
        (*IFTRUE*)
        if (eval_exp e1 env st) <> IntVal(0) then
@@ -395,15 +475,15 @@ let rec eval_state stml env map st0 =
        else failwith "error in IFFALSE B"
     (*LocalCALL*)
     | LocalCall(mid,idl) (* call q(y1,...,yn) *)->
-       let locs = lookup_envs "this" env in                  (* γ(this) = l *)
-       let LocsVal(locs2) = lookup_st locs st in             (* μ(l) = l' *)
-       let ObjVal(id, envf)  = lookup_st locs2 st in         (* μ(l') = (c, γ') *)
-       let (f, meth) = lookup_map id map in                  (* Γ(c) = (field, method) *)
-       let MDecl(mid, para, mstml) = lookup_meth mid meth in (* メソッド名がmidのメソッドを求める(q) *)
-       let pidl = id_list para in                            (* pidl=仮引数のidのみのリスト(z1,...,zk)b *)
-       let env2 = ext_env_meth env envf pidl idl in         (* 環境拡張 γ''=γ'[z1->γ(y1),...,zk->γ(yn)] *)
-       let env3 = ext_envs env2 "this" locs in               (* 環境拡張 γ'''=γ''[this->l]*)
-       eval_state mstml env3 map st              (* メソッドの本体を実行 *)
+       let locs = lookup_envs "this" env in                   (* γ(this) = l *)
+       let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
+       let ObjVal(id, envf)  = lookup_st locs2 st in          (* μ(l') = (c, γ') *)
+       let (f, meth) = lookup_map id map in                   (* Γ(c) = (field, method) *)
+       let MDecl(mid, para, mstml) = lookup_meth mid meth in  (* メソッド名がmidのメソッドを求める(q) *)
+       let pidl = id_list para in                             (* pidl=仮引数のidのみのリスト(z1,...,zk)b *)
+       let env2 = ext_env_meth env envf pidl idl in           (* 環境拡張 γ''=γ'[z1->γ(y1),...,zk->γ(yn)] *)
+       let env3 = ext_envs env2 "this" locs in                (* 環境拡張 γ'''=γ''[this->l]*)
+       eval_state mstml env3 map st                           (* メソッドの本体を実行 *)
     (*LocalUNCALL*)
     | LocalUncall(mid, idl) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in
@@ -417,7 +497,7 @@ let rec eval_state stml env map st0 =
        eval_state (invert mstml) env3 map st (* メソッド本体を逆実行 *)
     (*CALLOBJ*)
     | ObjectCall(obj, mid, idl) (* call x0::q(y1,...,yn) *)->
-       let locs, _ = lval_val obj in              (* γ(x0)=l *) 
+       let locs, _ = lval_val obj env in              (* γ(x0)=l *) 
        let LocsVal(locs2) = lookup_st locs st in  (* 以下からlocalcallと同一 *)
        let ObjVal(id2, envf) = lookup_st locs2 st in
        let (f, meth) = lookup_map id2 map in
@@ -428,7 +508,7 @@ let rec eval_state stml env map st0 =
        eval_state mstml env3 map st
     (*UNCALLOBJ*)
     | ObjectUncall(obj, mid, idl) (* uncall x0::q(y1,...,yn) *)->
-       let locs, _ = lval_val obj in
+       let locs, _ = lval_val obj env in
        let LocsVal(locs2) = lookup_st locs st in
        let ObjVal(id2, envf) = lookup_st locs2 st in
        let (f, meth) = lookup_map id2 map in
@@ -439,59 +519,77 @@ let rec eval_state stml env map st0 =
        eval_state (invert mstml) env3 map st (* メソッド本体を逆実行 *)
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
-       let (fl, ml) = lookup_map tid map in                                                  (* Γ(c)=(f1,...,fn, medhods) *)
-       let env2 = ext_envs env id (List.length st + 1) in                                    (* 環境拡張 γ[x->l0] *)
-       let envf = ext_env_field fl (List.length st + 3) in                                   (* 環境生成 γ'=[f1->l1',...,fn->l'n] *)
-       let st2 = ext_st_zero st (List.length st + 3) (List.length fl) in                     (* ストア拡張 μ'=μ[l1'->0,...,l'n->0 *)
-       let st3 = ext_st st2 (List.length st + 2) (ObjVal(tid, envf)) (*l'->(c,γ')*) in       (* ストア拡張 μ''=μ'[l'->(c,γ')]*)
-       let st4 = ext_st st3 (lookup_envs id env2) (LocsVal(List.length st + 2)) (*r->l'*) in (* ストア拡張 μ'''=μ'[l->l'] *)
-       let st5 = eval_state stml env2 map st4 in                                             (* sを実行 *)
-       ext_st_zero st5 (List.length st + 3) (List.length fl)                                 (*l1'からln'をゼロに*)
+       let (fl, ml) = lookup_map tid map in                 (* Γ(c)=(f1,...,fn, medhods) *)
+       let max_locs = max_locs st in                        (* ロケーションの最大値を求める *)
+       let locs = max_locs + 1 in                           (* locs = l *)
+       let locs0 = max_locs + 2 in                          (* locs0 = l0 *)
+       let locs1 = max_locs + 3 in                          (* locs1 = l1 *)
+       let env2 = ext_envs env id locs in                   (* 環境拡張 γ[x->l] *)
+       let envf = ext_env_field fl locs1 in                 (* 環境生成 γ'=[f1->l1,...,fn->ln] *)
+       let st2 = ext_st_zero st locs1 (List.length fl) in   (* ストア拡張 μ'=μ[l1->0,...,ln->0 *)
+       let st3 = ext_st st2 (locs0) (ObjVal(tid, envf)) in  (* ストア拡張 μ''=μ'[l0->(c,γ')]*)
+       let st4 = ext_st st3 locs (LocsVal(locs0)) in        (* ストア拡張 μ'''=μ'[l->l0] *)
+       let st5 = eval_state stml env2 map st4 in            (* sを実行 *)
+       if is_field_zero st5 locs1 (List.length fl)          (*l1からlnがゼロクリアされているか確認*)
+        then st5 else failwith "instance field is not zero-cleared"
     (*OBJNEW*)
-    | ObjectConstruction(tid, obj) (* new c x *)->
-       let (fl, ml) = lookup_map tid map in                                    (* Γ(c)=(f1,...,fn, methods) *)
-       (*       let locs = lookup_envs id env in                                        (* γ(x)=l *)*)
-       let locs, _ = lval_val obj in                                        (* γ(x)=l *)
-       let envf = ext_env_field fl (List.length st + 2)(*l1'*) in              (* 環境生成 γ'=[f1->l1',...,fn->l'n]*)
-       let st2 = ext_st_zero st (List.length st + 2) (List.length fl) in       (* ストア拡張 μ'=μ[l1'->0,...,l'n->0] *)
-       let st3 = ext_st st2 (List.length st + 1)(*l0'*) (ObjVal(tid, envf)) in (* ストア拡張 μ''=μ[l0'->(c,γ')] *)
-       ext_st st3 locs (LocsVal(List.length st + 1))                           (* ストア拡張 μ'''=μ''[l->l0'] *)
+    | ObjectConstruction(tid, obj) (* new c y *)->
+       let (fl, ml) = lookup_map tid map in                (* Γ(c)=(f1,...,fn, methods) *)
+       let locs, _ = lval_val obj env in                   (* l=γ(y) *)
+       let max_locs = max_locs st in                       (* ロケーションの最大値を求める *)
+       let locs0 = max_locs + 1 in                         (* locs0 = l0 *)  
+       let locs1 = max_locs + 2 in                         (* locs1 = l1 *) 
+       let envf = ext_env_field fl locs1 in                (* 環境生成 γ'=[f1->l1,...,fn->ln]*)
+       let st2 = ext_st_zero st locs1 (List.length fl) in  (* ストア拡張 μ'=μ[l1->0,...,ln->0] *)
+       let st3 = ext_st st2 locs0 (ObjVal(tid, envf)) in   (* ストア拡張 μ''=μ[l0->(c,γ')] *)
+       ext_st st3 locs (LocsVal locs0)                     (* ストア拡張 μ'''=μ''[l->l0] *)
     (*OBJDELETE*)
-    | ObjectDestruction(tid, obj) (* delete c x *)->
-       let (fl, _) = lookup_map tid map in
-       let locs, _ = lval_val obj in                                        (* γ(x)=l *)
-       let LocsVal(locs') = lookup_st locs st in
-       let st2 = delete_st st locs' (1 + List.length fl) in (*ストアからロケーションl0',...,ln'を削除*)
-       ext_st st2 locs (IntVal 0)                          (* lの値を初期化 *)
+    | ObjectDestruction(tid, obj) (* delete c y *)->
+let (fl, _) = lookup_map tid map in
+       let locs, _ = lval_val obj env in                    (* l=γ(y) *)
+       let LocsVal(locs0) = lookup_st locs st in            (* l0 *)
+       let locs1 = locs0 + 1 in                             (* l1 *)
+       if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)
+       let st2 = delete_st st locs0 (1 + List.length fl) in (* ストアからロケーションl0',...,ln'を削除 *)
+       ext_st st2 locs (IntVal 0)                           (* lの値をゼロクリア *)
+       else failwith "instance field is not zero-cleared"
     (*ARRNEW*)
-    | ArrayConstruction((tid, e), id) ->                                         (* new a[e] x *)
-       let IntVal(n) = eval_exp e env st in                                      (* 要素数を求める *)
-       let locs = lookup_envs id env in                                          (* xのロケーションを求める *)
-       let st2 = ext_st st locs (LocsVec(gen_locsvec n (List.length st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
-       ext_st_zero st2 (List.length st2 + 1)  n                                  (* ストア拡張 μ[l'1->0,...,l'n->0 *)
+    | ArrayConstruction((tid, e), id) ->                                      (* new a[e] x *)
+       let IntVal(n) = eval_exp e env st in                                   (* 要素数を求める *)
+       let locs = lookup_envs id env in                                       (* xのロケーションを求める *)
+       let st2 = ext_st st locs (LocsVec(gen_locsvec n (max_locs st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
+       ext_st_zero st2 (max_locs st2 + 1)  n                                  (* ストア拡張 μ[l'1->0,...,l'n->0 *)
     (*ARRDELETE*)
-    | ArrayDestruction((tid, e), id) ->           (* delete a[e] x *)
-       let veclocs = lookup_envs id env in        (* l=γ(x) *)
-       let LocsVec(vec) = lookup_st veclocs st in (* μ(l) = {l'1,...,l'n} *)
-       let st2 = delete_arr st vec in             (* l'1からl'nのロケーションを削除 *)
-       ext_st st2 veclocs (IntVal 0)              (* xのロケーションをゼロに初期化 *)
-    (*COPY1*)
-    | CopyReference(dt, obj1, obj2) -> (* copy c x x' *)
-       let locsx',_ = lval_val obj2 in           (* v=μ(γ(x)) *)
-       let _, vx = lval_val obj1 in                   (* l'=γ(x') *)
-       ext_st st locsx' vx                             (* ストア更新μ[l'->v] *)
+    | ArrayDestruction((tid, e), id) ->            (* delete a[e] x *)
+       let IntVal(n) = eval_exp e env st in        (* 要素数を求める *)
+       let veclocs = lookup_envs id env in         (* l=γ(x) *)
+       let LocsVec(vec) = lookup_st veclocs st in  (* μ(l) = {l'1,...,l'n} *)
+       let locs = lookup_vec 0 vec in              (* locs = l'1 *)
+       if is_field_zero st locs n                  (* 配列要素すべてがゼロクリアされているか確認 *)
+       then 
+       let st2 = delete_arr st vec in              (* l'1からl'nのロケーションを削除 *)
+       ext_st st2 veclocs (IntVal 0)               (* xのロケーションをゼロに初期化 *)
+       else failwith "array elements is not zero-cleared"
+    (*COPY*)
+    | CopyReference(dt, obj1, obj2) ->      (* copy c x x' *)
+       let locsx',_ = lval_val obj2 env in  (* v=μ(γ(x)) *)
+       let _, vx = lval_val obj1 env in     (* l'=γ(x') *)
+       ext_st st locsx' vx                  (* ストア更新μ[l'->v] *)
     (*UNCOPY*)
     | UncopyReference(_, _, obj) -> (* uncopy c _ x *)
-       let locs,_ = lval_val obj in
+       let locs,_ = lval_val obj env in
        ext_st st locs (IntVal 0)
     (*LOCALBLOCK*)
     | LocalBlock(dt, id, e1, stml, e2) -> (* local c x = e1  s  delocal x = e2 *)
        let v1 = eval_exp e1 env st in
-       let env2 = ext_envs env id (List.length st + 1) in
-       let st2 = ext_st st (List.length st + 1) v1 in
+       let locs = max_locs st + 1 in
+       let env2 = ext_envs env id locs in
+       let st2 = ext_st st locs v1 in
        let st3 = eval_state stml env2 map st2 in
        let v2 = eval_exp e2 env2 st3 in
-       ext_st st3 (List.length st + 1) v2
+       if lookup_st locs st3 = v2 then
+         List.remove_assoc locs st3 
+       else failwith "error: delocal value is not valid"
   in List.fold_left update st0 stml
 
 let eval_prog (Prog(cl)) =

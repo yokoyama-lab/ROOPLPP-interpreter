@@ -71,7 +71,8 @@ rule token = parse
   | "-="      { MODSUB }
   | "^="      { MODXOR }
   | '.'       { DOT }
-
+  (* 追加部分siwtch *)
+  | ':'	      { COLON }
   (* 括弧 *)
   | '('       { LPAREN }
   | ')'       { RPAREN }
@@ -96,6 +97,12 @@ rule token = parse
   | "in"	{ IN }
   | "rev"	{ REV }
   | "end"	{ END }
+  (* 追加部分switch　*)
+  | "switch"	{ SWITCH }
+  | "rswitch"	{ RSWITCH }
+  | "case"	{ CASE }
+  | "rcase"	{ RCASE }
+  | "break"	{ BREAK }
 
   | "int"       { INT }
   | "nil"       { NIL }

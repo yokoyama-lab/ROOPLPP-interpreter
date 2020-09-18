@@ -20,7 +20,17 @@ let rec invert_stm = function
      let flag = if rev = true
                 then false
                 else true in
-     FOR(x1, AFOR(flag, x2), stml)     
+     FOR(x1, AFOR(flag, x2), stml)
+  (*追加部分switch*)
+  | Switch(rev, obj1, case_list, obj2) ->
+     let rev_case = function
+       | (n1, stml, n2, break) -> (n2, invert stml, n1, break)
+     in
+     let flag = if rev = true
+                then false
+                else true in
+     let case_list2 = List.map rev_case case_list in
+     Switch(flag, obj2, case_list2, obj1)
   | ObjectBlock(tid, id, stml) ->
      ObjectBlock(tid, id, invert stml)
   | LocalBlock(dt, id, e1, stml, e2) ->

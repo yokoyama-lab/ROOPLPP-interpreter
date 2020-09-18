@@ -34,7 +34,7 @@ type modOp =
   | ModAdd
   | ModSub
   | ModXor
-
+  
 type exp =
   | Const of int
   | Var of id
@@ -45,8 +45,8 @@ type exp =
 
 type obj =
   | VarArray of id * exp option
-  | InstVar  of id * id
-
+  | InstVar  of obj * obj
+         
 type myfor = (*追加部分for*)
   | NFOR of exp * exp (*回数指定*)
   | AFOR of bool * id (*配列要素 bool=trueなら逆順*)
@@ -58,6 +58,7 @@ type stm =
   | Conditional of exp * stm list * stm list * exp
   | Loop of exp * stm list * stm list * exp
   | FOR of id * myfor * stm list (*追加部分for*)
+  | Switch of bool * obj * (int * stm list * int * bool) list * obj (*追加部分switch*)         
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
   | LocalCall of methodId * id list

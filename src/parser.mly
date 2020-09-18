@@ -4,10 +4,10 @@ open Util
 
 let parse_error s = print_endline s
 
-let anyId2obj = function
+let rec anyId2obj = function
   | VarArray(x, None)   -> Var x
   | VarArray(x, Some e) -> ArrayElement (x,e)
-  | InstVar(x1, x2) -> Dot(Var x1, Var x2)
+  | InstVar(x1, x2) -> Dot(anyId2obj x1, anyId2obj x2)
 %}
 
 // リテラル
@@ -36,12 +36,13 @@ let anyId2obj = function
 %token COMMA     // ','
 // 追加部分for
 %token WDOT      // ".."
-
 %token WCOLON    // "::"
 %token MODADD    // "+="
 %token MODSUB    // "-="
 %token MODXOR    // "^="
 %token DOT       // '.'
+// 追加部分switch
+%token COLON     // ':'
 
 // 括弧
 %token LPAREN    // '('
@@ -67,6 +68,12 @@ let anyId2obj = function
 %token IN        // "in"
 %token REV       // "rev"
 %token END       // "end"
+// 追加部分switch
+%token SWITCH    // "switch"
+%token RSWITCH   // "rswitch"
+%token CASE      // "case"
+%token RCASE     // "rcase"
+%token BREAK     // "break"
 
 %token INT       // "int"
 %token NIL       // "nil"
@@ -155,7 +162,7 @@ anyIds:
 anyId:
   | ID LBRA exp RBRA { VarArray($1, Some $3) }
   | ID               { VarArray($1, None) }
-  | ID DOT ID       { InstVar($1, $3) }
+  | anyId DOT anyId  { InstVar($1, $3) }
 
 // 追加部分for
 myfor:
@@ -165,6 +172,24 @@ myfor:
     { AFOR(true, $4) }
   | ID
     { AFOR(false, $1) }
+
+// 追加部分switch
+break:
+  | BREAK { true  }
+  |       { false }
+
+rev:
+  | LPAREN REV RPAREN { true  }
+  |                   { false }
+
+switchs1:
+  | switchs1 switch { $1 @ [$2] }
+  | switch          { [$1] }
+
+switch:
+  | CASE CONST COLON stms1 RCASE CONST break
+    { $2, $4, $6, $7 }
+
 
 // statement
 stms1:
@@ -181,6 +206,9 @@ stm:
   //追加部分for
   | FOR ID IN myfor DO stms1 END // for x in {(e..e) | (rev)?x } do s end
     { FOR($2, $4, $6) }
+  // 追加部分switch
+  | rev SWITCH anyId switchs1 RSWITCH anyId
+    { Switch($1,$3,$4,$6) }
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN
