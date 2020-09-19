@@ -547,11 +547,13 @@ let rec eval_state stml env map st0 =
     | ObjectDestruction(tid, obj) (* delete c y *)->
        let (fl, _) = lookup_map tid map in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
-       let LocsVal(locs0) = lookup_st locs st in            (* l0 *)
-       let locs1 = locs0 + 1 in                             (* l1 *)
+       let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
+       let ObjVal(_, envf) = lookup_st locs0 st in          (* (c,γ')=μ(l0) *)
+       let locs1 = List.hd (List.map snd envf) in           (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)
-       let st2 = delete_st st locs0 (1 + List.length fl) in (* ストアからロケーションl0',...,ln'を削除 *)
-       ext_st st2 locs (IntVal 0)                           (* lの値をゼロクリア *)
+         let st2 = delete_st st locs1 (List.length fl) in   (* ストアからロケーションl1,...,lnを削除 *)
+         let st3 = List.remove_assoc locs0 st2 in           (* ストアからロケーションl0を削除 *) 
+         ext_st st3 locs (IntVal 0)                         (* lの値をゼロクリア *)
        else failwith "instance field is not zero-cleared"
     (*ARRNEW*)
     | ArrayConstruction((tid, e), id) ->                                      (* new a[e] x *)
