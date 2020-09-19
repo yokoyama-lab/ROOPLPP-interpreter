@@ -465,14 +465,14 @@ let rec eval_state stml env map st0 =
          let st2 = eval_state stml1 env map st in
          if (eval_exp e2 env st2) <> IntVal(0) then
            st2
-         else failwith "error in IFTRUE"
+         else failwith "assertion is incorrect in if-true"
        (*IFFALSE*)
        else if (eval_exp e1 env st) = IntVal(0) then
          let st2 = eval_state stml2 env map st in
          if (eval_exp e2 env st2) = IntVal(0) then
            st2
-         else failwith "error in IFFALSE A"
-       else failwith "error in IFFALSE B"
+         else failwith "assertion is incorrect in if-false"
+       else failwith "assertion is incorrect in if-false"
     (*LocalCALL*)
     | LocalCall(mid,idl) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
@@ -545,7 +545,7 @@ let rec eval_state stml env map st0 =
        ext_st st3 locs (LocsVal locs0)                     (* ストア拡張 μ'''=μ''[l->l0] *)
     (*OBJDELETE*)
     | ObjectDestruction(tid, obj) (* delete c y *)->
-let (fl, _) = lookup_map tid map in
+       let (fl, _) = lookup_map tid map in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let LocsVal(locs0) = lookup_st locs st in            (* l0 *)
        let locs1 = locs0 + 1 in                             (* l1 *)
