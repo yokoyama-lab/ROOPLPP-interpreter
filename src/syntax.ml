@@ -58,7 +58,7 @@ type stm =
   | Conditional of exp * stm list * stm list * exp
   | Loop of exp * stm list * stm list * exp
   | FOR of id * myfor * stm list (*追加部分for*)
-  | Switch of bool * obj * (int * stm list * int * bool) list * obj (*追加部分switch*)         
+  | Switch of bool * obj * (exp * stm list * exp * bool) list * obj (*追加部分switch*)         
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
   | LocalCall of methodId * id list

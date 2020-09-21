@@ -422,7 +422,7 @@ let rec eval_state stml env map st0 =
        let rec is_break n case_list =
          match case_list with
          | [] -> failwith "error in switch"
-         | (m1, stml, m2, break) :: tl ->
+         | (Const m1, stml, Const m2, break) :: tl ->
             if n = m1 && break then true, stml, tl, case_list, m2
             else if n = m1 && not break then false, stml, tl,case_list, m2
             else is_break n tl
@@ -430,7 +430,7 @@ let rec eval_state stml env map st0 =
        let rec fall_through case_list env map st =
          match case_list with
          | [] -> failwith "error in switch of fall_through"
-         | (m1, stml, m2, break) :: tl ->
+         | (_, stml, _, break) :: tl ->
             let st2 = eval_state stml env map st in
             if break then st2
             else fall_through tl env map st2
@@ -457,7 +457,7 @@ let rec eval_state stml env map st0 =
              let st2 = eval_state stml2 env map st in
              fall_through case_list2 env map st2
        in
-       if (lookup_st locs_obj2 st3) = IntVal(assertion) then st3
+       if lookup_st locs_obj2 st3 = IntVal(assertion) then st3
        else failwith "assersion in switch is not correct"
     | Conditional(e1, stml1, stml2, e2) ->
        (*IFTRUE*)
@@ -549,7 +549,8 @@ let rec eval_state stml env map st0 =
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
        let ObjVal(_, envf) = lookup_st locs0 st in          (* (c,γ')=μ(l0) *)
-       let locs1 = List.hd (List.map snd envf) in           (* locs1=l1 *)
+       let locs1 = if (List.length envf) = 0 then 0
+                   else List.hd (List.map snd envf) in      (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)
          let st2 = delete_st st locs1 (List.length fl) in   (* ストアからロケーションl1,...,lnを削除 *)
          let st3 = List.remove_assoc locs0 st2 in           (* ストアからロケーションl0を削除 *) 

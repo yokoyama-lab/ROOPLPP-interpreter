@@ -187,7 +187,7 @@ switchs1:
   | switch          { [$1] }
 
 switch:
-  | CASE CONST COLON stms1 RCASE CONST break
+  | CASE exp COLON stms1 RCASE exp break
     { $2, $4, $6, $7 }
 
 

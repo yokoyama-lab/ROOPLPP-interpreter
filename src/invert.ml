@@ -24,7 +24,7 @@ let rec invert_stm = function
   (*追加部分switch*)
   | Switch(rev, obj1, case_list, obj2) ->
      let rev_case = function
-       | (n1, stml, n2, break) -> (n2, invert stml, n1, break)
+       | (e1, stml, e2, break) -> (e2, invert stml, e1, break)
      in
      let flag = if rev = true
                 then false

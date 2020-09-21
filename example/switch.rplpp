@@ -1,8 +1,8 @@
 class Test
   method test(int x)
   switch x
-    case 1: x += 2 rcase 7
-    case 2: x += 4 rcase 6
+    case 1: x += 2  rcase 7
+    case 2: x += 4  rcase 6
             break
     case 3: print("a") rcase 3
     case 4: print("b") rcase 4
@@ -14,9 +14,13 @@ class Program
 int x
 Test t
   method main()
-  x ^= 3
+  x ^= 1
   new Test t
+  show(x)
+  print("\n順実行\n")
   call t::test(x)
-  print("\n")
+  show(x)
+  print("\n逆実行\n")
   uncall t::test(x)
+  show(x)
   print("\n")
