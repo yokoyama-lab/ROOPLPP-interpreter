@@ -3,19 +3,31 @@ class Node
     Node right
     Node parent
     int value
+    
+    method constructor(int val, Node left, Node right, Node parent)
+        call setValue(val)
+        call setLeftChild(left)
+        call setRightChild(right)
+        call setParent(parent)
+
     method setValue(int val)
         value ^= val
+
     method setLeftChild(Node node)
         copy Node node left
+
     method setRightChild(Node node)
         copy Node node right
+
     method setParent(Node node)
         copy Node node parent
 
 class Tree
     Node root
+
     method setRoot(Node node)
         copy Node node root
+
     method step(Node cur, Node pre)
         local Node next = nil
         if cur.parent=pre then
@@ -45,15 +57,12 @@ class Tree
         pre <=> cur
         cur <=> next
         delocal Node next = nil
+
     method search(int key, Node result)
-        local Tree tree = nil
-        new Tree tree
         local Node pre = nil
         copy Node root pre
-        from pre=root do 
-            skip
-        loop 
-            call tree::step(result, pre) 
+        from pre=root loop 
+            call step(result, pre) 
         until result=root || result.value=key
         if result!=root then
             uncopy Node result.parent pre
@@ -61,11 +70,10 @@ class Tree
             uncopy Node root.left pre
         fi result!=root
         delocal Node pre = nil
-        delete Tree tree
-        delocal Tree tree = nil
 
 class Program
     Tree tree
+    int empty
     Node dummy
     Node node1
     Node node2
@@ -89,21 +97,14 @@ class Program
         node2Value += 22
         node3Value += 33
         node4Value += 44
-        call dummy::setValue(dummyValue)
-        call node1::setValue(node1Value)
-        call node2::setValue(node2Value)
-        call node3::setValue(node3Value)
-        call node4::setValue(node4Value)
-        call node4::setParent(node2)
-        call node3::setParent(node2)
-        call node2::setParent(node1)
-        call node2::setLeftChild(node3)
-        call node2::setRightChild(node4)
-        call node1::setParent(dummy)
-        call node1::setLeftChild(node2)
-        call dummy::setLeftChild(node1)
+        call dummy::constructor(dummyValue, node1, empty, empty)
+        call node1::constructor(node1Value, node2, empty, dummy)
+        call node2::constructor(node2Value, node3, node4, node1)
+        call node3::constructor(node3Value, empty, empty, node2)
+        call node4::constructor(node4Value, empty, empty, node2)
+
         new Tree tree
-        key += 55
+        key += 44
         copy Node node1 result
         call tree::setRoot(dummy)
         call tree::search(key, result)
