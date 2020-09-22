@@ -61,6 +61,7 @@ class Tree
             uncopy Node root.left pre
         fi result!=root
         delocal Node pre = nil
+        delete Tree tree
         delocal Tree tree = nil
 
 class Program

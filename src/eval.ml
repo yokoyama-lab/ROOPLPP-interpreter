@@ -591,8 +591,8 @@ let rec eval_state stml env map st0 =
        let st3 = eval_state stml env2 map st2 in
        let v2 = eval_exp e2 env2 st3 in
        if lookup_st locs st3 = v2 then
-         List.remove_assoc locs st3 
-       else failwith "error: delocal value is not valid"
+         List.remove_assoc locs st3
+       else failwith ("error: delocal value of " ^ id ^ " = " ^ Print.show_val (lookup_st locs st3) ^ " is not valid: " ^ Print.show_val v2)
   in List.fold_left update st0 stml
 
 let eval_prog (Prog(cl)) =
