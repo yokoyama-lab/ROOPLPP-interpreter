@@ -46,6 +46,10 @@ type exp =
 type obj =
   | VarArray of id * exp option
   | InstVar  of obj * obj
+
+type arg =
+  | Id of id
+  | Exp of exp
          
 type myfor = (*追加部分for*)
   | NFOR of exp * exp (*回数指定*)
@@ -61,16 +65,16 @@ type stm =
   | Switch of bool * obj * (exp * stm list * exp * bool) list * obj (*追加部分switch*)         
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
-  | LocalCall of methodId * id list
-  | LocalUncall of methodId * id list
-  | ObjectCall of obj * methodId * id list
-  | ObjectUncall of obj * methodId * id list
+  | LocalCall of methodId * arg list
+  | LocalUncall of methodId * arg list
+  | ObjectCall of obj * methodId * arg list
+  | ObjectUncall of obj * methodId * arg list
   | ObjectConstruction of typeId * obj
   | ObjectDestruction of typeId * obj
   | CopyReference of dataType * obj * obj
   | UncopyReference of dataType * obj * obj
-  | ArrayConstruction of (typeId * exp) * id
-  | ArrayDestruction of (typeId * exp) * id
+  | ArrayConstruction of (typeId * exp) * obj
+  | ArrayDestruction of (typeId * exp) * obj
   | Skip
   | Show of exp
   | Print of string

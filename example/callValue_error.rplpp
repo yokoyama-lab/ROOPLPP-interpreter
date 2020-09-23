@@ -1,0 +1,12 @@
+class Test
+ method Plus(int n, int x)
+  x += n
+  n += 10
+class Program
+ Test t
+ int result
+  method main()
+  new Test t
+  result ^= 0
+  call t::Plus(10,result)
+  

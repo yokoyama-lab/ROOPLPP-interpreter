@@ -2,8 +2,8 @@
 # Makefile
 #
 
-SRC= util.ml syntax.ml value.ml inver.ml print.ml eval.ml parser.mly lexer.mll main.ml
-COMPONENT= util.ml syntax.ml value.ml invert.ml print.ml eval.ml parser.mli parser.ml lexer.ml main.ml
+SRC= util.ml syntax.ml value.ml pretty.ml inver.ml print.ml eval.ml parser.mly lexer.mll main.ml
+COMPONENT= util.ml syntax.ml value.ml pretty.ml invert.ml print.ml eval.ml parser.mli parser.ml lexer.ml main.ml
 TARGET= rplpp
 
 all:	$(TARGET)
