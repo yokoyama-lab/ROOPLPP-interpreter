@@ -1,0 +1,109 @@
+class Node
+    Node left
+    Node right
+    Node parent
+    int value
+    method setValue(int val)
+        value ^= val
+    method setLeftChild(Node node)
+        copy Node node left
+    method setRightChild(Node node)
+        copy Node node right
+    method setParent(Node node)
+        copy Node node parent
+
+class Tree
+    Node root
+    method setRoot(Node node)
+        copy Node node root
+    method step(Node cur, Node pre)
+        local Node next = nil
+        if cur.parent=pre then
+            if cur.left=nil && cur.right=nil then
+                pre <=> next
+            else 
+                if cur.left=nil then
+                    copy Node cur.right next
+                else 
+                    copy Node cur.left next
+                fi cur.left=nil
+                uncopy Node cur.parent pre
+            fi cur.left=nil && cur.right=nil
+        else if cur.right!=nil then
+            if cur.right=pre then
+                copy Node cur.parent next
+                uncopy Node cur.right pre
+            else
+                copy Node cur.right next
+                uncopy Node cur.left pre
+            fi cur.parent=next
+        else
+            copy Node cur.parent next
+            uncopy Node cur.left pre
+        fi cur.right!=nil
+        fi (next.parent=cur && (cur.left=next || cur.left=nil)) || (cur.right=nil && cur.left=nil)
+        pre <=> cur
+        cur <=> next
+        delocal Node next = nil
+    method search(int key, Node result)
+        local Tree tree = nil
+        new Tree tree
+        local Node pre = nil
+        copy Node root pre
+        from pre=root do 
+            skip
+        loop 
+            call tree::step(result, pre) 
+        until result=root || result.value=key
+        if result!=root then
+            uncopy Node result.parent pre
+        else 
+            uncopy Node root.left pre
+        fi result!=root
+        delocal Node pre = nil
+        delete Tree tree
+        delocal Tree tree = nil
+
+class Program
+    Tree tree
+    Node dummy
+    Node node1
+    Node node2
+    Node node3
+    Node node4
+    int dummyValue
+    int node1Value
+    int node2Value
+    int node3Value
+    int node4Value
+    int key
+    Node result
+    method main()
+        new Node dummy
+        new Node node1
+        new Node node2
+        new Node node3
+        new Node node4
+        dummyValue -= 1
+        node1Value += 11
+        node2Value += 22
+        node3Value += 33
+        node4Value += 44
+        call dummy::setValue(dummyValue)
+        call node1::setValue(node1Value)
+        call node2::setValue(node2Value)
+        call node3::setValue(node3Value)
+        call node4::setValue(node4Value)
+        call node4::setParent(node2)
+        call node3::setParent(node2)
+        call node2::setParent(node1)
+        call node2::setLeftChild(node3)
+        call node2::setRightChild(node4)
+        call node1::setParent(dummy)
+        call node1::setLeftChild(node2)
+        call dummy::setLeftChild(node1)
+        new Tree tree
+        key += 55
+        copy Node node1 result
+        call tree::setRoot(dummy)
+        call tree::search(key, result)
