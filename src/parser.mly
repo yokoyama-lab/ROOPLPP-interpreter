@@ -151,9 +151,13 @@ arrayTypeName:
   | typeId LBRA exp RBRA { ($1, $3) }
   | INT    LBRA exp RBRA { ("int", $3) }
 
+arg:
+  | ID  { Id $1  }
+  | exp { Exp $1 }
+
 anyIds1:
-  | anyIds1 COMMA ID { $1 @ [$3]}
-  | ID               { [$1] }
+  | anyIds1 COMMA arg { $1 @ [$3]}
+  | arg               { [$1] }
 
 anyIds:
   | anyIds1 { $1 }
@@ -221,11 +225,11 @@ stm:
     { LocalBlock($2, $3, $5, $6, $11) } // local ... delocal ... dataTypes must be equal.
   | CONSTRUCT typeId ID stms1 DESTRUCT ID    // TODO: check ids
     { ObjectBlock($2, $3, $4) } // construct c x  s  destruct x
-  | NEW arrayTypeName ID
+  | NEW arrayTypeName anyId
     { ArrayConstruction($2, $3) } // new Foo[length] fooList
   | NEW typeId anyId
     { ObjectConstruction($2, $3) } // new Foo foo
-  | DELETE arrayTypeName ID
+  | DELETE arrayTypeName anyId
     { ArrayDestruction($2, $3) } // delete Foo[length] fooList
   | DELETE typeId anyId
     { ObjectDestruction($2, $3) } // delete Foo foo
