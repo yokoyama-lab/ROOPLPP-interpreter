@@ -99,9 +99,11 @@ rule token = parse
   | "end"	{ END }
   (* 追加部分switch　*)
   | "switch"	{ SWITCH }
-  | "rswitch"	{ RSWITCH }
+  | "hctiws"	{ HCTIWS }
   | "case"	{ CASE }
-  | "rcase"	{ RCASE }
+  | "fcase"	{ FCASE }
+  | "ecase"	{ ECASE }
+  | "esac"	{ ESAC }
   | "break"	{ BREAK }
 
   | "int"       { INT }

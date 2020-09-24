@@ -64,6 +64,25 @@ let rec pretty_stms stms =
     | Swap(obj1, obj2) -> (pretty_obj obj1) ^ " <=> " ^ (pretty_obj obj2)
     | Conditional(exp1, stm1, stm2, exp2) -> "if " ^ (pretty_exp exp1) ^ " then\n" ^ (pretty_stms stm1) ^ "else\n" ^ (pretty_stms stm2) ^ "fi " ^ (pretty_exp exp2)
     | Loop(exp1, stm1, stm2, exp2) -> "from " ^ (pretty_exp exp1) ^ " do\n" ^ (pretty_stms stm1) ^ "loop\n" ^ (pretty_stms stm2) ^ "until " ^(pretty_exp exp2)
+    (* for追加部分 *)
+    | For(id, myfor, stms) ->
+       let pretty_for = function
+         | Nfor(e1, e2) -> "(" ^ (pretty_exp e1) ^ ".." ^ (pretty_exp e2) ^ ")"
+         | Afor(flag, id) ->
+            let rev = if flag then "(rev) " else "" in
+            rev ^ id
+       in
+       "for " ^ id ^ " in " ^ (pretty_for myfor) ^ " do\n" ^ (pretty_stms stms) ^ "end"
+      (* switch追加部分 *)
+    | Switch(obj1, cases, obj2) ->
+       let rec pretty_cases =
+         let pretty_case = function | Case -> "case" | Fcase -> "fcase" | Ecase -> "ecase" in
+         let pretty_break = function | Break -> " break " | NoBreak -> "" in
+         function
+         | [] -> ""
+         | (c, e1, s, e2, b) :: tl -> (pretty_case c) ^ " " ^ (pretty_exp e1) ^ ": " ^ (pretty_stms s) ^ "esac " ^ (pretty_exp e2) ^ (pretty_break b) ^ ("\n") ^ (pretty_cases tl)
+       in
+       "switch " ^ (pretty_obj obj1) ^ "\n" ^ (pretty_cases cases) ^ "hctiws " ^ (pretty_obj obj2)
     | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ (pretty_stms stm) ^ "\n" ^ "destruct " ^ id
     | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp1) ^ "\n" ^ (pretty_stms stm) ^ "\n" ^ "delocal " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp2)
     | LocalCall(methodId, ids) -> "call " ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"

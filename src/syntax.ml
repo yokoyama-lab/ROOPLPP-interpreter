@@ -52,17 +52,25 @@ type arg =
   | Exp of exp
          
 type myfor = (*追加部分for*)
-  | NFOR of exp * exp (*回数指定*)
-  | AFOR of bool * id (*配列要素 bool=trueなら逆順*)
+  | Nfor of exp * exp (*回数指定*)
+  | Afor of bool * id (*配列要素 bool=trueなら逆順*)
 
-         
+type case =
+  | Case
+  | Fcase
+  | Ecase
+
+type break =
+  | Break
+  | NoBreak
+  
 type stm =
   | Assign of obj * modOp * exp
   | Swap of obj * obj
   | Conditional of exp * stm list * stm list * exp
   | Loop of exp * stm list * stm list * exp
-  | FOR of id * myfor * stm list (*追加部分for*)
-  | Switch of bool * obj * (exp * stm list * exp * bool) list * obj (*追加部分switch*)         
+  | For of id * myfor * stm list (*追加部分for*)
+  | Switch of obj * (case * exp * stm list * exp * break) list * obj (*追加部分switch*)
   | ObjectBlock of typeId * id * stm list
   | LocalBlock of dataType * id * exp * stm list * exp
   | LocalCall of methodId * arg list

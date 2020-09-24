@@ -413,7 +413,7 @@ let rec eval_state stml env map st0 =
           print_string(pretty_stms [stm]); failwith "error:assertion of true is incorrect in this statement"
          end
     (*FOR CONST: for x in (e1..e2) do stml end *)
-    | FOR(x, NFOR(n1, n2), stml) ->
+    | For(x, Nfor(n1, n2), stml) ->
        let rec for_con (x, (e1, e2), stml) env map st =                         (*意味関数F*)
          let IntVal n1,IntVal n2 = (eval_exp e1 env st, eval_exp e2 env st) in  (*e1,e2を評価*)
          if n1 = n2 then List.remove_assoc (lookup_envs x env) st               (* ストアからロケーションxを取り除く *)
@@ -431,7 +431,7 @@ let rec eval_state stml env map st0 =
        let st3 = eval_state stml env2 map st2 in                  (*stml1回実行*)
        for_con (x, (n1, n2), stml) env2 map st3                   (*意味関数Fへ*)
     (* FOR ARRAY: for x1 in (x2 or (rev)x2) do s end *)
-    | FOR(x1, AFOR(rev, x2), stml) ->                    (* rev:bool trueの場合(rev)x2 falseの場合x2 *)
+    | For(x1, Afor(rev, x2), stml) ->                    (* rev:bool trueの場合(rev)x2 falseの場合x2 *)
        let LocsVec(vec) = lookup_val x2 env st in        (* ベクトルを求める μ(γ(x2)) *)
        let rec for_array (x1, x2, stml, n) env map st =  (*意味関数A or B*)
          let flag, index = if rev = true 
@@ -458,47 +458,55 @@ let rec eval_state stml env map st0 =
        let st3 = eval_state stml env2 map st2 in
        for_array (x1, x2, stml, index) env2 map st3
     (*追加部分SWITCH*)
-    | Switch(rev, obj1, case, obj2) ->
-       let rec is_break n case_list =
-         match case_list with
-         | [] -> failwith "error in switch"
-         | (Const m1, stml, Const m2, break) :: tl ->
-            if n = m1 && break then true, stml, tl, case_list, m2
-            else if n = m1 && not break then false, stml, tl,case_list, m2
-            else is_break n tl
+    | Switch(obj1, cases, obj2) ->
+       let rec search_case n cases cnt env st =
+         match cases with
+         | [] -> failwith "error:not match in case"
+         | (c, e, s, e', b) :: tl ->
+            if n = (eval_exp e env st) then (c, e, s, e', b), cnt
+            else search_case n tl (cnt + 1) env st
        in
-       let rec fall_through case_list env map st =
-         match case_list with
-         | [] -> failwith "error in switch of fall_through"
-         | (_, stml, _, break) :: tl ->
-            let st2 = eval_state stml env map st in
-            if break then st2
-            else fall_through tl env map st2
+       let rec search_ecase cases n cnt =
+         match cases with
+         | [] -> failwith "error:not match in ecase"
+         | (c, _, _, _, _) :: tl ->
+              if (c = Ecase) && (cnt > n) then cnt
+              else search_ecase tl n (cnt + 1)
        in
-       let rec fall_through_rev case_list env map st =
-         let rec search_case case_list =
-           match case_list with
-           | [] -> failwith "error in (rev)switch of fall_through"
-           | (_, stml, _, break) :: tl ->
-              if break then stml
-              else stml @ (search_case tl)
-         in
-         let stml2 = List.rev(search_case case_list) in
-         eval_state stml2 env map st
+       let rec search_state cases k j =
+         let (_, _, stm, _, _) = List.nth cases k in
+         if k = j then stm
+         else stm @ (search_state cases (k + 1) j)
        in
-       let _, IntVal(v1) = lval_val obj1 env in
-       let locs_obj2, _ = lval_val obj2 env  in
-       let flag, stml2, case_list2, case_list3, assertion = is_break v1 case in
-       let st3 =
-         if flag then eval_state stml2 env map st
+       let rec eval_case j k cases env map st =
+         if k = - 1 then
+           let m = search_ecase cases j 0 in
+           eval_state (search_state cases j m) env map st
          else
-           if rev then fall_through_rev case_list3 env map st
-           else
-             let st2 = eval_state stml2 env map st in
-             fall_through case_list2 env map st2
+         let (ck, _, _, _, bk) = List.nth cases k in
+         match ck, bk with
+         | Ecase, _ -> eval_state (search_state cases k j) env map st
+         | _ , Break ->
+            let m = search_ecase cases j 0 in
+            eval_state (search_state cases j m) env map st
+         | _ ->  eval_case j (k - 1) cases env map st
        in
-       if lookup_st locs_obj2 st3 = IntVal(assertion) then st3
-       else failwith "assersion in switch is not correct"
+       let _, v1 = lval_val obj1 env in
+       let v2_locs, _ = lval_val obj2 env in
+       let (c, e, s, e', b), index = search_case v1 cases 0 env st in
+       let st2 =
+         begin
+         match c with
+         | Fcase -> eval_case index (index - 1) cases env map st
+         | _ -> eval_state s env map st
+         end
+       in
+       if lookup_st v2_locs st2 = eval_exp e' env st2 then st2
+       else
+         begin
+           print_string(pretty_stms [stm]);
+           failwith ("assertion is incorrect when " ^ (pretty_obj obj1) ^ " = " ^ (pretty_exp e) ^ " in this switch statement")
+         end
     | Conditional(e1, stml1, stml2, e2) ->           (* if e1 then s1 else s2 fi e2 *)
        (*IFTRUE*)
        if (eval_exp e1 env st) <> IntVal(0) then     (* ?e1 != 0(true)  *)

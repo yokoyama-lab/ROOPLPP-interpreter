@@ -14,23 +14,56 @@ let rec invert_stm = function
   | Loop(e1, stml1, stml2, e2) ->
      Loop(e2, invert stml1, invert stml2, e1)
   (*追加部分for*)
-  | FOR(x, NFOR(n1, n2), stml) ->
-     FOR(x, NFOR(n2, n1), invert stml)
-  | FOR(x1, AFOR(rev, x2), stml) ->
+  | For(x, Nfor(n1, n2), stml) ->
+     For(x, Nfor(n2, n1), invert stml)
+  | For(x1, Afor(rev, x2), stml) ->
      let flag = if rev = true
                 then false
                 else true in
-     FOR(x1, AFOR(flag, x2), stml)
+     For(x1, Afor(flag, x2), stml)
   (*追加部分switch*)
-  | Switch(rev, obj1, case_list, obj2) ->
-     let rev_case = function
-       | (e1, stml, e2, break) -> (e2, invert stml, e1, break)
+  | Switch(obj1, cases, obj2) ->
+     let rec invert_cases cases =
+       let rec append_k cases =
+         match cases with
+         | (c, e1, s, e2, b) :: tl ->
+            if b = Break then [(c, e1, s, e2, b)]
+            else
+              (c, e1, s, e2, b) :: (append_k tl)
+       in
+       let rec search_kn cases =
+         match cases with
+         | (_, _, _, _, b) :: tl ->
+            if b = Break then tl
+            else search_kn tl              
+       in
+       let invert_cases2 cases =
+         let cases2 =
+         match cases with
+         | (c, e1, s, e2, b) :: tl ->
+            List.rev((c, e1, s, e2, Break) :: tl)
+         in         
+         match cases2 with
+         | (c, e1, s, e2, b) :: tl -> (c, e1, s, e2, NoBreak) :: tl
+       in
+       match cases with
+       | [] -> []
+       | [x] -> [x]
+       | (c, e1, s, e2, b) :: tl ->
+          if c = Case then [(c, e1, s, e2, b)] @ (invert_cases tl)
+          else if c = Fcase || c = Ecase then
+            let cases_k, cases_kn = (append_k cases), (search_kn cases) in
+            (invert_cases2 cases_k) @ (invert_cases cases_kn) 
+          else failwith "error in switch statement"
      in
-     let flag = if rev = true
-                then false
-                else true in
-     let case_list2 = List.map rev_case case_list in
-     Switch(flag, obj2, case_list2, obj1)
+     let cases2 =
+       List.map (fun x ->
+           begin
+             match x with
+             | (c, e1, s, e2, b) -> (c, e2, invert s, e1, b)
+           end  ) cases
+     in
+     Switch(obj2, invert_cases cases2, obj1)
   | ObjectBlock(tid, id, stml) ->
      ObjectBlock(tid, id, invert stml)
   | LocalBlock(dt, id, e1, stml, e2) ->

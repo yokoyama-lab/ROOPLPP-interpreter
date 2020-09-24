@@ -1,26 +1,29 @@
 class Test
   method test(int x)
   switch x
-    case 1: x += 2  rcase 7
-    case 2: x += 4  rcase 6
-            break
-    case 3: print("a") rcase 3
-    case 4: print("b") rcase 4
-    case 5: print("c") rcase 5
-            break
-  rswitch x
+    fcase 10: x += 10 show(x)  esac 26
+    fcase 1: x += 2   show(x)  esac 7
+    ecase 2: x += 4   show(x)  esac 6
+             break
+    case 6:  x += 10 esac 16
+             break
+    fcase 3: print("a") esac 3
+    fcase 4: print("b") esac 4
+    ecase 5: print("c") esac 5
+             break
+  hctiws x
 
 class Program
 int x
 Test t
   method main()
-  x ^= 1
+  x ^= 3
   new Test t
-  show(x)
-  print("\n順実行\n")
+  print("初期値：")
+  show(x) print("\n")
+  print("順実行:")
   call t::test(x)
-  show(x)
-  print("\n逆実行\n")
+  print("\n")
+  print("逆実行:")
   uncall t::test(x)
-  show(x)
   print("\n")

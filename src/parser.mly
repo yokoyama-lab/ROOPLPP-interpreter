@@ -70,9 +70,11 @@ let rec anyId2obj = function
 %token END       // "end"
 // 追加部分switch
 %token SWITCH    // "switch"
-%token RSWITCH   // "rswitch"
+%token HCTIWS    // "hctiws"
 %token CASE      // "case"
-%token RCASE     // "rcase"
+%token FCASE     // "fcase"
+%token ECASE     // "ecase"
+%token ESAC      // "ESAC"
 %token BREAK     // "break"
 
 %token INT       // "int"
@@ -171,29 +173,29 @@ anyId:
 // 追加部分for
 myfor:
   | LPAREN exp WDOT exp RPAREN
-    { NFOR($2, $4) }
+    { Nfor($2, $4) }
   | LPAREN REV RPAREN ID
-    { AFOR(true, $4) }
+    { Afor(true, $4) }
   | ID
-    { AFOR(false, $1) }
+    { Afor(false, $1) }
 
 // 追加部分switch
-break:
-  | BREAK { true  }
-  |       { false }
+case:
+  | CASE  { Case  }
+  | FCASE { Fcase }
+  | ECASE { Ecase }
 
-rev:
-  | LPAREN REV RPAREN { true  }
-  |                   { false }
+break:
+  | BREAK { Break  }
+  |       { NoBreak }
 
 switchs1:
   | switchs1 switch { $1 @ [$2] }
   | switch          { [$1] }
 
 switch:
-  | CASE exp COLON stms1 RCASE exp break
-    { $2, $4, $6, $7 }
-
+  | case exp COLON stms1 ESAC exp break
+    { $1, $2, $4, $6, $7 }
 
 // statement
 stms1:
@@ -209,10 +211,10 @@ stm:
     { Loop($2, $3, $4, $6) } // from e do s loop s until e or   or  from e do s until e  or  from e loop s until e
   //追加部分for
   | FOR ID IN myfor DO stms1 END // for x in {(e..e) | (rev)?x } do s end
-    { FOR($2, $4, $6) }
+    { For($2, $4, $6) }
   // 追加部分switch
-  | rev SWITCH anyId switchs1 RSWITCH anyId
-    { Switch($1,$3,$4,$6) }
+  | SWITCH anyId switchs1 HCTIWS anyId
+    { Switch($2,$3,$5) }
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN
