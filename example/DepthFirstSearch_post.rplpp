@@ -61,7 +61,7 @@ class Tree
     method search(int key, Node result)
         local Node pre = nil
         copy Node root pre
-        from  pre=root do print("調査：") print("cur:") show(result) print("pre") show(pre) print("\n") loop
+        from  pre=root loop
             call step(result, pre)
         until ((result=root || result.value=key)) &&
 	((result.right = nil && result.left = nil) || (result.right = pre) && (pre.parent = result) && (pre.parent != nil && result.right != nil) || (result.left = pre && result.right = nil))
