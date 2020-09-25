@@ -61,24 +61,23 @@ class Tree
     method search(int key, Node result)
         local Node pre = nil
         copy Node root pre
-        from  pre=root loop
+        from pre=root loop
             call step(result, pre)
         until ((result=root || result.value=key)) &&
-	((result.right = nil && result.left = nil) || (result.right = pre) && (pre.parent = result) && (pre.parent != nil && result.right != nil) || (result.left = pre && result.right = nil))
-
-	
+	((result.right = nil && result.left = nil) || (result.right = pre) || // 追加部分
+	(result.left = pre && result.right = nil))                            //
         if result!=root then
-	  if (result.left = nil) && (result.right = nil) then
+	  if (result.left = nil) && (result.right = nil) then                 //
             uncopy Node result.parent pre
-          else if (result.right != nil) && (result.left != nil) then
-	         uncopy Node result.right pre
-	       else if result.left != nil then
-	              uncopy Node result.left pre
+          else if (result.right != nil) && (result.left != nil) then          //
+	         uncopy Node result.right pre		   		      //
+	       else if result.left != nil then				      //
+	              uncopy Node result.left pre			      //
 		    else
-		      uncopy Node result.right pre
+		      uncopy Node result.right pre			      //
 		    fi result.left != nil
-	       fi (result.right != nil) && (result.left != nil)
-	  fi (result.left = nil) && (result.right = nil)
+	       fi (result.right != nil) && (result.left != nil)		      //
+	  fi (result.left = nil) && (result.right = nil)                      // ここまで追加部分
 	else
             uncopy Node root.left pre
         fi result!=root
@@ -142,9 +141,7 @@ class Program
         call node8::constructor(node8Value, node9, empty, node3)
         call node9::constructor(node9Value, empty, empty, node8)	
 	new Tree tree
-        key += 1
+        key += 2
         copy Node node1 result
         call tree::setRoot(dummy)
         call tree::search(key, result)
-	print("\n")
-	show(result)
