@@ -121,15 +121,15 @@ class Program
         new Node node8
         new Node node9
         dummyValue -= 1
-        node1Value += 1
-        node2Value += 1
-        node3Value += 1
-        node4Value += 1
-        node5Value += 1
-        node6Value += 1
-        node7Value += 1
-        node8Value += 1
-        node9Value += 1
+        node1Value += 2
+        node2Value += 2
+        node3Value += 2
+        node4Value += 2
+        node5Value += 2
+        node6Value += 2
+        node7Value += 2
+        node8Value += 2
+        node9Value += 2
 
         call dummy::constructor(dummyValue, node1, empty, empty)
         call node1::constructor(node1Value, node2, node3, dummy)
@@ -146,4 +146,5 @@ class Program
         copy Node node1 result
         call tree::setRoot(dummy)
         call tree::search(key, result)
-	uncall tree::search(key, result)
+	print("\n")
+	show(result)
