@@ -69,7 +69,7 @@ class Tree
 	    until (result.left = nil && result.right = nil) ||
 	          (result.right = pre) ||
 	    	  (result.left = pre && result.right = nil)
-	print("捜査：") show(result.value) print(" ")
+		  print("走査：") show(result.value) print(" ")
         until result=root || result.value=key
         if result!=root then
 	    if (result.left = nil) && (result.right = nil) then
