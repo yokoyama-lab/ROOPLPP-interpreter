@@ -12,6 +12,12 @@ function convertEOL($string, $to = "\n")
 }
 $dir = dirname(__FILE__);
 $cmd = "$dir/../src/./rplpp";
+
+// 引数
+$invert = filter_input(INPUT_POST, "invert", FILTER_VALIDATE_BOOLEAN);
+if ($invert) { $cmd .= " -inverse"; }
+
+// プログラムを保存
 $prog_text = convertEOL(filter_input(INPUT_POST, "prog", FILTER_UNSAFE_RAW));
 $prog_hash = substr(sha1($prog_text), 0, 8);
 $res = file_put_contents("$dir/programs/$prog_hash.rplpp", $prog_text);

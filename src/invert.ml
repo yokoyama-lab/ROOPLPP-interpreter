@@ -1,5 +1,5 @@
 open Syntax
-
+   
 let rec invert_stm = function
   | Skip -> Skip
   | Assign(obj, modOp, e) ->
@@ -81,3 +81,7 @@ let rec invert_stm = function
   | Show e -> Show e
   | Print str -> Print str
 and invert stml = List.rev (List.map invert_stm stml)
+
+let invert_method (MDecl(mid, para, stml)) = MDecl(mid, para, invert stml)
+let invert_prog2 (CDecl(tid, inher, fields, methods)) = CDecl(tid, inher, fields, List.map invert_method methods)
+let invert_prog (Prog(cl)) = Prog(List.map invert_prog2 cl)

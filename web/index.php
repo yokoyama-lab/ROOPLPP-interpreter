@@ -38,7 +38,9 @@ $example = filter_input(INPUT_GET, "example", FILTER_VALIDATE_INT);
   echo($con);
    ?>
 </textarea>
-</br>
+<h3>Options</h3>
+<input type="checkbox" name="invert"value="1">Inversion
+<h3>Excute</h3>
 <input type="submit" value="Execute">
 </form>
 <h2>Sample programs</h2>

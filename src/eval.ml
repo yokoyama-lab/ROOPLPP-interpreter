@@ -57,7 +57,7 @@ let rec lookup_meth x meth =
 (*マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
 let rec lookup_map id map =
   try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith "error in lookup_map"
+  with Not_found -> failwith ("class " ^ id ^ "is not valid")
 
 (*マップのリストから指定されたメソッド名を含んでいるクラス名とそのメソッドのstatementのタプルを返す*)
 let rec lookup_class id1 map =
@@ -231,13 +231,19 @@ let rec eval_exp exp env st =
        let locsx' = lookup_vec x_index locsvecx in
        let v = lookup_st locsx' st in (*the value of x[e1]*)
        locsx', v
-    | Dot(x, xi) ->         
-       let _, LocsVal(l) = lval_val x env in
-       let ObjVal(c, env') = lookup_st l st in
-       let li, v = lval_val xi env' in
-       (*         let li = lookup_envs xi' env' in
-                  let v = lookup_st li st in*)
-       li, v
+    | Dot(x, xi) ->
+       let _, locs = lval_val x env in
+       match locs with
+         LocsVal(l)-> 
+          begin
+            match (lookup_st l st) with
+            | ObjVal(c, env') ->
+               let li, v = lval_val xi env' in
+               (*         let li = lookup_envs xi' env' in
+                          let v = lookup_st li st in*)
+               li, v
+          end
+       | _ -> - 1, IntVal 0
   in
   match exp with
   (*CON*)
@@ -254,13 +260,8 @@ let rec eval_exp exp env st =
   (*NIL*)
   | Nil -> IntVal(0)
   (* DOT *)
-  | Dot(x, xi) -> let _, v = lval_val (Dot(x, xi)) env in v
-(*  | Dot (Var(x), Var(xi')) ->
-     let l = lookup_envs x env in
-     let LocsVal(l') = lookup_st l st in
-     let ObjVal(c, env') = lookup_st l' st in
-     let li = lookup_envs xi' env' in
-     lookup_st li st*)
+  | Dot(x, xi) ->
+     let _, v = lval_val (Dot(x, xi)) env in v
   (*BINOP*)
   | Binary(b, e1, e2) ->
      let f = function
@@ -281,10 +282,8 @@ let rec eval_exp exp env st =
        | Le   -> comp_op (<=)
        | Ge   -> comp_op (>=)
      in
-     let v = f b (eval_exp e1 env st) (eval_exp e2 env st) in
-     try v with
-     | Failure e -> begin print_string(pretty_exp exp); failwith (e ^ "in this expression")end
-     | _ -> v
+     try (f b (eval_exp e1 env st) (eval_exp e2 env st)) with
+     | Failure e -> begin print_string(pretty_exp exp);print_newline (); failwith (e ^ "in this expression")end
           
 (* callの意味論の関数search_aに相当 *)
 let rec search_a args env st locs =
@@ -352,20 +351,16 @@ let rec eval_state stml env map st0 =
        let v = lookup_st locsx' st in (*the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->         
-       let _, LocsVal(l) = lval_val x env in
-       let ObjVal(c, env') = lookup_st l st in
-       let li, v = lval_val xi env' in
-       (*         let li = lookup_envs xi' env' in
-                  let v = lookup_st li st in*)
-       li, v
-    (*let lval_val = function
-      | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
-      | VarArray(x, Some(e)) ->
-         let IntVal(x_index) = eval_exp e env st in
-         let LocsVec(locsvecx) = lookup_val x env st in
-         let locsx' = lookup_vec x_index locsvecx in
-         let v = lookup_st locsx' st in (*the value of x[e1]*)
-         locsx', v*)
+       let _, locs = lval_val x env in
+       match locs with
+         LocsVal(l) ->
+          begin
+            match (lookup_st l st) with
+            | ObjVal(c, env') ->
+               let li, v = lval_val xi env' in
+               li, v
+          end
+       | _ -> - 1, IntVal 0
     in
     match stm with
     (*PRINT*)

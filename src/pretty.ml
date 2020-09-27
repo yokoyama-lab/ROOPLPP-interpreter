@@ -55,10 +55,13 @@ let rec pretty_actArgs =
   | [] -> ""
   | [arg] -> pretty_actArg arg
   | hd :: tl -> (pretty_actArg hd) ^ ", " ^ (pretty_actArgs tl)
-              
-let rec pretty_stms stms =
-  let pretty_stm str stm =
-    let s =
+
+let rec pretty_stms = function
+  | [] -> "        "
+  | hd :: tl -> "        " ^ (pretty_stm hd) ^ (pretty_stms tl)
+  and
+pretty_stm stm =
+  let s =
     match stm with
     | Assign(obj, modOp, exp) -> (pretty_obj obj) ^ " " ^ (pretty_modOp modOp) ^ " " ^ (pretty_exp exp)
     | Swap(obj1, obj2) -> (pretty_obj obj1) ^ " <=> " ^ (pretty_obj obj2)
@@ -84,7 +87,7 @@ let rec pretty_stms stms =
        in
        "switch " ^ (pretty_obj obj1) ^ "\n" ^ (pretty_cases cases) ^ "hctiws " ^ (pretty_obj obj2)
     | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ (pretty_stms stm) ^ "\n" ^ "destruct " ^ id
-    | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp1) ^ "\n" ^ (pretty_stms stm) ^ "\n" ^ "delocal " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp2)
+    | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp1) ^ "\n" ^ (pretty_stms stm)  ^ "delocal " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp2)
     | LocalCall(methodId, ids) -> "call " ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
     | LocalUncall(methodId, ids) -> "uncall " ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
     | ObjectCall(obj, methodId, ids) -> "call " ^ (pretty_obj obj) ^ "::" ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
@@ -99,15 +102,13 @@ let rec pretty_stms stms =
     | Show(exp) -> "show" ^ "(" ^ (pretty_exp exp) ^ ")"
     | Print(str) -> "print" ^ "(\"" ^ str ^ "\")"
     in
-    str ^ s ^ "\n"
-  in
-  List.fold_left pretty_stm "" stms
+    s ^ "\n"
   
 let pretty_decl (Decl(dataType, id)) = (pretty_dataType dataType) ^ " " ^ id
                                      
 let rec pretty_fields = function
   | [] -> ""
-  | hd :: tl -> (pretty_decl hd) ^ "\n" ^ (pretty_fields tl)
+  | hd :: tl -> (pretty_decl hd) ^ "\n    " ^ (pretty_fields tl)
               
 let rec pretty_args = function
   | [] -> ""
@@ -119,7 +120,7 @@ let pretty_method (MDecl(id, args, stms)) =
   
 let rec pretty_methods = function
   | [m] -> (pretty_method m)
-  | hd :: tl -> (pretty_method hd) ^ "\n" ^ (pretty_methods tl)
+  | hd :: tl -> (pretty_method hd) ^ "\n    " ^ (pretty_methods tl)
               
 let pretty_c (CDecl(c, inherits, fields, methods)) =
   let inher = 
@@ -127,10 +128,10 @@ let pretty_c (CDecl(c, inherits, fields, methods)) =
   | None -> ""
   | Some(id) -> " inherits " ^ id
   in
-  "class " ^ c ^ inher  ^ "\n" ^ (pretty_fields fields) ^ (pretty_methods methods)
+  "class " ^ c ^ inher  ^ "\n    " ^ (pretty_fields fields) ^ "\n    " ^ (pretty_methods methods)
   
 let rec pretty_cl = function
   | [cl] -> pretty_c cl
   | hd :: tl ->(pretty_c hd) ^ "\n" ^ (pretty_cl tl)
              
-let pretty_prog (Prog(cl)) = pretty_cl cl
+let pretty_prog (Prog(cl)) = print_string((pretty_cl cl) ^ "\n")
