@@ -61,25 +61,17 @@ class Tree
     method search(int key, Node result)
         local Node pre = nil
         copy Node root pre
-	from pre=root do
-	    from pre=root || ((result.left = nil && result.right = nil) ||
-	    	 (result.right = pre) ||
-	    	 (result.left = pre && result.right = nil))
-	    do call step(result, pre)
-	    until (result.left = nil && result.right = nil) ||
-	          (result.right = pre) ||
-	    	  (result.left = pre && result.right = nil)
-	    print("走査：") show(result.value) print(" ")
+	from pre = root do print("走査：") show(result.value) print(" ")
+	loop
+	    from (result.parent = pre)
+	        do call step(result, pre)
+	    until (result.parent = pre) || (result = root)
         until result=root || result.value=key
-	if (result.left = nil) && (result.right = nil) then
+        if result!=root then
             uncopy Node result.parent pre
-        else
-	    if result.right != nil then
-	        uncopy Node result.right pre
-	    else
-                uncopy Node result.left pre
-	    fi result.right != nil
-        fi (result.left = nil) && (result.right = nil)
+	else
+            uncopy Node root.left pre
+        fi result!=root
         delocal Node pre = nil
 	
 class Program
@@ -142,10 +134,8 @@ class Program
         key += 0
         copy Node node1 result
         call tree::setRoot(dummy)
-	print("\n実行前：") show(result.value) print("\n")
+	print("\n実行前：") show(result.value) print("\n")	
         call tree::search(key, result)
 	print("\n順実行後：") show(result.value) print("\n")
-	uncall tree::search(key,result)
-	print("\n逆実行後：") show(result.value) print("\n")
-
-
+        uncall tree::search(key, result)
+	print("\n逆実行前：") show(result.value) print("\n")

@@ -62,24 +62,16 @@ class Tree
         local Node pre = nil
         copy Node root pre
 	from pre=root do
-	    from pre=root || ((result.left = nil && result.right = nil) ||
-	    	 (result.right = pre) ||
-	    	 (result.left = pre && result.right = nil))
-	    do call step(result, pre)
-	    until (result.left = nil && result.right = nil) ||
-	          (result.right = pre) ||
-	    	  (result.left = pre && result.right = nil)
+	    from pre=root || (result.left = nil && result.right != pre) || (result.left = pre)
+	        do call step(result, pre)
+	    until (result.left = nil && result.right != pre) || (result.left = pre)
 	    print("走査：") show(result.value) print(" ")
         until result=root || result.value=key
-	if (result.left = nil) && (result.right = nil) then
+        if result.left = nil then
             uncopy Node result.parent pre
         else
-	    if result.right != nil then
-	        uncopy Node result.right pre
-	    else
-                uncopy Node result.left pre
-	    fi result.right != nil
-        fi (result.left = nil) && (result.right = nil)
+            uncopy Node result.left pre
+        fi result.left = nil
         delocal Node pre = nil
 	
 class Program
@@ -145,7 +137,5 @@ class Program
 	print("\n実行前：") show(result.value) print("\n")
         call tree::search(key, result)
 	print("\n順実行後：") show(result.value) print("\n")
-	uncall tree::search(key,result)
+        uncall tree::search(key, result)
 	print("\n逆実行後：") show(result.value) print("\n")
-
-
