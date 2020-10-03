@@ -20,17 +20,19 @@ let () =
   match !files with
   | [file_name] ->
      let channel = open_in file_name in
-     try let prog = parse channel in
-         let _ = close_in channel in
-         if !inv then pretty_prog(invert_prog prog)
-         else eval prog
-     with Util.Parse_error (start_pos, end_pos) ->
-       Printf.printf "Parse error at %d.%d-%d.%d\n"
-         start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
-         end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol);
-       exit 1
-            
-                  
+     let prog =
+       try parse channel with
+         Util.Parse_error (start_pos, end_pos) ->
+         Printf.printf "Parse error at %d.%d-%d.%d\n"
+           start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
+           end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol);
+         exit 1
+     in
+     let _ = close_in channel in
+     if !inv then pretty_prog(invert_prog prog)
+     else
+       try eval prog with
+       Failure e -> print_endline e         
 (*let () =
   let file_name = Printf.sprintf "%s" (Sys.argv.(1)) in
   let channel = open_in file_name in
