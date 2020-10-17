@@ -1,34 +1,35 @@
+// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language
 // Calculating the square root of an integer.// Factorization program
 // based on http://topps.diku.dk/pirc/janus-playground/
 
 class Root
-  method root(int num, int root)
-    local int bit = 1
-    from bit = 1 loop  // find exponential ball park
-        call doublebit(bit)
-    until (bit * bit) > num
+    method root(int num, int root)
+      local int bit = 1
+      from bit = 1 loop  // find exponential ball park
+          call doublebit(bit)
+      until (bit * bit) > num
 
-    from (bit * bit) > num do
-        uncall doublebit(bit)
-        if ((root + bit) * (root + bit)) <= num then
-            root += bit
-        fi (root / bit) % 2 != 0
-    until bit = 1
-    delocal int bit = 1
-    num -= root * root
+      from (bit * bit) > num do
+          uncall doublebit(bit)
+          if ((root + bit) * (root + bit)) <= num then
+              root += bit
+          fi (root / bit) % 2 != 0
+      until bit = 1
+      delocal int bit = 1
+      num -= root * root
 
-  method doublebit(int bit)
-    local int z = bit
-    bit += z
-    delocal int z = bit / 2
+    method doublebit(int bit)
+      local int z = bit
+      bit += z
+      delocal int z = bit / 2
 
 class Program
-  int num
-  int root
-  method main()
-    num += 144
-    local Root r = nil
-    new Root r
-    call r::root(num, root)
-    delete Root r
-    delocal Root r = nil
+    int num
+    int root
+    method main()
+        num += 144
+        local Root r = nil
+    	new Root r
+    	call r::root(num, root)
+    	delete Root r
+    	delocal Root r = nil

@@ -1,62 +1,63 @@
+// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language
 // Factorization program
 // based on http://topps.diku.dk/pirc/janus-playground/
 // factor num into table in fact[]
 
 class Fact
-  method factor(int num, int[] fact)
-    local int try = 0   // Attempted factor.
-    local int i = 0     // Pointer to last factor in factor table.
-    from (try = 0) && (num > 1) loop
-        call nexttry(try)
-        from fact[i] != try loop               // Divide out all occurrences of this
-            i += 1                             // factor
-            fact[i] += try
-            local int z = num / try
-            z <=> num
-            delocal int z = num * try
-        until (num % try) != 0
-    until (try * try) > num                    // Exit early if possible
+    method factor(int num, int[] fact)
+        local int try = 0   // Attempted factor.
+        local int i = 0     // Pointer to last factor in factor table.
+        from (try = 0) && (num > 1) loop
+            call nexttry(try)
+            from fact[i] != try loop               // Divide out all occurrences of this
+                i += 1                             // factor
+                fact[i] += try
+                local int z = num / try
+                z <=> num
+                delocal int z = num * try
+            until (num % try) != 0
+        until (try * try) > num                    // Exit early if possible
 
-    if num != 1 then
-        i += 1                                 // Put last prime away, if not done
-        fact[i] ^= num                         // and zero num
-        num     ^= fact[i]
-        fact[i] ^= num
-    else
-        num -= 1
-    fi fact[i] != fact[i-1]
+        if num != 1 then
+            i += 1                                 // Put last prime away, if not done
+            fact[i] ^= num                         // and zero num
+            num     ^= fact[i]
+            fact[i] ^= num
+    	else
+            num -= 1
+        fi fact[i] != fact[i-1]
 
-    if (fact[i-1] * fact[i-1]) < fact[i] then  // Zero try
-        from (try * try) > fact[i] loop
-            uncall nexttry(try)
-        until try = 0
-    else
-        try -= fact[i-1]
-    fi (fact[i-1] * fact[i-1]) < fact[i]
+        if (fact[i-1] * fact[i-1]) < fact[i] then  // Zero try
+            from (try * try) > fact[i] loop
+                uncall nexttry(try)
+            until try = 0
+        else
+            try -= fact[i-1]
+        fi (fact[i-1] * fact[i-1]) < fact[i]
 
-    call zeroi(i, fact)                        // Zero i
-    delocal int i = 0
-    delocal int try = 0
+        call zeroi(i, fact)                        // Zero i
+        delocal int i = 0
+        delocal int try = 0
 
-  method zeroi(int i, int[] fact)
-    from fact[i+1] = 0 loop
-        i -= 1
-    until i = 0
+    method zeroi(int i, int[] fact)
+        from fact[i+1] = 0 loop
+            i -= 1
+    	until i = 0
 
-  method nexttry(int try)
-    try += 2
-    if try = 4 then
-      try -= 1
-    fi try = 3
+    method nexttry(int try)
+        try += 2
+    	if try = 4 then
+            try -= 1
+    	fi try = 3
 
 class Program
-  int num      // Number to factor.  Ends up zero
-  int[] fact   // Factor table.  Starts zero. Ends with factors in ascending order
-  method main()
-    new int[20] fact
-    local Fact f = nil
-    new Fact f
-    num += 840
-    call f::factor(num, fact)
-    delete Fact f
-    delocal Fact f = nil
+    int num      // Number to factor.  Ends up zero
+    int[] fact   // Factor table.  Starts zero. Ends with factors in ascending order
+    method main()
+        new int[20] fact
+    	local Fact f = nil
+    	new Fact f
+    	num += 840
+    	call f::factor(num, fact)
+    	delete Fact f
+    	delocal Fact f = nil

@@ -1,131 +1,127 @@
-// Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P141-142
 class Node
-  Node left
-  Node right
-  int value
+    Node left
+    Node right
+    int value
 
-  method setValue(int newValue)
-    value ^= newValue
+    method setValue(int newValue)
+        value ^= newValue
 
     method insertNode(Node node, int nodeValue)
-      if nodeValue < value then
-        if left = nil & node != nil then
-	  left <=> node
-	else skip
-	fi left != nil & node = nil
+        if nodeValue < value then
+            if left = nil & node != nil then
+	        left <=> node
+	    else skip
+	    fi left != nil & node = nil
 
-	if left != nil then
-	  call left::insertNode(node, nodeValue)
-	else skip
-	fi left != nil
-      else
-        if right = nil & node != nil then
-	  right <=> node
-	else skip
-	fi right != nil & node = nil
+	    if left != nil then
+	        call left::insertNode(node, nodeValue)
+	    else skip
+	    fi left != nil
+        else
+            if right = nil & node != nil then
+	        right <=> node
+	    else skip
+	    fi right != nil & node = nil
 
-	if right != nil then
-	  call right::insertNode(node, nodeValue)
-	else skip
-	fi right != nil
-      fi nodeValue < value
+	    if right != nil then
+	        call right::insertNode(node, nodeValue)
+	    else skip
+	    fi right != nil
+        fi nodeValue < value
 
-  method getSum(int result)
-    result += value
+    method getSum(int result)
+        result += value
 
-    if left != nil then
-      call left::getSum(result)
-    else skip
-    fi left != nil
+    	if left != nil then
+      	    call left::getSum(result)
+        else skip
+    	fi left != nil
 
-    if right != nil then
-      call right::getSum(result)
-    else skip
-      fi right != nil
+        if right != nil then
+            call right::getSum(result)
+        else skip
+      	fi right != nil
 
-  method mirror()
-    left <=> right
+    method mirror()
+        left <=> right
 
-    if left = nil then skip
-    else call left::mirror()
-    fi left = nil
+    	if left = nil then skip
+    	else call left::mirror()
+    	fi left = nil
 
-    if right = nil then skip
-    else call right::mirror()
-    fi right = nil
+    	if right = nil then skip
+    	else call right::mirror()
+    	fi right = nil
 
-  method pretty()
-    print("Node (")
-    show(value)
-    print(",")
-    if left = nil then
-      print("nil")
-    else
-      call left::pretty()
-    fi left = nil
-    print(",")
-    if right = nil then
-      print("nil")
-    else
-      call right::pretty()
-    fi right = nil
-    print(")")
+    method pretty()
+        print("Node (")
+        show(value)
+	print(",")
+	if left = nil then
+	    print("nil")
+	else
+	    call left::pretty()
+	fi left = nil
+	print(",")
+	if right = nil then
+	    print("nil")
+	else
+	    call right::pretty()
+	fi right = nil
+	print(")")
 
 class Tree
-  Node root
+    Node root
 
-  method insertNode(Node node, int value)
-    if root = nil & node != nil then
-      root <=> node
-    else skip
-    fi root != nil & node = nil
+    method insertNode(Node node, int value)
+        if root = nil & node != nil then
+      	    root <=> node
+        else skip
+        fi root != nil & node = nil
 
-    if root != nil then
-      call root::insertNode(node, value)
-    else skip
-    fi root != nil
+    	if root != nil then
+      	    call root::insertNode(node, value)
+    	else skip
+        fi root != nil
 
-  method sum(int result)
-    if root != nil then
-      call root::getSum(result)
-    else skip
-    fi root != nil
+    method sum(int result)
+        if root != nil then
+      	    call root::getSum(result)
+    	else skip
+    	fi root != nil
 
-  method mirror()
-    if root != nil then
-      call root::mirror()
-    else skip
-    fi root != nil
+    method mirror()
+        if root != nil then
+      	    call root::mirror()
+        else skip
+    	fi root != nil
 
-  method pretty()
-    print("Tree (")
-    call root::pretty()
-    print(")")
+    method pretty()
+        print("Tree (")
+   	call root::pretty()
+    	print(")")
 
 class Program
-  int sumResult
-  Tree tree
-  int nodeCount
+    int sumResult
+    Tree tree
+    int nodeCount
 
-  method main()
-    new Tree tree
-    nodeCount += 3
+    method main()
+        new Tree tree
+    	nodeCount += 3
 
-    local int x = 0
-    from x = 0 do
-      skip
-    loop
-      local Node node = nil
-      new Node node
-      call node::setValue(x)
-      call tree::insertNode(node, x)
-      delocal Node node = nil
-      x += 1
-    until x = nodeCount
-    delocal int x = nodeCount
+    	local int x = 0
+    	from x = 0 do
+      	    skip
+        loop
+            local Node node = nil
+      	    new Node node
+      	    call node::setValue(x)
+	    call tree::insertNode(node, x)
+	    delocal Node node = nil
+     	    x += 1
+        until x = nodeCount
+        delocal int x = nodeCount
 
-    call tree::sum(sumResult)
-    call tree::mirror()
-
-    call tree::pretty()
-    print("\n")
+    	call tree::sum(sumResult)
+    	call tree::mirror()

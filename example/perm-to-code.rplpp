@@ -1,41 +1,40 @@
+// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language
 // Based on http://topps.diku.dk/pirc/janus-playground/
 // Permutation to code
 // Given an array X that contains a permutation of the integers 0, 1, ...,
 // size(X)-1, it computes the array X' where X'[i] is the number of X[j < i] that
 // are smaller than X[i].
 
-
-
 class Perm
-  method perm_to_code(int[] x, int length)
-    local int k = length
-    from k = length loop
-        k -= 1
-        local int j = 0
-        from j = 0 loop
-            if x[j] > x[k] then
-                x[j] -= 1
-            fi x[j] >= x[k]
-            j += 1
-        until j = k
-        delocal int j = k
-    until k = 0
-    delocal int k = 0
+    method perm_to_code(int[] x, int length)
+        local int k = length
+        from k = length loop
+            k -= 1
+            local int j = 0
+            from j = 0 loop
+                if x[j] > x[k] then
+                    x[j] -= 1
+                fi x[j] >= x[k]
+                j += 1
+            until j = k
+            delocal int j = k
+        until k = 0
+        delocal int k = 0
 
 class Program
-  int[] x
-  method main()
-    new int[6] x
-    local Perm p = nil
-    new Perm p
-    local int length = 6
-    x[0] += 2
-    x[1] += 0
-    x[2] += 3
-    x[3] += 1
-    x[4] += 5
-    x[5] += 4
-    call p::perm_to_code(x, length)
-    delocal int length = 6
-    delete Perm p
-    delocal Perm p = nil
+    int[] x
+    method main()
+        new int[6] x
+        local Perm p = nil
+        new Perm p
+    	local int length = 6
+   	x[0] += 2
+    	x[1] += 0
+    	x[2] += 3
+    	x[3] += 1
+    	x[4] += 5
+    	x[5] += 4
+    	call p::perm_to_code(x, length)
+    	delocal int length = 6
+    	delete Perm p
+    	delocal Perm p = nil
