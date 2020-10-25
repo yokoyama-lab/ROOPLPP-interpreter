@@ -1,4 +1,3 @@
-<h1><button type="button" onclick="history.back()">Back</button></h1>
 <?php
 set_time_limit(10);             // 時間制限の設定
 
@@ -13,12 +12,15 @@ function convertEOL($string, $to = "\n")
 $dir = dirname(__FILE__);
 $cmd = "$dir/../src/./rplpp";
 
+$json_string = file_get_contents("php://input");
+$post = json_decode($json_string, true);
+
 // 引数
-$invert = filter_input(INPUT_POST, "invert", FILTER_VALIDATE_BOOLEAN);
+$invert = $post['invert'];
 if ($invert) { $cmd .= " -inverse"; }
 
 // プログラムを保存
-$prog_text = convertEOL(filter_input(INPUT_POST, "prog", FILTER_UNSAFE_RAW));
+$prog_text = $post['prog'];
 $prog_hash = substr(sha1($prog_text), 0, 8);
 $res = file_put_contents("$dir/programs/$prog_hash.rplpp", $prog_text);
 if ($res === FALSE) {
@@ -50,16 +52,11 @@ if (is_resource($process)) {
     // echo $return_value . "\n";
 
     if ($return_value === 124) {
-      echo "Execution timed out!\n";
+      //echo "Execution timed out!\n";
+      $output = 'Execution timed out!\n';
     }
-?>
-<h3>Result</h3>
-<textarea name="output" rows="30" cols="100">
-<?php
-    echo $output;
-?>
-</textarea>
-<?php
 }
 
-?>
+header('Content-type:application/json; charset=utf8');
+
+echo json_encode(array($output));
