@@ -9,45 +9,47 @@ import "ace-builds/src-noconflict/theme-github";
 interface RooplppWebInterpreterProps {
 }
 interface RooplppWebInterpreterState {
-  program?: string,
-  result?: string,
-  isInvert?: boolean,
+  program?: string
+  result?: string
+  isInvert?: boolean
   onClick?: any
+  onChange?: any
 }
 interface programExample {
-  algorithmName: string,
+  algorithmName: string
   algorithmSrc: string
 }
 
-const HOSTNAME = 'http://localhost:9000/';
+const HOSTNAME = document.URL;
 
 const PROGRAME_EXAMPLE_LIST: programExample[] = [
-  {algorithmName: 'Fibonacci', algorithmSrc: 'fib.rplpp'},
-  {algorithmName: 'Square root', algorithmSrc: 'sqrt.rplpp'},
-  {algorithmName: 'Factorization', algorithmSrc: 'factor.rplpp'},
-  {algorithmName: 'Perm-to-code', algorithmSrc: 'perm-to-code.rplpp'},
-  {algorithmName: 'LinkedList', algorithmSrc: 'LinkedList.rplpp'},
-  {algorithmName: 'DoublyLinkedList', algorithmSrc: 'DoublyLinkedList.rplpp'},
-  {algorithmName: 'BinaryTree', algorithmSrc: 'BinaryTree.rplpp'},
-  {algorithmName: 'BinaryTree_print', algorithmSrc: 'BinaryTree_print.rplpp'},
+  { algorithmName: 'Fibonacci', algorithmSrc: 'fib.rplpp' },
+  { algorithmName: 'Square root', algorithmSrc: 'sqrt.rplpp' },
+  { algorithmName: 'Factorization', algorithmSrc: 'factor.rplpp' },
+  { algorithmName: 'Perm-to-code', algorithmSrc: 'perm-to-code.rplpp' },
+  { algorithmName: 'LinkedList', algorithmSrc: 'LinkedList.rplpp' },
+  { algorithmName: 'DoublyLinkedList', algorithmSrc: 'DoublyLinkedList.rplpp' },
+  { algorithmName: 'BinaryTree', algorithmSrc: 'BinaryTree.rplpp' },
+  { algorithmName: 'BinaryTree_print', algorithmSrc: 'BinaryTree_print.rplpp' },
 ];
 
+// エディター部分
 class Editor extends React.Component<RooplppWebInterpreterState> {
   render() {
     return (
-      <div>
-        <AceEditor
-          //mode="java"
-          theme="github"
-          name="rooplpp_program"
-          value={this.props.program}
-          editorProps={{$blockScrolling: true}}
-        />
-      </div>
+      <AceEditor
+        //mode="java"
+        theme="github"
+        name="rooplpp_program"
+        value={this.props.program}
+        editorProps={{ $blockScrolling: true }}
+        onChange={this.props.onChange}
+      />
     );
   }
 }
 
+// プログラム例の一覧
 class ProgramList extends React.Component<RooplppWebInterpreterState> {
   render() {
     const listItems = PROGRAME_EXAMPLE_LIST.map((programExample) =>
@@ -59,10 +61,11 @@ class ProgramList extends React.Component<RooplppWebInterpreterState> {
   }
 }
 
+// 計算結果表示部分
 class ExecuteResult extends React.Component<RooplppWebInterpreterState> {
   render() {
     return (
-      <div className='result'>{this.props.result}</div>
+      <textarea value={this.props.result} readOnly={true}/>
     );
   }
 }
@@ -90,7 +93,6 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
       }
     }).then(response => {
       console.log(response.status);
-      console.log(response.data[0])
       this.setState({
         result: response.data[0]
       });
@@ -131,20 +133,21 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
     });
   }
 
-  handleOnClick(){
+  editorOnChange(newValue: string) {
     this.setState({
-      program: 'succsess',
+      program: newValue
     });
   }
 
   render() {
     return (
-      <div>
-        <Editor program={this.state.program} />
-        <ProgramList onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)} />
+      <div id='rooplpp_web_interpreter'>
+        <h2 id='header_title'>Roopl++ Online Interpreter</h2>
+        <button id='execute_btn' onClick={this.handleExecuteClick.bind(this)}>Execute</button>
+        <button id='invert_btn' onClick={this.handleInvertClick.bind(this)} className={this.state.isInvert ? 'clicked' : 'not-clicked'}>invert</button>
+        <Editor program={this.state.program} onChange={(newValue: string) => this.editorOnChange(newValue)} />
         <ExecuteResult result={this.state.result} />
-        <button onClick={this.handleExecuteClick.bind(this)}>Execute</button>
-        <button onClick={this.handleInvertClick.bind(this)}>invert</button>
+        <ProgramList onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)} />
       </div>
     );
   }
