@@ -1,5 +1,8 @@
 open Syntax
-   
+
+let rec indent n = if n = 0 then ""
+                   else indent (n - 1) ^ "    "
+                 
 let pretty_dataType = function
   | IntegerType -> "int"
   | ObjectType typeId -> typeId
@@ -56,38 +59,32 @@ let rec pretty_actArgs =
   | [arg] -> pretty_actArg arg
   | hd :: tl -> (pretty_actArg hd) ^ ", " ^ (pretty_actArgs tl)
 
-let rec pretty_stms = function
-  | [] -> "        "
-  | hd :: tl -> "        " ^ (pretty_stm hd) ^ (pretty_stms tl)
+let rec pretty_stms stms n =
+  match stms with
+  | [] -> ""
+  | hd :: tl -> (indent n) ^ (pretty_stm hd n) ^ "\n" ^ (pretty_stms tl n)
   and
-pretty_stm stm =
+pretty_stm stm n =
   let s =
     match stm with
     | Assign(obj, modOp, exp) -> (pretty_obj obj) ^ " " ^ (pretty_modOp modOp) ^ " " ^ (pretty_exp exp)
     | Swap(obj1, obj2) -> (pretty_obj obj1) ^ " <=> " ^ (pretty_obj obj2)
-    | Conditional(exp1, stm1, stm2, exp2) -> "if " ^ (pretty_exp exp1) ^ " then\n" ^ (pretty_stms stm1) ^ "else\n" ^ (pretty_stms stm2) ^ "fi " ^ (pretty_exp exp2)
-    | Loop(exp1, stm1, stm2, exp2) -> "from " ^ (pretty_exp exp1) ^ " do\n" ^ (pretty_stms stm1) ^ "loop\n" ^ (pretty_stms stm2) ^ "until " ^(pretty_exp exp2)
+    | Conditional(exp1, stm1, stm2, exp2) -> "if " ^ (pretty_exp exp1) ^ " then\n" ^ (pretty_stms stm1 (n + 1)) ^ (indent n) ^ "else\n" ^ (pretty_stms stm2 (n + 1)) ^ (indent n) ^ "fi " ^ (pretty_exp exp2)
+    | Loop(exp1, stm1, stm2, exp2) -> "from " ^ (pretty_exp exp1) ^ " do\n" ^ (pretty_stms stm1 (n + 1)) ^ (indent n) ^  "loop\n" ^ (pretty_stms stm2 (n + 1)) ^ (indent n) ^ "until " ^ (pretty_exp exp2)
     (* for追加部分 *)
-    | For(id, myfor, stms) ->
-       let pretty_for = function
-         | Nfor(e1, e2) -> "(" ^ (pretty_exp e1) ^ ".." ^ (pretty_exp e2) ^ ")"
-         | Afor(flag, id) ->
-            let rev = if flag then "(rev) " else "" in
-            rev ^ id
-       in
-       "for " ^ id ^ " in " ^ (pretty_for myfor) ^ " do\n" ^ (pretty_stms stms) ^ "end"
+    | For(id, e1, e2, stms) -> "for " ^ id ^ " in " ^  "(" ^ (pretty_exp e1) ^ ".." ^ (pretty_exp e2) ^ ")" ^ " do\n" ^ (pretty_stms stms (n + 1)) ^ (indent n) ^  "end"
       (* switch追加部分 *)
-    | Switch(obj1, cases, obj2) ->
+    | Switch(obj1, cases, stml, obj2) ->
        let rec pretty_cases =
          let pretty_case = function | Case -> "case" | Fcase -> "fcase" | Ecase -> "ecase" in
          let pretty_break = function | Break -> " break " | NoBreak -> "" in
          function
          | [] -> ""
-         | (c, e1, s, e2, b) :: tl -> (pretty_case c) ^ " " ^ (pretty_exp e1) ^ ": " ^ (pretty_stms s) ^ "esac " ^ (pretty_exp e2) ^ (pretty_break b) ^ ("\n") ^ (pretty_cases tl)
+         | (c, e1, s, e2, b) :: tl -> (pretty_case c) ^ " " ^ (pretty_exp e1) ^ ": " ^ (pretty_stms s (n + 1)) ^ (indent n) ^ "esac " ^ (pretty_exp e2) ^ (pretty_break b) ^ ("\n") ^ (indent n) ^ (pretty_cases tl)
        in
-       "switch " ^ (pretty_obj obj1) ^ "\n" ^ (pretty_cases cases) ^ "hctiws " ^ (pretty_obj obj2)
-    | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ (pretty_stms stm) ^ "\n" ^ "destruct " ^ id
-    | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp1) ^ "\n" ^ (pretty_stms stm)  ^ "delocal " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp2)
+       "switch " ^ (pretty_obj obj1) ^ "\n" ^ (indent n) ^ (pretty_cases cases) ^ "default:" ^ (pretty_stms stml (n + 1)) ^ "break\n" ^ (indent n) ^ "hctiws " ^ (pretty_obj obj2)
+    | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ (pretty_stms stm (n + 1)) ^ "\n" ^ (indent n) ^ "destruct " ^ id
+    | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp1) ^ "\n" ^ (pretty_stms stm n)  ^ (indent n) ^ "delocal " ^ (pretty_dataType dataType) ^ " " ^ id ^ " = " ^ (pretty_exp exp2)
     | LocalCall(methodId, ids) -> "call " ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
     | LocalUncall(methodId, ids) -> "uncall " ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
     | ObjectCall(obj, methodId, ids) -> "call " ^ (pretty_obj obj) ^ "::" ^ methodId ^ "(" ^ (pretty_actArgs ids) ^ ")"
@@ -102,7 +99,7 @@ pretty_stm stm =
     | Show(exp) -> "show" ^ "(" ^ (pretty_exp exp) ^ ")"
     | Print(str) -> "print" ^ "(\"" ^ str ^ "\")"
     in
-    s ^ "\n"
+    s
   
 let pretty_decl (Decl(dataType, id)) = (pretty_dataType dataType) ^ " " ^ id
                                      
@@ -116,7 +113,7 @@ let rec pretty_args = function
   | hd :: tl -> (pretty_decl hd) ^ ", " ^ (pretty_args tl)
               
 let pretty_method (MDecl(id, args, stms)) =
-  "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ (pretty_stms stms)
+  "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ (pretty_stms stms 2)
   
 let rec pretty_methods = function
   | [m] -> (pretty_method m)

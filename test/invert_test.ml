@@ -46,20 +46,20 @@ let tests = "test suite for invert.ml" >::: [
                                          [Assign (VarArray("i", None), ModAdd, Const 1)], Binary (Sub, Const 3, Const 1))] ) );
 
       "call Plus1(result)"  >::
-        (fun _ -> assert_equal [LocalUncall ("Plus1", ["result"])]
-                    (invert [LocalCall ("Plus1", ["result"])] ) );
+        (fun _ -> assert_equal [LocalUncall ("Plus1", [Id "result"])]
+                    (invert [LocalCall ("Plus1", [Id "result"])] ) );
 
       "uncall Plus1(result)"  >::
-        (fun _ -> assert_equal [LocalCall ("Plus1", ["result"])]
-                    (invert [LocalUncall ("Plus1", ["result"])] ) );
+        (fun _ -> assert_equal [LocalCall ("Plus1", [Id "result"])]
+                    (invert [LocalUncall ("Plus1", [Id "result"])] ) );
 
       "call t::Plus1(result)"  >::
-        (fun _ -> assert_equal [ObjectUncall (VarArray("t", None), "Plus1", ["result"])]
-                    (invert [ObjectCall (VarArray("t", None), "Plus1", ["result"])]) );
+        (fun _ -> assert_equal [ObjectUncall (VarArray("t", None), "Plus1", [Id "result"])]
+                    (invert [ObjectCall (VarArray("t", None), "Plus1", [Id "result"])]) );
 
       "uncall t::Plus1(result)"  >::
-        (fun _ -> assert_equal [ObjectCall (VarArray("t", None), "Plus1", ["result"])]
-                    (invert [ObjectUncall (VarArray("t", None), "Plus1", ["result"])]) );
+        (fun _ -> assert_equal [ObjectCall (VarArray("t", None), "Plus1", [Id "result"])]
+                    (invert [ObjectUncall (VarArray("t", None), "Plus1", [Id "result"])]) );
       
       "new Test t"  >::
         (fun _ -> assert_equal [ObjectDestruction ("Test", VarArray("t", None))]
@@ -78,11 +78,11 @@ let tests = "test suite for invert.ml" >::: [
                     (invert [UncopyReference (ObjectType "Test", VarArray("t1", None), VarArray("t2", None))] ) );
 
       "new int[2] xs"  >::
-        (fun _ -> assert_equal [ArrayDestruction (("int", Const 2), "xs")]
-                    (invert [ArrayConstruction (("int", Const 2), "xs")] ) );
+        (fun _ -> assert_equal [ArrayDestruction (("int", Const 2), VarArray ("xs", None))]
+                    (invert [ArrayConstruction (("int", Const 2), VarArray ("xs", None))] ) );
       "delete int[2] xs"  >::
-        (fun _ -> assert_equal [ArrayConstruction (("int", Const 2), "xs")]
-                    (invert [ArrayDestruction (("int", Const 2), "xs")] ) );
+        (fun _ -> assert_equal [ArrayConstruction (("int", Const 2), VarArray ("xs", None))]
+                    (invert [ArrayDestruction (("int", Const 2), VarArray ("xs", None))] ) );
       "x += 1 x += 2 x += 3"  >::
         (fun _ -> assert_equal [Assign (VarArray("x", None), ModSub, Const 3);
                                 Assign (VarArray("x", None), ModSub, Const 2);

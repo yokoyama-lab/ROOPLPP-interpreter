@@ -8,7 +8,7 @@ test_eval: eval_test.byte
 
 eval_test.byte: 		eval_test.ml
 	(cd ../src; make)
-	ocamlfind ocamlc -o $@ -package oUnit -linkpkg -g -I ../src util.cmo invert.cmo print.cmo eval.cmo value.cmo syntax.cmo eval_test.ml
+	ocamlfind ocamlc -o $@ -package oUnit -linkpkg -g -I ../src util.cmo pretty.cmo invert.cmo print.cmo eval.cmo value.cmo syntax.cmo eval_test.ml
 
 test_invert: invert_test.byte
 	./invert_test.byte

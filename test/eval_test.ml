@@ -2,6 +2,7 @@ open OUnit
 open Syntax
 open Value
 open Eval
+open Pretty
    
 let tests = "test suite for eval.ml" >::: [
       "Const 1"  >:: (fun _ -> assert_equal (IntVal 1) (eval_exp (Const 1) [] []) );
@@ -149,29 +150,28 @@ let tests = "test suite for eval.ml" >::: [
 
       "call Plus1(result)"    >:: (fun _ ->
         assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
-          (eval_state [LocalCall("Plus1", ["result"])]
+          (eval_state [LocalCall("Plus1", [Id "result"])]
              [("result", 1); ("this", 2)]
              [("Program",
     ([Decl (IntegerType, "result")],
-     [MDecl ("main", [], [LocalCall ("Plus1", ["result"])]);
+     [MDecl ("main", [], [LocalCall ("Plus1", [Id "result"])]);
       MDecl ("Plus1", [Decl (IntegerType, "n")],
        [Assign (VarArray("n", None), ModAdd, Const 1)])]))]
   [(1, IntVal 0);  (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))] ) );
-
       "uncall Plus1(result)"    >:: (fun _ ->
         assert_equal [(1, IntVal 0);  (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
-          (eval_state [LocalUncall("Plus1", ["result"])]
+          (eval_state [LocalUncall("Plus1", [Id "result"])]
              [("result", 1); ("this", 2)]
              [("Program",
     ([Decl (IntegerType, "result")],
-     [MDecl ("main", [], [LocalCall ("Plus1", ["result"])]);
+     [MDecl ("main", [], [LocalCall ("Plus1", [Id "result"])]);
       MDecl ("Plus1", [Decl (IntegerType, "n")],
        [Assign (VarArray("n", None), ModAdd, Const 1)])]))]
   [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))] ) );
 
       "t::call Plus1(result)"    >:: (fun _ ->
         assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5); (5, ObjVal ("Test", []))]
-          (eval_state [ObjectCall (VarArray("t", None), "Plus1", ["result"])]
+          (eval_state [ObjectCall (VarArray("t", None), "Plus1", [Id "result"])]
              [("t", 4); ("result", 1); ("this", 2)]
           [("Test",
             ([],
@@ -182,7 +182,7 @@ let tests = "test suite for eval.ml" >::: [
              [MDecl ("main", [],
                      [LocalBlock (ObjectType "Test", "t", Nil,
                                   [ObjectConstruction ("Test", VarArray("t", None));
-                                   ObjectCall (VarArray("t", None), "Plus1", ["result"]);
+                                   ObjectCall (VarArray("t", None), "Plus1", [Id "result"]);
                                    ObjectDestruction ("Test", VarArray("t", None))],
                                   Nil)])]))]
           [(1, IntVal 0); (2, LocsVal 3);
@@ -194,7 +194,7 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal [(1, IntVal 0); (2, LocsVal 3);
                       (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
                       (5, ObjVal ("Test", []))]
-          (eval_state [ObjectUncall (VarArray("t", None), "Plus1", ["result"])]
+          (eval_state [ObjectUncall (VarArray("t", None), "Plus1", [Id "result"])]
              [("t", 4); ("result", 1); ("this", 2)]
              [("Test",
                ([],
@@ -205,7 +205,7 @@ let tests = "test suite for eval.ml" >::: [
                 [MDecl ("main", [],
                         [LocalBlock (ObjectType "Test", "t", Nil,
                                      [ObjectConstruction ("Test", VarArray("t", None));
-                                      ObjectCall (VarArray("t", None), "Plus1", ["result"]);
+                                      ObjectCall (VarArray("t", None), "Plus1", [Id "result"]);
                                       ObjectDestruction ("Test", VarArray("t", None))],
                                      Nil)])]))]
              [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5); (5, ObjVal ("Test", []))]
@@ -215,7 +215,7 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal [(1, LocsVec [5; 6]); (2, IntVal 1); (3, LocsVal 4);
                       (4, ObjVal ("Program", [("xs", 1); ("result", 2); ("this", 3)]));
                       (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", []))]
-          (eval_state [ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", ["result"])]
+          (eval_state [ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", [Id "result"])]
              [("xs", 1); ("result", 2); ("this", 3)]
              [("Test",
                ([],
@@ -224,9 +224,9 @@ let tests = "test suite for eval.ml" >::: [
               ("Program",
                ([Decl (ObjectArrayType "Test", "xs"); Decl (IntegerType, "result")],
                 [MDecl ("main", [],
-                        [ArrayConstruction (("Test", Const 2), "xs");
+                        [ArrayConstruction (("Test", Const 2), VarArray ("xs", None));
                          ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)));
-                         ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", ["result"])])]))]
+                         ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", [Id "result"])])]))]
              
              [(1, LocsVec [5; 6]); (2, IntVal 0); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("result", 2); ("this", 3)]));
@@ -237,7 +237,7 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal [(1, LocsVec [5; 6]); (2, IntVal 0); (3, LocsVal 4);
                       (4, ObjVal ("Program", [("xs", 1); ("result", 2); ("this", 3)]));
                       (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", []))]
-          (eval_state [ObjectUncall (VarArray ("xs", Some (Const 0)), "Plus1", ["result"])]
+          (eval_state [ObjectUncall (VarArray ("xs", Some (Const 0)), "Plus1", [Id "result"])]
              
              [("xs", 1); ("result", 2); ("this", 3)]
              [("Test",
@@ -247,10 +247,10 @@ let tests = "test suite for eval.ml" >::: [
               ("Program",
                ([Decl (ObjectArrayType "Test", "xs"); Decl (IntegerType, "result")],
                 [MDecl ("main", [],
-                        [ArrayConstruction (("Test", Const 2), "xs");
+                        [ArrayConstruction (("Test", Const 2), VarArray ("xs", None));
                          ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)));
-                         ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", ["result"]);
-                         ObjectUncall (VarArray ("xs", Some (Const 0)), "Plus1", ["result"])])]))]
+                         ObjectCall (VarArray ("xs", Some (Const 0)), "Plus1", [Id "result"]);
+                         ObjectUncall (VarArray ("xs", Some (Const 0)), "Plus1", [Id "result"])])]))]
              
              [(1, LocsVec [5; 6]); (2, IntVal 1); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("result", 2); ("this", 3)]));
@@ -261,7 +261,7 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal   [(1, IntVal 1); (2, LocsVal 3);
                         (3, ObjVal ("Program", [("result", 1); ("this", 2)])); (4, LocsVal 5);
                         (5, ObjVal ("Test", []))]
-          (eval_state [ObjectBlock ("Test", "t",[ObjectCall (VarArray("t", None), "Plus1", ["result"])])]
+          (eval_state [ObjectBlock ("Test", "t",[ObjectCall (VarArray("t", None), "Plus1", [Id "result"])])]
              [("result", 1); ("this", 2)]
              [("Test",
                ([],
@@ -271,7 +271,7 @@ let tests = "test suite for eval.ml" >::: [
                ([Decl (IntegerType, "result")],
                 [MDecl ("main", [],
                         [ObjectBlock ("Test", "t",
-                                      [ObjectCall (VarArray("t", None), "Plus1", ["result"])])])]))]
+                                      [ObjectCall (VarArray("t", None), "Plus1", [Id "result"])])])]))]
              [(1, IntVal 0); (2, LocsVal 3);
               (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
       ) );
@@ -320,46 +320,30 @@ let tests = "test suite for eval.ml" >::: [
       
       "new int[2] xs"    >:: (fun _ ->
         assert_equal [(1, LocsVec [4; 5]); (2, ObjVal ("Program", [("xs", 1); ("this", 3)])); (3, LocsVal 2); (4, IntVal 0); (5, IntVal 0)]
-          (eval_state [ArrayConstruction (("int", Const 2), "xs")]
+          (eval_state [ArrayConstruction (("int", Const 2), VarArray ("xs", None))]
              [("xs", 1); ("this", 3)]
              [("Program",
                ([Decl (IntegerArrayType, "xs")],
                 [MDecl ("main", [],
-                        [ArrayConstruction (("int", Const 2), "xs");
-                         ArrayDestruction (("int", Const 2), "xs")])]))]             
+                        [ArrayConstruction (("int", Const 2), VarArray ("xs", None));
+                         ArrayDestruction (("int", Const 2), VarArray ("xs", None))])]))]             
              [(1, IntVal 0); (2, ObjVal ("Program", [("xs", 1); ("this", 3)]));(3, LocsVal 2)]
       ) );
 
       "delete int[2] xs"    >:: (fun _ ->
         assert_equal [(1, IntVal 0); (2, ObjVal ("Program", [("xs", 1); ("this", 3)]));(3, LocsVal 2)]
-          (eval_state [ArrayDestruction (("int", Const 2), "xs")]
+          (eval_state [ArrayDestruction (("int", Const 2), VarArray ("xs", None))]
              [("xs", 1); ("this", 3)]
-             [("Program",
-               ([Decl (IntegerArrayType, "xs")],
-                [MDecl ("main", [],
-                        [ArrayConstruction (("int", Const 2), "xs");
-                         ArrayDestruction (("int", Const 2), "xs")])]))]
+             []
              [(1, LocsVec [4; 5]); (2, ObjVal ("Program", [("xs", 1); ("this", 3)])); (3, LocsVal 2); (4, IntVal 0); (5, IntVal 0)]) );
 
-      let map =  [("Test",
-               ([Decl (IntegerType, "a"); Decl (IntegerType, "b")],
-                [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                        [Assign (VarArray ("n", None), ModAdd, Const 1)])]));
-              ("Program",
-               ([Decl (ObjectArrayType "Test", "xs")],
-                [MDecl ("main", [],
-                        [ArrayConstruction (("Test", Const 2), "xs");
-                         ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)));
-                         ObjectDestruction ("Test", VarArray ("xs", Some (Const 0)));
-                         ArrayDestruction (("Test", Const 2), "xs")])]))]
-      in
       "new Test[2] ts"    >:: (fun _ ->
         assert_equal [(1, LocsVec [4; 5]); (2, LocsVal 3);
                       (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, IntVal 0);
                       (5, IntVal 0)]
-          (eval_state [ArrayConstruction (("Test", Const 2), "xs")]
+          (eval_state [ArrayConstruction (("Test", Const 2), VarArray ("xs", None))]
              [("xs", 1); ("this", 2)]
-             map    
+             []    
              [(1, IntVal 0); (2, LocsVal 3);
               (3, ObjVal ("Program", [("xs", 1); ("this", 2)]))]
       ) );
@@ -367,22 +351,33 @@ let tests = "test suite for eval.ml" >::: [
       "delete Test[2] ts"    >:: (fun _ ->
         assert_equal [(1, IntVal 0); (2, LocsVal 3);
                       (3, ObjVal ("Program", [("xs", 1); ("this", 2)]))]          
-          (eval_state [ArrayDestruction (("Test", Const 2), "xs")]
+          (eval_state [ArrayDestruction (("Test", Const 2), VarArray ("xs", None))]
              [("xs", 1); ("this", 2)]
-             map             
+             []             
              [(1, LocsVec [4; 5]); (2, LocsVal 3);
               (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, IntVal 0);
               (5, IntVal 0)]
       ) ); 
 
-      "new Test ts[0]"    >:: (fun _ ->
+(*      "new Test ts[0]"    >:: (fun _ ->
         assert_equal   [(1, LocsVec [4; 5]); (2, LocsVal 3);
                         (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, LocsVal 6);
                         (5, IntVal 0); (6, ObjVal ("Test", [("a", 7); ("b", 8)])); (7, IntVal 0);
                         (8, IntVal 0)]
           (eval_state [ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)))]
              [("xs", 1); ("this", 2)]
-             map
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (VarArray("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (IntegerType, "result")],
+                [MDecl ("main", [],
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", VarArray("t", None));
+                                      ObjectDestruction ("Test", VarArray("t", None))],
+                                     Nil)])]))]             
+             
              [(1, LocsVec [4; 5]); (2, LocsVal 3);
               (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, IntVal 0);
               (5, IntVal 0)]
@@ -394,34 +389,31 @@ let tests = "test suite for eval.ml" >::: [
                       (5, IntVal 0)]
           (eval_state [ObjectDestruction ("Test", VarArray ("xs", Some (Const 0)))]
              [("xs", 1); ("this", 2)]
-             map
+             [("Test",
+               ([],
+                [MDecl ("Plus1", [Decl (IntegerType, "n")],
+                        [Assign (VarArray("n", None), ModAdd, Const 1)])]));
+              ("Program",
+               ([Decl (IntegerType, "result")],
+                [MDecl ("main", [],
+                        [LocalBlock (ObjectType "Test", "t", Nil,
+                                     [ObjectConstruction ("Test", VarArray("t", None));
+                                      ObjectDestruction ("Test", VarArray("t", None))],
+                                     Nil)])]))]                          
              [(1, LocsVec [4; 5]); (2, LocsVal 3);
               (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, LocsVal 6);
               (5, IntVal 0); (6, ObjVal ("Test", [("a", 7); ("b", 8)])); (7, IntVal 0);
               (8, IntVal 0)]             
-      ) );
-
-      let map_copy = [("Test",
-    ([],
-     [MDecl ("Plus1", [Decl (IntegerType, "n")],
-       [Assign (VarArray ("n", None), ModAdd, Const 1)])]));
-   ("Program",
-    ([Decl (ObjectType "Test", "t"); Decl (ObjectType "Test", "tcopy")],
-     [MDecl ("main", [],
-       [ObjectConstruction ("Test", VarArray ("t", None));
-        CopyReference (ObjectType "Test", VarArray ("t", None),
-         VarArray ("tcopy", None));
-        UncopyReference (ObjectType "Test", VarArray ("t", None),
-                         VarArray ("tcopy", None))])]))]
-      in
+      ) );*)
+      
       "copy Test t tcopy"    >:: (fun _ ->
-        assert_equal [(1, LocsVal 5); (2, IntVal 5); (3, LocsVal 4);
+        assert_equal [(1, LocsVal 5); (2, LocsVal 5); (3, LocsVal 4);
                       (4, ObjVal ("Program", [("t", 1); ("tcopy", 2); ("this", 3)]));
                       (5, ObjVal ("Test", []))]
           (eval_state [CopyReference (ObjectType "Test", VarArray ("t", None),
                                       VarArray ("tcopy", None))]
              [("t", 1); ("tcopy", 2); ("this", 3)]
-             map_copy
+             []
              [(1, LocsVal 5); (2, IntVal 0); (3, LocsVal 4);
               (4, ObjVal ("Program", [("t", 1); ("tcopy", 2); ("this", 3)]));
               (5, ObjVal ("Test", []))]
@@ -434,31 +426,13 @@ let tests = "test suite for eval.ml" >::: [
           (eval_state [UncopyReference (ObjectType "Test", VarArray ("t", None),
                                         VarArray ("tcopy", None))]
              [("t", 1); ("tcopy", 2); ("this", 3)]
-             map_copy
-             [(1, LocsVal 5); (2, IntVal 5); (3, LocsVal 4);
+             []
+             [(1, LocsVal 5); (2, LocsVal 5); (3, LocsVal 4);
               (4, ObjVal ("Program", [("t", 1); ("tcopy", 2); ("this", 3)]));
               (5, ObjVal ("Test", []))]
             
       ) );
 
-      let map2 = [("Test",
-               ([Decl (IntegerType, "a"); Decl (IntegerType, "b")],
-                [MDecl ("Plus1", [Decl (IntegerType, "n")],
-                        [Assign (VarArray ("n", None), ModAdd, Const 1)])]));
-              ("Program",
-               ([Decl (ObjectArrayType "Test", "xs"); Decl (ObjectType "Test", "tcopy")],
-                [MDecl ("main", [],
-                        [ArrayConstruction (("Test", Const 2), "xs");
-                         ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)));
-                         CopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
-                                        VarArray ("tcopy", None));
-                         UncopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
-                                          VarArray ("tcopy", None));
-                         CopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
-                                        VarArray ("xs", Some (Const 1)));
-                         UncopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
-                                          VarArray ("xs", Some (Const 1)))])]))]
-      in
       "copy Test xs[0] tcopy"    >:: (fun _ ->
         assert_equal [(1, LocsVec [5; 6]); (2, LocsVal 7); (3, LocsVal 4);
                       (4, ObjVal ("Program", [("xs", 1); ("tcopy", 2); ("this", 3)]));
@@ -466,10 +440,8 @@ let tests = "test suite for eval.ml" >::: [
                       (8, IntVal 0); (9, IntVal 0)]
           (eval_state [CopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
   VarArray ("tcopy", None))]
-             [("xs", 1); ("tcopy", 2); ("this", 3)]
-             
-             map2
-             
+             [("xs", 1); ("tcopy", 2); ("this", 3)]             
+             []             
              [(1, LocsVec [5; 6]); (2, IntVal 0); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("tcopy", 2); ("this", 3)]));
               (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", [("a", 8); ("b", 9)]));
@@ -483,10 +455,8 @@ let tests = "test suite for eval.ml" >::: [
                       (8, IntVal 0); (9, IntVal 0)]          
           (eval_state [UncopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
   VarArray ("tcopy", None))]
-             [("xs", 1); ("tcopy", 2); ("this", 3)]
-             
-             map2
-             
+             [("xs", 1); ("tcopy", 2); ("this", 3)]                          
+             []
              [(1, LocsVec [5; 6]); (2, LocsVal 7); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("tcopy", 2); ("this", 3)]));
               (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", [("a", 8); ("b", 9)]));
@@ -503,7 +473,7 @@ let tests = "test suite for eval.ml" >::: [
           (eval_state [CopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
                                       VarArray ("xs", Some (Const 1)))]
              [("xs", 1); ("tcopy", 2); ("this", 3)]             
-             map2             
+             []             
              [(1, LocsVec [5; 6]); (2, IntVal 0); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("tcopy", 2); ("this", 3)]));
               (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", [("a", 8); ("b", 9)]));
@@ -519,35 +489,21 @@ let tests = "test suite for eval.ml" >::: [
           (eval_state [UncopyReference (ObjectType "Test", VarArray ("xs", Some (Const 0)),
                                       VarArray ("xs", Some (Const 1)))]
              [("xs", 1); ("tcopy", 2); ("this", 3)]
-             map2
+             []
              [(1, LocsVec [5; 6]); (2, IntVal 0); (3, LocsVal 4);
               (4, ObjVal ("Program", [("xs", 1); ("tcopy", 2); ("this", 3)]));
-              (5, LocsVal 7); (6, IntVal 0); (7, ObjVal ("Test", [("a", 8); ("b", 9)]));
+              (5, LocsVal 7); (6, LocsVal 7); (7, ObjVal ("Test", [("a", 8); ("b", 9)]));
               (8, IntVal 0); (9, IntVal 0)]
       ) );
 
-      let map3 = [("Test",
-  ([],
-   [MDecl ("Plus1", [Decl (IntegerType, "n")],
-     [Assign (VarArray ("n", None), ModAdd, Const 1)])]));
- ("Program",
-  ([Decl (ObjectType "Test", "t"); Decl (ObjectArrayType "Test", "ts")],
-   [MDecl ("main", [],
-     [ObjectConstruction ("Test", VarArray ("t", None));
-      ArrayConstruction (("Test", Const 2), "ts");
-      CopyReference (ObjectType "Test", VarArray ("t", None),
-       VarArray ("ts", Some (Const 0)));
-      UncopyReference (ObjectType "Test", VarArray ("t", None),
-       VarArray ("ts", Some (Const 0)))])]))]
-      in      
       "copy Test t ts[0]"    >:: (fun _ ->
         assert_equal [(1, LocsVal 5); (2, LocsVec [6; 7]); (3, LocsVal 4);
                       (4, ObjVal ("Program", [("t", 1); ("ts", 2); ("this", 3)]));
-                      (5, ObjVal ("Test", [])); (6, IntVal 5); (7, IntVal 0)]         
+                      (5, ObjVal ("Test", [])); (6, LocsVal 5); (7, IntVal 0)]         
           (eval_state [CopyReference (ObjectType "Test", VarArray ("t", None),
                                       VarArray ("ts", Some (Const 0)))]
              [("t", 1); ("ts", 2); ("this", 3)]
-             map3
+             []
              [(1, LocsVal 5); (2, LocsVec [6; 7]); (3, LocsVal 4);
               (4, ObjVal ("Program", [("t", 1); ("ts", 2); ("this", 3)]));
               (5, ObjVal ("Test", [])); (6, IntVal 0); (7, IntVal 0)]         
@@ -560,18 +516,18 @@ let tests = "test suite for eval.ml" >::: [
           (eval_state [UncopyReference (ObjectType "Test", VarArray ("t", None),
                                        VarArray ("ts", Some (Const 0)))]
              [("t", 1); ("ts", 2); ("this", 3)]
-             map3
+             []
              [(1, LocsVal 5); (2, LocsVec [6; 7]); (3, LocsVal 4);
               (4, ObjVal ("Program", [("t", 1); ("ts", 2); ("this", 3)]));
-              (5, ObjVal ("Test", [])); (6, IntVal 5); (7, IntVal 0)]
+              (5, ObjVal ("Test", [])); (6, LocsVal 5); (7, IntVal 0)]
       ) );      
       
-      "local int i = 0 call::Plusi(result) delocal int i = 0"    >:: (fun _ ->
+      "local ingt i = 0 call::Plusi(result) delocal int i = 0"    >:: (fun _ ->
         assert_equal [(1, LocsVal 4); (2, LocsVal 3);
                       (3, ObjVal ("Program", [("t", 1); ("this", 2)]));
                       (4, ObjVal ("Test", []))]
           (eval_state [LocalBlock (IntegerType, "i", Const 0,
-                                   [ObjectCall (VarArray ("t", None), "Plus1", ["i"])], Const 1)]
+                                   [ObjectCall (VarArray ("t", None), "Plus1", [Id "i"])], Const 1)]
             [("t", 1); ("this", 2)]
             [("Test",
               ([],
@@ -582,13 +538,13 @@ let tests = "test suite for eval.ml" >::: [
                [MDecl ("main", [],
                        [ObjectConstruction ("Test", VarArray ("t", None));
                         LocalBlock (IntegerType, "i", Const 0,
-                                    [ObjectCall (VarArray ("t", None), "Plus1", ["i"])], Const 1)])]))]            
+                                    [ObjectCall (VarArray ("t", None), "Plus1", [Id "i"])], Const 1)])]))]            
             [(1, LocsVal 4); (2, LocsVal 3);
              (3, ObjVal ("Program", [("t", 1); ("this", 2)]));
              (4, ObjVal ("Test", []))]          
       ) );
 
-      "class Program
+(*      "class Program
        int result
        method main()
        call Plus1(result)
@@ -598,7 +554,7 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal [("result", IntVal 1)]
           (eval_prog  (Prog
                          [CDecl ("Program", None, [Decl (IntegerType, "result")],
-                                 [MDecl ("main", [], [LocalCall ("Plus1", ["result"])]);
+                                 [MDecl ("main", [], [LocalCall ("Plus1", [Id "result"])]);
                                   MDecl ("Plus1", [Decl (IntegerType, "n")],
                                          [Assign (VarArray ("n", None), ModAdd, Const 1)])])]) ) );
       "class Test
@@ -705,7 +661,6 @@ let tests = "test suite for eval.ml" >::: [
         ObjectDestruction ("Sub", VarArray ("ts", Some (Const 0)));
         ArrayDestruction (("Super", Const 2), "ts")])])]
 )
-       ) );
-      
+       ) ); *)
     ]
 let _ = run_test_tt_main tests

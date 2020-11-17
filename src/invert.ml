@@ -14,15 +14,10 @@ let rec invert_stm = function
   | Loop(e1, stml1, stml2, e2) ->
      Loop(e2, invert stml1, invert stml2, e1)
   (*追加部分for*)
-  | For(x, Nfor(n1, n2), stml) ->
-     For(x, Nfor(n2, n1), invert stml)
-  | For(x1, Afor(rev, x2), stml) ->
-     let flag = if rev = true
-                then false
-                else true in
-     For(x1, Afor(flag, x2), stml)
+  | For(x, e1, e2, stml) ->
+     For(x, e2, e1, invert stml)
   (*追加部分switch*)
-  | Switch(obj1, cases, obj2) ->
+  | Switch(obj1, cases, stml, obj2) ->
      let rec invert_cases cases =
        let rec append_k cases =
          match cases with
@@ -63,7 +58,7 @@ let rec invert_stm = function
              | (c, e1, s, e2, b) -> (c, e2, invert s, e1, b)
            end  ) cases
      in
-     Switch(obj2, invert_cases cases2, obj1)
+     Switch(obj2, invert_cases cases2, invert stml, obj1)
   | ObjectBlock(tid, id, stml) ->
      ObjectBlock(tid, id, invert stml)
   | LocalBlock(dt, id, e1, stml, e2) ->

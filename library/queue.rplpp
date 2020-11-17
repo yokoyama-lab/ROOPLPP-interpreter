@@ -1,0 +1,46 @@
+class Queue
+    Object[] queue
+    int tl
+    int hd
+
+    method init(int n)
+        new Object[n] queue
+
+    method isEmpty(int flag)
+        if ptr = 0 then
+	    flag ^= 1
+	else
+	    flag ^= 0
+	fi ptr = 0
+
+    method top(int x)
+        x ^= queue[hd]
+
+    method isEmpty(int flag)
+        if tl = 0 then
+	    flag ^= 1
+	else
+	    flag ^= 0
+	fi tl = 0
+	
+    method enqueue(Object o)
+        queue[tl] ^= o
+	tl += 1
+	
+    method dequeue(Object o)
+        queue[hd] ^= o
+	hd += 1
+
+class Programs
+    method main()
+        local Queue q = nil
+        new Queue q
+	call q::init(5)
+	call q::enqueue(1)
+	call q::enqueue(2)
+	call q::dequeue(2)
+	uncall q::dequeue(1)
+	uncall q::enqueue(1)
+	uncall q::init(5)
+	delete Queue q
+	delocal Queue q = nil

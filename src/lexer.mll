@@ -37,7 +37,7 @@ let u = ['\000'-'\255']           (* universal: any character *)
 
 rule token = parse
   (* 定数 *)
-  | digit+
+  | '-'?digit+
     { let str = Lexing.lexeme lexbuf in
       CONST (int_of_string str) }
   | '\"' ((u # ['\"' '\\' '\n']) | ('\\' ('\"' | '\\' | '\'' | 'n' | 't')))* '\"' {let s = lexeme lexbuf in STRING (unescapeInitTail s)}
@@ -95,7 +95,6 @@ rule token = parse
   (* 追加部分for *)
   | "for"	{ FOR }
   | "in"	{ IN }
-  | "rev"	{ REV }
   | "end"	{ END }
   (* 追加部分switch　*)
   | "switch"	{ SWITCH }
@@ -104,6 +103,7 @@ rule token = parse
   | "fcase"	{ FCASE }
   | "ecase"	{ ECASE }
   | "esac"	{ ESAC }
+  | "default"	{ DEFAULT }
   | "break"	{ BREAK }
 
   | "int"       { INT }

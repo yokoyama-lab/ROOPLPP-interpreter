@@ -1,0 +1,481 @@
+class List
+    Cell head
+    int length
+
+    method insertHead(Cell cell)
+        if head = nil && cell != nil then
+      	    head <=> cell
+        fi head != nil && cell = nil
+
+    method get(int index, int i, Cell cell)      	
+	if index != i && cell = nil then
+	    i += 1
+	    call next::get(index, i, cell)
+	fi index = i && cell != nil
+	
+        if index = i && cell = nil then
+	    copy Cell this cell  
+	fi index = i && cell = this
+
+    method indexOf(Object o, int index)
+        call head::indexOf(o, index)
+
+    method size(int result)
+        result ^= length
+
+    method isEmpty(int flag)
+        if head = nil then
+	    flag ^= 1
+	else
+	    flag ^= 0
+	fi head = nil
+
+// Cell class
+class Cell
+    Cell next
+    Object data
+
+    method add(Cell head, int index, int i, Cell cell)
+	if index - 1 != i && cell != nil then
+	    i += 1
+	    call next::add(head, index, i, cell)
+	fi index - 1 = i && cell = nil
+
+	local Cell tmp = nil
+	local int j = 0
+	call head::get(index - 1, j, tmp)
+	if index - 1 = i && cell != nil then
+	    cell.next <=> next
+	    next <=> cell
+        fi index - 1 = i && cell = nil && tmp.next = next
+	uncall head::get(index - 1, j, tmp)
+	delocal int j = 0
+	delocal Cell tmp = nil
+
+    method addLast(Cell cell)
+	if next = nil && cell != nil then
+	    next <=> cell
+	fi next != nil && cell = nil
+
+        if next != nil then
+	    call next::addLast(cell)
+	fi next != nil
+	
+    method get(int index, int i, Cell cell)      	
+	if index != i && cell = nil then
+	    i += 1
+	    call next::get(index, i, cell)
+	fi index = i && cell != nil
+	
+        if index = i && cell = nil then
+	    copy Cell this cell  
+	fi index = i && cell = this
+
+    method indexOf(Object o, int index)
+        if data != o then
+	    index += 1
+	    call next::indexOf(o, index)
+	fi data != o
+		
+    method pretty()
+        show(data)
+    	if next != nil then
+      	    print(" -> ")
+      	    call next::pretty()
+        fi next != nil
+
+class LinkedList inherits List
+    method add(Object o)
+        call addLast(o)
+	
+    method add(int index, Object o)
+	switch index
+	    case 0:      call addFirst(o) esac 0 break
+	    case length: call addLast(o) esac length - 1 break
+	    default:     local Cell cell = nil
+  	    		 new Cell cell
+      	    		 copy Node o cell.data
+            		 local int i = 0
+      	    		 call head::add(head, index, i, cell)
+      	    		 delocal int i = index - 1
+            		 delocal Cell cell = nil
+	    		 length += 1
+			 break
+	hctiws index
+	
+    method addFirst(Object o)
+        local Cell cell = nil
+	new Cell cell
+	copy Object o cell.data
+	call insertHead(cell)
+	if head != nil && cell != nil then
+            cell.next <=> head
+            head <=> cell
+	fi head != nil && cell = nil && head.next != nil
+	delocal Cell cell = nil
+	length += 1
+	
+    method addLast(Object o)            
+        local Cell cell = nil
+	new Cell cell	
+	copy Object o cell.data
+	call insertHead(cell)
+	if head != nil && cell != nil then
+            call head::addLast(cell)
+	fi head != nil && cell = nil && head.next != nil
+	delocal Cell cell = nil
+        length += 1
+		
+    method remove(int index, Object o)
+        uncall add(index, o)
+
+    method pretty()
+        print("Linked_List[")
+    	call head::pretty()
+    	print("]\n")	
+
+class DoublyCell
+    int data
+    DoublyCell left
+    DoublyCell right
+
+    method add(DoublyCell head, int index, int i, DoublyCell cell)
+	if index != i && cell != nil then
+	    i += 1
+	    call right::add(head, index, i, cell)
+	fi index = i && cell = nil
+
+	local DoublyCell tmp = nil
+	local int j = 0
+	call head::get(index - 1, j, tmp)
+	if index = i && cell != nil then
+	    local Node cellCopy = nil
+	    copy Node cell cellCopy
+	    this.left <=> cell.left
+	    cellCopy <=> this.left
+	    delocal Node cellCopy = nil
+	    cell.right <=> this
+	    this <=> cell
+        fi index = i && cell = nil && tmp.right = this
+	uncall head::get(index - 1, j, tmp)
+	delocal int j = 0
+	delocal DoublyCell tmp = nil
+
+    method addLast(DoublyCell cell)
+        if right = nil && cell != nil then
+            right <=> cell
+
+      	    local DoublyCell selfCopy = nil
+      	    copy DoublyCell this selfCopy
+	    right.left <=> selfCopy
+      	    delocal DoublyCell selfCopy = nil
+        fi right != nil && cell = nil
+
+        if right != nil then
+            call right::addLast(cell)
+        fi right != nil
+        
+    method get(int index, int i, DoublyCell cell )      	
+	if index != i && cell = nil then
+	    i += 1
+	    call right::get(index, i, cell)
+	fi index = i && cell != nil
+	
+        if index = i && cell = nil then
+	    copy DoublyCell this cell
+	fi index = i && cell = this
+
+    method indexOf(Object o, int index)
+        if data != o then
+	    index += 1
+	    call right::indexOf(o, index)
+	fi data != o
+
+    method pretty()
+        show(data)
+        if right != nil then
+            print(" <=> ")
+     	    call right::pretty()
+        fi right != nil
+
+// DoublyLinkedList
+class DoublyLinkedList
+    DoublyCell head
+    int length
+
+    method insertHead(DoublyCell cell)
+        if head = nil && cell != nil then
+      	    head <=> cell
+        fi head != nil && cell = nil
+
+    method add(Object o)
+        call addLast(o)
+
+    method add(int index, Object o)
+	switch index
+	    case 0:      call addFirst(o) esac 0 break
+	    case length: call addLast(o) esac length - 1 break
+	    default:     local DoublyCell cell = nil
+  	    		 new DoublyCell cell
+      	    		 cell.data ^= o
+            		 local int i = 0
+      	    		 call head::add(head, index, i, cell)
+      	    		 delocal int i = index
+            		 delocal DoublyCell cell = nil
+	    		 length += 1
+			 break
+	hctiws index
+        
+    method addFirst(Object o)
+        local DoublyCell cell = nil
+	new DoublyCell cell
+	copy Object o cell.data
+
+	call insertHead(cell)
+        if head != nil && cell != nil then
+	    local Node cellCopy = nil
+	    copy Node cell cellCopy
+	    head.left <=> cellCopy
+	    delocal Node cellCopy = nil	    
+            cell.right <=> head
+	    head <=> cell
+        fi head != nil && cell != nil
+
+        length += 1
+	delocal DoublyCell cell = nil
+
+    method addLast(Object o)
+        local DoublyCell cell = nil
+	new DoublyCell cell
+	copy Object o cell.data
+	
+	call insertHead(cell)
+        if head != nil then
+            call head::addLast(cell)
+        fi head != nil
+	delocal DoublyCell cell = nil
+        length += 1
+
+    method get(int index, Object o)
+        local DoublyCell cell = nil
+        local int i = 0	
+        call head::get(index, i, cell)
+	copy Object cell.data o
+	uncall head::get(index, i, cell)
+        delocal int i = 0
+	delocal DoublyCell cell = nil
+
+    method indexOf(Object o, int index)
+        call head::indexOf(o, index)
+
+    method size(int result)
+        result ^= length
+
+    method pretty()
+        print("[")
+        call head::pretty()
+        print("]\n")
+
+class Stack inherits List
+    method push(Object o)
+        local Cell cell = nil
+	new Cell cell	
+	cell.data <=> o
+
+	call insertHead(cell)
+	if head != nil && cell != nil then
+            call head::addLast(cell)
+	fi head != nil && cell = nil && head.next != nil
+	delocal Cell cell = nil
+        length += 1
+
+    method pop(Object o)
+        uncall push(o)	
+
+    method top(Object o)
+        call get(length - 1, o)
+
+    method isEmpty(int flag)
+        if head = nil then
+	    flag ^= 1
+	else
+	    flag ^= 0
+	fi head = nil
+
+    method pretty()
+        print("Stack[")
+    	call head::pretty()
+    	print("]\n")
+
+// Queue
+class Queue inherits List
+    method addFirst(Object o)
+        local Cell cell = nil
+	new Cell cell
+	cell.data <=> o
+	call insertHead(cell)
+	if head != nil && cell != nil then
+            cell.next <=> head
+            head <=> cell
+	fi head != nil && cell = nil && head.next != nil
+	delocal Cell cell = nil
+	length += 1
+
+    method top(Object o)
+        call get(0, o)
+		
+    method enqueue(Object o)
+        local Cell cell = nil
+	new Cell cell	
+	cell.data <=> o	
+	call insertHead(cell)
+	if head != nil && cell != nil then
+            call head::addLast(cell)
+	fi head != nil && cell = nil && head.next != nil
+	delocal Cell cell = nil
+        length += 1	
+	
+    method dequeue(Object o)
+        uncall addFirst(o)
+
+    method pretty()
+        print("Queue[")
+    	call head::pretty()
+    	print("]\n")
+
+// Node class
+class Node
+    Node left
+    Node right
+    Node parent
+    int value
+
+    method setValue(int newValue)
+        value ^= newValue
+
+    method insertNode(Node node, int nodeValue)
+        if nodeValue < value then
+            if left = nil && node != nil then
+         	copy Cell this node.parent	    
+	        left <=> node
+	    fi left != nil && node = nil
+
+	    if left != nil then
+	        call left::insertNode(node, nodeValue)
+	    fi left != nil
+        else
+            if right = nil && node != nil then
+		copy Cell this node.parent
+	        right <=> node
+	    fi right != nil && node = nil
+
+	    if right != nil then
+	        call right::insertNode(node, nodeValue)
+	    fi right != nil	
+        fi nodeValue < value
+	
+    method getSum(int result)
+        result += value
+
+    	if left != nil then
+      	    call left::getSum(result)
+    	fi left != nil
+
+        if right != nil then
+            call right::getSum(result)
+      	fi right != nil
+
+    method pretty()
+        print("Node (")
+        show(value)
+	print(",")
+	if left = nil then
+	    print("nil")
+	else
+	    call left::pretty()
+	fi left = nil
+	print(",")
+	if right = nil then
+	    print("nil")
+	else
+	    call right::pretty()
+	fi right = nil
+	print(")")
+
+// BinaryTree class
+class Tree
+    Node root
+
+    method add(int value)
+        local Node node = nil
+	new Node node
+      	node.value ^= value
+	call insertNode(node, value)
+	delocal Node node = nil
+    
+    method insertNode(Node node, int value)
+        if root = nil && node != nil then
+      	    root <=> node
+        fi root != nil && node = nil
+
+    	if root != nil then
+      	    call root::insertNode(node, value)
+        fi root != nil
+
+    method sum(int result)
+        if root != nil then
+      	    call root::getSum(result)
+    	fi root != nil
+
+    method insertDummy()
+        local Node node = nil
+	new Node node
+	node.value ^= -1
+	copy Node node root.parent
+	node.left <=> root
+	root <=> node
+	delocal Node node = nil
+
+    method step(Node cur, Node pre, int key)
+        local Node next = nil
+	if cur.parent = pre then
+	    if cur.value > key && cur.left != nil then
+	        copy Node cur.left next
+                uncopy Node cur.parent pre		
+	    else
+	        if cur.value < key && cur.right != nil then		
+	            copy Node cur.right next
+                    uncopy Node cur.parent pre		    
+		else
+		    pre <=> next
+		fi cur.value < key && cur.right != nil
+	    fi cur.value > key && cur.left != nil
+        else
+	    copy Node cur.parent next
+	    if cur.value > key then
+	        uncopy Node cur.left pre
+	    else
+	        uncopy Node cur.right pre
+	    fi cur.value > key
+        fi next.parent=cur || (cur.value < key && cur.right = nil) || (cur.value > key && cur.left = nil)
+        pre <=> cur
+        cur <=> next
+        delocal Node next = nil
+
+    method search(int key, Node result)
+        local Node pre = nil
+        copy Node root pre
+        from pre=root loop
+           call step(result, pre, key)
+        until result=root || result.value=key
+        if result!=root then
+            uncopy Node result.parent pre
+        else
+            uncopy Node root.left pre	    
+        fi result!=root
+        delocal Node pre = nil
+
+    method pretty()
+        print("Tree (")
+   	call root::pretty()
+    	print(")")

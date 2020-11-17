@@ -66,7 +66,6 @@ let rec anyId2obj = function
 // 追加部分for
 %token FOR       // "for"
 %token IN        // "in"
-%token REV       // "rev"
 %token END       // "end"
 // 追加部分switch
 %token SWITCH    // "switch"
@@ -76,6 +75,7 @@ let rec anyId2obj = function
 %token ECASE     // "ecase"
 %token ESAC      // "ESAC"
 %token BREAK     // "break"
+%token DEFAULT   // "default
 
 %token INT       // "int"
 %token NIL       // "nil"
@@ -170,15 +170,6 @@ anyId:
   | ID               { VarArray($1, None) }
   | anyId DOT anyId  { InstVar($1, $3) }
 
-// 追加部分for
-myfor:
-  | LPAREN exp WDOT exp RPAREN
-    { Nfor($2, $4) }
-  | LPAREN REV RPAREN ID
-    { Afor(true, $4) }
-  | ID
-    { Afor(false, $1) }
-
 // 追加部分switch
 case:
   | CASE  { Case  }
@@ -210,11 +201,11 @@ stm:
   | FROM exp do_opt loop_opt UNTIL exp
     { Loop($2, $3, $4, $6) } // from e do s loop s until e or   or  from e do s until e  or  from e loop s until e
   //追加部分for
-  | FOR ID IN myfor DO stms1 END // for x in {(e..e) | (rev)?x } do s end
-    { For($2, $4, $6) }
+  | FOR ID IN LPAREN exp WDOT exp RPAREN DO stms1 END // for x in (e..e) do s end
+    { For($2, $5, $7, $10 ) }
   // 追加部分switch
-  | SWITCH anyId switchs1 HCTIWS anyId
-    { Switch($2,$3,$5) }
+  | SWITCH anyId switchs1 DEFAULT COLON stms1 BREAK HCTIWS anyId
+    { Switch($2,$3,$6,$9) }
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN

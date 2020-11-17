@@ -8,7 +8,7 @@ let parse str =
 
 let pretty prog = pretty_prog prog
   
-let eval prog = print_result(eval_prog prog)
+let eval prog library = print_result(eval_prog prog library)
 
 let () =
   let files = ref [] in
@@ -31,8 +31,11 @@ let () =
      let _ = close_in channel in
      if !inv then pretty_prog(invert_prog prog)
      else
-       try eval prog with
-       Failure e -> print_endline e         
+       let channel2 = open_in "../library/Library.rplpp" in
+       let library = parse channel2 in
+       try eval prog library with
+         Failure e ->  print_newline(); print_endline e
+                      
 (*let () =
   let file_name = Printf.sprintf "%s" (Sys.argv.(1)) in
   let channel = open_in file_name in
@@ -44,9 +47,9 @@ let () =
       start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
       end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol);
     exit 1
-*)
 
-(*open Syntax
+
+open Syntax
 open Print
 open Eval
 
