@@ -35,6 +35,15 @@ opam install extlib ocamlfind
 cd ROOPLPP-interpreter/src
 make
 ```
+## プログラム実行方法
++ ディレクトリsrc内で以下のコマンドを打つことでROOPL++プログラムが書かれたファイルを実行できる．(以下のコマンドでは，example/fib.rplppが実行される)
+```
+./rplpp ../example/fib.rplpp
+```
++ 実行時にオプションで-inverseを指定することで逆プログラムを表示させることができる．(以下のコマンドでは，example/fib.rplppの逆プログラムが表示される)
+```
+./rplpp -inverse ../example/fib.rplpp
+```
 ## オンラインインタープリタ実行方法
 + ディレクトリwebに移動し,ディレクトリprogramsを作成
 
@@ -58,16 +67,6 @@ php -S localhost:9000
 + ブラウザで "http://localhost:9000" を開くと,ROOPL++のオンラインインタープリタが表示される
 
 + ページ下のExecuteを押すとプログラムを実行できる
-
-## プログラム実行方法
-+ ディレクトリsrc内で以下のコマンドを打つことでROOPL++プログラムが書かれたファイルを実行できる．(以下のコマンドでは，example/fib.rplppが実行される)
-```
-./rplpp ../example/fib.rplpp
-```
-+ 実行時にオプションで-inverseを指定することで逆プログラムを表示させることができる．(以下のコマンドでは，example/fib.rplppの逆プログラムが表示される)
-```
-./rplpp -inverse ../example/fib.rplpp
-```
 
 ## テストケース実行方法
 + 単体テストフレームワークのOUnitをインストール
