@@ -1,3 +1,4 @@
+(**評価器：式、文、プログラムを評価する*)
 open Syntax
 open Value
 open Pretty
@@ -5,115 +6,63 @@ open Invert
 
 let myassert (cond, msg) =  assert (if not cond then print_endline msg; cond)
 
-(*環境：変数名とロケーションのリストを拡張する関数(同じ識別子がある場合古いものを削除し、新しいものを追加する*)
+(**環境を拡張する関数(同じ識別子がある場合古いものを削除し、新しいものを追加する)*)
 let ext_envs env x v = (x,v) :: (List.remove_assoc x env)
 
-(*ストア：ロケーションと値のリストを拡張する関数*)
+(**ストアを拡張する関数(古いものを削除、昇順にソートされる)*)
 let ext_st st x v = List.sort (fun x y -> if x < y then -1 else 1) ((x,v) :: (List.remove_assoc x st))
 
-(*環境に指定されたメソッドのフィールドを使われていないロケーションに追加する。eval_stateのOBJBLOKで使用*)
-let rec ext_env_field f n =
-   match f with
-  | [] -> []
-  | Decl(dtype, id) :: tl -> ext_envs (ext_env_field tl (n + 1)) id n
-
-(*eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
+(**eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
 let rec ext_st_zero st locs n =
   if n <> 0 then
     ext_st (ext_st_zero st (locs + 1) (n - 1)) locs (IntVal(0))
   else
     st
   
-(*マップ拡張用 eval_progで使用*)
+(**マップ拡張用：eval_progで使用*)
 let rec ext_map map c fm = (c, fm) :: map
 
-(*第一引数に変数名、第２引数に環境を指定し、環境の中に指定した変数名があれば、
+(**第一引数に変数名、第２引数に環境を指定し、環境の中に指定した変数名があれば、
 その変数のロケーションを返す関数*)
 let lookup_envs x env =
   try snd (List.find (fun (y,_) -> x = y) env)
   with Not_found -> failwith ("ERROR:unbound variable: " ^ x)
 
-(*第一引数にロケーション、第２引数にストアを指定し、ストアの中に指定したロケーションがあれば、
+(**第一引数にロケーション、第２引数にストアを指定し、ストアの中に指定したロケーションがあれば、
 そのロケーションに格納されている値を返す関数*)
 let lookup_st x st =
   try snd (List.find (fun (y,_) -> x = y) st)
   with Not_found -> failwith ("ERROR:unbound locations: " ^ (string_of_int x))
-
+                  
+(**変数、環境、ストアを受け取り、その変数の値を返す*)
 let lookup_val x env st = lookup_st (lookup_envs x env) st
 
-(*eval_stateで使用：オブジェクトフィールドの値がすべてゼロクリアされているか確認する関数*)
-let rec is_field_zero st locs n =
-  if n <> 0 then
-  let flag = if lookup_st locs st = IntVal(0) then true
-             else false in
-  flag && (is_field_zero st (locs + 1) (n - 1))
-  else true
-          
-(*メソッドのリストから指定したメソッド名のメソッドを返す関数*)
-let rec lookup_meth x vl meth =
-  try List.find (fun (MDecl(id, para, _)) ->
-          x = id && List.length vl = List.length para) meth
-  with Not_found -> failwith ("ERROR:Method " ^ x ^ " is not exist or Wrong number of arguments for the function")
-                  
-(*マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
-let rec lookup_map id map =
-  try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith ("ERROR:class " ^ id ^ "is not valid")
-
-(*ロケーションのベクトルから指定されたインデックスのロケーションを返す（添字は0から）*)
+(**ロケーションのベクトルから指定されたインデックスのロケーションを返す（添字は0から）*)
 let rec lookup_vec index vec =
   match vec with
   | [] -> failwith "ERROR in lookup_vec"
   | l :: tl -> if index <> 0 then lookup_vec (index - 1) tl
                else l
 
-(*OBJDElETEのための関数*)
-let rec delete_st st locs n =
-  if n <> 0 then delete_st (List.remove_assoc locs st) (locs + 1) (n - 1)
-  else st
-
-(*ARRDELETEのための関数*)
-let rec delete_arr st vec =
-  match vec with
-  | [] -> st
-  | l :: tl -> delete_arr (List.remove_assoc l st) tl
-                
-(*ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る。*)
-let rec gen_locsvec n locs =
-  if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
-  else []
-
-(*クラスからidを取り出す関数 gen_mapで使用*)
-let lookup_cid (CDecl(id, _, _, _)) = id
-
-(*指定したクラスidのクラスを返す関数　α^-1に相当 map_fieldとmap_methodで使用*)
-let rec lookup_class_map clist cid =
-  match clist with
-  | [] -> failwith ("ERROR:class "^ cid ^ " is not exist")
-  | CDecl(id, tid, fl, m) :: tl ->
-     if cid = id then CDecl(id, tid, fl, m)
-     else lookup_class_map tl cid
-
-(*eval_expを簡潔にするための関数
-第一引数に演算子、第２第３引数にvalue型を受け取りIntValを返す。　*)
+(**演算子、式を受け取り、演算をする関数*)
 let bin_op f v1 v2 =
   match v1, v2 with
     | IntVal(n1), IntVal(n2) -> IntVal(f n1 n2)
     | _ -> failwith "ERROR:integer values expected"
 
-(*bin_op同様。関係演算子専用。*)
+(**bin_op同様．関係演算子専用*)
 let rel_op f v1 v2 =
   match v1, v2 with
   | IntVal(n1), IntVal(n2) ->
      if f (n1 = 1) (n2 = 1) then IntVal(1) else IntVal(0)
   | _ -> failwith "ERROR:integer values expected"
 
-(*bin_op同様。比較算子専用。*)
+(**bin_op同様．比較算子専用*)
 let comp_op f v1 v2 =
   if f v1 v2 = true then IntVal(1)
   else IntVal(0)
 
-(*式expressionを評価するための関数。envは環境、stはストア。value型を返す。*)
+(**式expressionを評価するための関数：環境、ストアを受け取り、値を返す．*)
 let rec eval_exp exp env st =
   let rec lval_val y env =
     match y with
@@ -178,8 +127,13 @@ let rec eval_exp exp env st =
      in
      try (f b (eval_exp e1 env st) (eval_exp e2 env st)) with
      | Failure e -> failwith ((pretty_exp exp) ^ "\n" ^ (e ^ " in this expression"))
-          
-(* callの意味論の関数search_aに相当 *)
+                
+(**ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る*)
+let rec gen_locsvec n locs =
+  if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
+  else []
+                  
+(** callの意味論の関数search_aに相当 *)
 let rec search_a args env st locs =
   let search_a1 arg env st locs =
     match arg with
@@ -190,13 +144,13 @@ let rec search_a args env st locs =
   | [] -> []
   | hd :: tl -> [(search_a1 hd env st locs)] @ (search_a tl env st (locs + 1) )
               
-(* callの意味論の関数argに相当 *)
+(** callの意味論の関数argに相当 *)
 let argv arg env st =
   match arg with
   | Id(id) -> lookup_val id env st
   | Exp(e) -> eval_exp e env st
 
-(* callの意味論の関数remove_aに相当 *)            
+(** callの意味論の関数remove_aに相当 *)            
 let rec remove_a argl locsl vl st =
   let remove_a1 arg locs v st =
     match arg with
@@ -210,19 +164,35 @@ let rec remove_a argl locsl vl st =
   | (arg :: arg_tl), (locs :: locs_tl), (v :: v_tl) ->
      remove_a arg_tl locs_tl v_tl (remove_a1 arg locs v st)
     
-(*環境を拡張する関数 CALL,CALLOBJでのみ使用*)
-let rec ext_env_meth envf pidl locsl =
-  match pidl, locsl with
-  | [], [] -> envf
-  | pid :: p_tl, locs :: locs_tl ->
-     ext_envs (ext_env_meth envf p_tl locs_tl) pid locs
-  | _, _ -> failwith "ERROR"
+(**オブジェクトフィールドの値がすべてゼロクリアされているか確認する関数*)
+let rec is_field_zero st locs n =
+  if n <> 0 then
+  let flag = if lookup_st locs st = IntVal(0) then true
+             else false in
+  flag && (is_field_zero st (locs + 1) (n - 1))
+  else true
           
-(*文statementを評価する関数。
-第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
-第三引数にマップ、第四引数にストアを受け取る。この関数はストアを返す。*)
+(**メソッドのリストから指定したメソッド名のメソッドを返す関数*)
+let rec lookup_meth x vl meth =
+  try List.find (fun (MDecl(id, para, _)) ->
+          x = id && List.length vl = List.length para) meth
+  with Not_found -> failwith ("ERROR:Method " ^ x ^ " is not exist or Wrong number of arguments for the function")
+                  
+(**マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
+let rec lookup_map id map =
+  try snd (List.find (fun (x , _) -> x = id) map)
+  with Not_found -> failwith ("ERROR:class " ^ id ^ "is not valid")
+    
+(**環境に指定されたメソッドのフィールドを使われていないロケーションに追加する．eval_stateのOBJBLOKで使用*)
+let rec ext_env_field f n =
+   match f with
+  | [] -> []
+  | Decl(dtype, id) :: tl -> ext_envs (ext_env_field tl (n + 1)) id n
+    
+(**文statementを実行する関数：第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
+第三引数にマップ、第四引数にストアを受け取り、更新されたストアを返す．*)
 let rec eval_state stml env map st0 =
-  (* ストアのロケーションの最大値を求める *)
+  (** ストアのロケーションの最大値を求める *)
   let max_locs st = List.fold_left (fun x y -> if x < y then y else x) 0 (List.map fst st) in
   let isTrue = function
     | IntVal(0) -> false
@@ -233,7 +203,7 @@ let rec eval_state stml env map st0 =
     | ModSub -> (-)
     | ModXor -> (lxor) in
   let update st stm =
-    (* y (= x or x[n]) を受けとり左辺値と値を返す *)
+    (** y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す *)
     let rec lval_val y env =
     match y with
     | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
@@ -245,7 +215,7 @@ let rec eval_state stml env map st0 =
          else failwith ((pretty_stms [stm] 0) ^ "\nERROR:Array index " ^ x ^ "[" ^
                           (string_of_int x_index) ^ "] is out of bounds in this stament")                
        in
-       let v = lookup_st locsx' st in (*the value of x[e1]*)
+       let v = lookup_st locsx' st in (**the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->         
        let _, locs = lval_val x env in
@@ -259,8 +229,15 @@ let rec eval_state stml env map st0 =
           end
        | _ -> - 1, IntVal 0
     in
-    (* call処理の共通部分を実行する関数．invertFlagが1なら逆実行 *)    
-    let mycall locs locs2 invertFlag =
+    (** call処理の共通部分を実行する関数．invertFlagが1なら逆実行 *)    
+    let mycall locs locs2 invertFlag =     
+      let rec ext_env_meth envf pidl locsl =
+        match pidl, locsl with
+        | [], [] -> envf
+        | pid :: p_tl, locs :: locs_tl ->
+           ext_envs (ext_env_meth envf p_tl locs_tl) pid locs
+        | _, _ -> failwith "ERROR"
+      in
       match stm with
       | LocalCall (mid0, args) | LocalUncall(mid0, args) | ObjectCall(_, mid0, args) | ObjectUncall(_, mid0, args) ->
          let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)         
@@ -274,7 +251,7 @@ let rec eval_state stml env map st0 =
          let st2 = List.fold_left2 ext_st st arg_locsl vl in    (* ストア拡張 μ'=μ[l'_1 -> v_1,...,l'_n -> v_n] *)
          let mstml2 = if invertFlag = 1 then invert mstml else mstml in
          let st3 = eval_state mstml2 env3 map st2 in             (* メソッドの本体を実行 *)
-         (* 実引数が式の場合、メソッド実行後の仮引数の値と実引数の値が等しいか確認し、等しければストアから取り除く。等しくなければ、エラー表示。実引数が変数の場合、そのまま。 *)
+         (* 実引数が式の場合、メソッド実行後の仮引数の値と実引数の値が等しいか確認し、等しければストアから取り除く．等しくなければ、エラー表示．実引数が変数の場合、そのまま． *)
          try (remove_a args arg_locsl vl st3) with
          | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str)      
     in
@@ -412,91 +389,24 @@ let rec eval_state stml env map st0 =
            failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be false in this statement")
        else         
          failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be false in this statement")
-    (*LocalCALL*)(*まとめる予定ここから*)
+    (*LocalCALL*)
     | LocalCall(mid, args) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
        let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
        mycall locs locs2 0
-(*       let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)       
-       let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
-       let ObjVal(id, envf)  = lookup_st locs2 st in          (* μ(l') = (c, γ') *)
-       let (f, meth) = lookup_map id map in                   (* Γ(c) = (field, method) *)
-       let MDecl(mid, para, mstml) = lookup_meth mid vl meth in  (* メソッド名がmidのメソッドを求める(q) *)
-       let pidl = List.map (fun (Decl(_, id)) -> id) para in  (* pidl=仮引数のidのみのリスト(z1,...,zk) *)
-       let arg_locsl = search_a args env st (max_locs st) in  (* [l'_1...l'n] = search_a(a_i, γ, μ) (実引数のロケーションを求める) *)
-       let env2 = List.fold_left2 ext_envs envf pidl arg_locsl in  (* 環境拡張 γ''=γ'[z1->l'1,...,zk->l'n] *)
-       let env3 = ext_envs env2 "this" locs in                (* 環境拡張 γ'''=γ''[this->l]*)      
-       let st2 = List.fold_left2 ext_st st arg_locsl vl in    (* ストア拡張 μ'=μ[l'_1 -> v_1,...,l'_n -> v_n] *)
-       let st3 = eval_state mstml env3 map st2 in             (* メソッドの本体を実行 *)
-       let st4 =  (* 実引数が式の場合、メソッド実行後の仮引数の値と実引数の値が等しいか確認し、等しければストアから取り除く。等しくなければ、エラー表示。実引数が変数の場合、そのまま。 *)
-         try (remove_a args arg_locsl vl st3) with
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str)
-       in
-       st4*)
     (*LocalUNCALL*)
     | LocalUncall(mid, args) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
        let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
        mycall locs locs2 1       
-(*       let vl = List.map (fun x -> argv x env st) args in       
-       let locs = lookup_envs "this" env in                   (* 最後の部分以外LocalCallと同様 *)
-       let LocsVal(locs2) = lookup_st locs st in              
-       let ObjVal(id, envf)  = lookup_st locs2 st in          
-       let (f, meth) = lookup_map id map in                   
-       let MDecl(mid, para, mstml) = lookup_meth mid vl meth in
-       let pidl = List.map (fun (Decl(_, id)) -> id) para in                             
-       let arg_locsl = search_a args env st (max_locs st) in
-       let env2 = ext_env_meth envf pidl arg_locsl in         
-       let env3 = ext_envs env2 "this" locs in                
-       let st2 = List.fold_left2 ext_st st arg_locsl vl in
-       let st3 = eval_state (invert mstml) env3 map st2 in    (* メソッドの本体を逆実行 *)
-       let st4 =
-         try (remove_a args arg_locsl vl st3) with
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str)
-       in
-       st4*)
     (*CALLOBJ*)
     | ObjectCall(obj, mid, args) (* call x0::q(a1,...,an) *)->
        let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *)
        mycall locs locs2 0
-(*       let vl = List.map (fun x -> argv x env st) args in       
-       let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *) 
-       let ObjVal(id, envf)  = lookup_st locs2 st in          (* 以下からLocalCallと同様 *)
-       let (f, meth) = lookup_map id map in                   
-       let MDecl(mid, para, mstml) = lookup_meth mid vl meth in  
-       let pidl = List.map (fun (Decl(_, id)) -> id) para in                             
-       let arg_locsl = search_a args env st (max_locs st) in
-       let env2 = ext_env_meth envf pidl arg_locsl in         
-       let env3 = ext_envs env2 "this" locs in                
-       let st2 = List.fold_left2 ext_st st arg_locsl vl in
-       let st3 = eval_state mstml env3 map st2 in 
-       let st4 =
-         try (remove_a args arg_locsl vl st3) with
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str)
-       in
-       st4*)
     (*UNCALLOBJ*)
     | ObjectUncall(obj, mid, args) (* uncall x0::q(a1,...,an) *)->
        let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *)
-       mycall locs locs2 1
-(*       let vl = List.map (fun x -> argv x env st) args in       
-       let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *) 
-       let ObjVal(id, envf)  = lookup_st locs2 st in          (* 以下からLocalUncallと同様 *)
-       let (f, meth) = lookup_map id map in         
-       let MDecl(mid, para, mstml) = lookup_meth mid vl meth in
-       let pidl = List.map (fun (Decl(_, id)) -> id) para in                           
-       let arg_locsl = search_a args env st (max_locs st) in
-       let env2 = ext_env_meth envf pidl arg_locsl in       
-       let env3 = ext_envs env2 "this" locs in              
-       let st2 = List.fold_left2 ext_st st arg_locsl vl in
-       let st3 = eval_state (invert mstml) env3 map st2 in  
-       let st4 =
-         try (remove_a args arg_locsl vl st3) with
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str)
-       in
-       st4*)
-       
+       mycall locs locs2 1       
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
        let (fl, ml) = lookup_map tid map in                 (* Γ(c)=(f1,...,fn, medhods) *)
@@ -529,6 +439,10 @@ let rec eval_state stml env map st0 =
        ext_st st3 locs (LocsVal locs0)                     (* ストア拡張 μ'''=μ''[l->l0] *)
     (*OBJDELETE*)
     | ObjectDestruction(tid, obj) (* delete c y *)->
+       (**ベクトルの要素を削除するための関数：locsからnまでのロケーションを削除*)
+       let rec delete_st st locs n =
+         if n <> 0 then delete_st (List.remove_assoc locs st) (locs + 1) (n - 1)
+         else st in     
        let (fl, _) = lookup_map tid map in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
@@ -594,7 +508,7 @@ let rec eval_state stml env map st0 =
   in List.fold_left update st0 stml
 
    
-(*mainメソッドがあるクラスのフィールドから環境を生成する関数　eval_progでのみ使用*)
+(**mainメソッドがあるクラスのフィールドから環境を生成する関数　eval_progでのみ使用*)
 let gen_env fid1 : env =
   let rec gen_env_2 fid2 n =
     match fid2 with
@@ -603,7 +517,7 @@ let gen_env fid1 : env =
   in
   gen_env_2 fid1 1
 
-(*ストアを生成する関数：eval_progでのみ使用*)
+(**ストアを生成する関数：eval_progでのみ使用*)
 let gen_st env1 objval =
   let rec gen_st2 env2 objval n =
     match env2 with
@@ -613,7 +527,7 @@ let gen_st env1 objval =
   in
   gen_st2 env1 objval 1
 
-(*結果を生成する関数：eval_progでのみ使用*)
+(**結果を生成する関数：eval_progでのみ使用*)
 let rec gen_result env st =
   let rec gen_result_vec vec st f n =
     match vec with
@@ -628,7 +542,15 @@ let rec gen_result env st =
      | LocsVec(vec) -> (gen_result_vec vec st f 0) @ (gen_result tl st)
      | _ -> (f, v) :: (gen_result tl st)
 
-(*gen_mapで使用する関数 ROOPL++26ページの関数fieldに相当*)
+(**指定したクラスidのクラスを返す関数　α^-1に相当 map_fieldとmap_methodで使用*)
+let rec lookup_class_map clist cid =
+  match clist with
+  | [] -> failwith ("ERROR:class "^ cid ^ " is not exist")
+  | CDecl(id, tid, fl, m) :: tl ->
+     if cid = id then CDecl(id, tid, fl, m)
+     else lookup_class_map tl cid
+          
+(**gen_mapで使用する関数 ROOPL++26ページの関数fieldに相当*)
 let rec map_field clist1 cl =
   match cl with
   | CDecl(id, None, fl, m) -> fl
@@ -637,19 +559,16 @@ let rec map_field clist1 cl =
      let parent_method = map_field clist1 parent_class in
      parent_method @ fl
           
-(*下にある関数の説明
-map_method: gen_mapで使用する関数 ROOPL++26ページの関数methodに相当
-lookup_methid: メソッドのリストに指定した名前のメソッド名があるか調べる関数
-method_union: サブクラスに親クラスと同じ名前のメソッドがある場合
-親クラスからそのメソッドを削除し、サブクラスの同じ名前のメソッドを追加する関数(オーバーライド)
-remove__method: 親クラスがサブクラスと同じ名前のメソッドをもつ場合そのメソッドを削除する関数
-*)
+(**gen_mapで使用する関数 ROOPL++26ページの関数methodに相当*)
 let rec map_method clist1 cl =
+  (**メソッドのリストに指定した名前のメソッド名があるか調べる関数*)
   let rec lookup_methid id = function
     | [] -> false
     | MDecl(mid, _, _) :: tl -> id = mid || lookup_methid id tl                              
   in
+  (**サブクラスに親クラスと同じ名前のメソッドがある場合親クラスからそのメソッドを削除し、サブクラスの同じ名前のメソッドを追加する関数(オーバーライド)*)
   let method_union subm parem =
+    (**親クラスがサブクラスと同じ名前のメソッドをもつ場合そのメソッドを削除する関数*)
     let rec remove_method subm parem =
       match parem with
       | [] -> []
@@ -667,9 +586,11 @@ let rec map_method clist1 cl =
      let parent_method = map_method clist1 parent_class in
      method_union m parent_method
           
-(*マップを生成する関数*)
+(**マップを生成する関数*)
 let gen_map clist =
   let rec gen_map2 clist1 clist2 =
+    (**クラスからidを取り出す関数 gen_mapで使用*)
+    let lookup_cid (CDecl(id, _, _, _)) = id in    
     match clist2 with
     | [] -> []
     | cl :: tl ->
@@ -677,7 +598,7 @@ let gen_map clist =
   in
   gen_map2 clist clist
 
-  (*マップのリストから指定されたメソッド名を含んでいるクラス名とそのメソッドのstatementのタプルを返す*)
+  (**マップのリストから指定されたメソッド名を含んでいるクラス名とそのメソッドの文のタプルを返す*)
 let rec lookup_class id1 map =
   let rec lookup_class_2 id2 ml =
     match ml with
@@ -699,6 +620,7 @@ let rec lookup_class id1 map =
        end
   | [] -> failwith ("ERROR, not found")
         
+(**プログラムを実行する関数（クラスリストを受け取り、環境とストアの組を返す）*)        
 let eval_prog (Prog(cl)) (Prog(library)) =
   (*マップ生成*)
   let map0 = gen_map library in

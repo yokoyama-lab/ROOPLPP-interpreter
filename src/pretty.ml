@@ -1,8 +1,11 @@
+(**プリティプリンタ：構文木を文字列に変換する*)
 open Syntax
 
+(**n回分半角4文字字下げする関数*)
 let rec indent n = if n = 0 then ""
                    else indent (n - 1) ^ "    "
                  
+(**型をプリントする関数*)
 let pretty_dataType = function
   | IntegerType -> "int"
   | ObjectType typeId -> typeId
@@ -13,6 +16,7 @@ let pretty_dataType = function
   | ArrayElementType -> ""
   | NilType -> ""
 
+(**演算子をプリントする関数*)
 let pretty_binOp = function
   | Add -> "+"
   | Sub -> "-"
@@ -31,11 +35,13 @@ let pretty_binOp = function
   | Le -> "<="
   | Ge -> ">="
 
+(**代入演算子をプリントする関数*)
 let pretty_modOp = function
   | ModAdd -> "+="
   | ModSub -> "-="
   | ModXor -> "^="
             
+(**式をプリントする関数*)
 let rec pretty_exp = function
   | Const n -> string_of_int n
   | Var id -> id
@@ -44,11 +50,13 @@ let rec pretty_exp = function
   | Binary(binOp, exp1, exp2) -> (pretty_exp exp1) ^ " " ^ (pretty_binOp binOp) ^ " " ^ (pretty_exp exp2)
   | Dot(exp1, exp2) -> (pretty_exp exp1) ^ "." ^ (pretty_exp exp2)
                      
+(**変数、配列、ドット演算子をプリントする関数*)
 let rec pretty_obj = function
   | VarArray(id, None) -> id
   | VarArray(id, Some exp) -> id ^ "[" ^ (pretty_exp exp) ^ "]"
   | InstVar(obj1, obj2) -> (pretty_obj obj1) ^ "." ^ (pretty_obj obj2)
                          
+(**メソッド呼び出しの引数をプリントする関数*)
 let rec pretty_actArgs =
   let pretty_actArg = function
     | Id(id) -> id
@@ -59,6 +67,7 @@ let rec pretty_actArgs =
   | [arg] -> pretty_actArg arg
   | hd :: tl -> (pretty_actArg hd) ^ ", " ^ (pretty_actArgs tl)
 
+(**文をプリントする関数：nを受け取り、n回分字下げする*)
 let rec pretty_stms stms n =
   match stms with
   | [] -> ""
@@ -101,24 +110,29 @@ pretty_stm stm n =
     in
     s
   
+(**フィールドまたは引数をプリントする関数*)
 let pretty_decl (Decl(dataType, id)) = (pretty_dataType dataType) ^ " " ^ id
-                                     
+                                
+(**フィールドをプリントする関数(リストを受け取る)*)
 let rec pretty_fields = function
   | [] -> ""
   | hd :: tl -> (pretty_decl hd) ^ "\n    " ^ (pretty_fields tl)
-              
+
+(**引数をプリントする関数*)              
 let rec pretty_args = function
   | [] -> ""
   | [arg] -> pretty_decl arg
   | hd :: tl -> (pretty_decl hd) ^ ", " ^ (pretty_args tl)
               
+(**メソッドをプリントする関数*)
 let pretty_method (MDecl(id, args, stms)) =
   "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ (pretty_stms stms 2)
-  
+(**メソッドをプリントする関数(リストを受け取る)*)  
 let rec pretty_methods = function
   | [m] -> (pretty_method m)
   | hd :: tl -> (pretty_method hd) ^ "\n    " ^ (pretty_methods tl)
-              
+
+(**クラスをプリントする関数*)
 let pretty_c (CDecl(c, inherits, fields, methods)) =
   let inher = 
   match inherits with
@@ -126,9 +140,11 @@ let pretty_c (CDecl(c, inherits, fields, methods)) =
   | Some(id) -> " inherits " ^ id
   in
   "class " ^ c ^ inher  ^ "\n    " ^ (pretty_fields fields) ^ "\n    " ^ (pretty_methods methods)
-  
+
+(**クラスをプリントする関数(リストを受け取る)*)
 let rec pretty_cl = function
   | [cl] -> pretty_c cl
   | hd :: tl ->(pretty_c hd) ^ "\n" ^ (pretty_cl tl)
              
+(**プログラムをプリントする関数*)
 let pretty_prog (Prog(cl)) = print_string((pretty_cl cl) ^ "\n")

@@ -21,6 +21,17 @@ let tests = "test suite for eval.ml" >::: [
                                    [(1, LocsVec [2; 3; 4]); (2, IntVal 3); (3, IntVal 1); (4, IntVal 0)]) );
       "Nil"      >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp Nil [] []) );
+      "t.a"      >:: (fun _ ->
+        assert_equal (IntVal 10) (eval_exp (Dot (Var "t", Var "a")) 
+          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3);
+          (3, ObjVal ("Programs", [("t", 1); ("this", 2)])); (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, IntVal 0);
+          (6, IntVal 10); (7, IntVal 0)]) );
+      "t.t2.a"      >:: (fun _ ->
+        assert_equal (IntVal 100) (eval_exp (Dot (Dot (Var "t", Var "t2"), Var "a")) 
+          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
+          (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, LocsVal 8);
+          (6, IntVal 0); (7, IntVal 0); (8, ObjVal ("Test", [("t2", 9); ("a", 10); ("b", 11)])); (9, IntVal 0);
+          (10, IntVal 100); (11, IntVal 0)]) );
       "1 + 1"    >:: (fun _ ->
         assert_equal (IntVal 2) (eval_exp (Binary(Add, Const 1, Const 1)) [] []) );
       "x + x"    >:: (fun _ ->
@@ -126,12 +137,31 @@ let tests = "test suite for eval.ml" >::: [
       "x[0] ^= 1"    >:: (fun _ ->
         assert_equal [(1, LocsVec[2; 3]); (2, IntVal 1); (3, IntVal 0)]
           (eval_state [Assign(VarArray("x", Some(Const 0)), ModXor, Const 1)] [("x", 1)] [] [(1, LocsVec[2; 3]); (2, IntVal 0); (3, IntVal 0)]) );
+      "t.a ^= 10"    >:: (fun _ ->
+        assert_equal [(1, LocsVal 4); (2, LocsVal 3);
+        (3, ObjVal ("Programs", [("t", 1); ("this", 2)])); (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, IntVal 0);
+        (6, IntVal 10); (7, IntVal 0)]
+          (eval_state [Assign (InstVar (VarArray ("t", None), VarArray ("a", None)), ModXor,
+                               Const 10)  ] [("t", 1); ("this", 2)] [] 
+                               [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
+                               (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, IntVal 0); (6, IntVal 0); (7, IntVal 0)]) );
+      "t.a.a ^= 100"    >:: (fun _ ->
+          assert_equal [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
+          (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, LocsVal 8);
+          (6, IntVal 0); (7, IntVal 0); (8, ObjVal ("Test", [("t2", 9); ("a", 10); ("b", 11)])); (9, IntVal 0);
+          (10, IntVal 100); (11, IntVal 0)]
+          (eval_state [Assign (InstVar (InstVar (VarArray ("t", None), VarArray ("t2", None)), VarArray ("a", None)), ModXor, Const 100)] 
+           [("t", 1); ("this", 2)] [] 
+           [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
+           (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, LocsVal 8); (6, IntVal 0); (7, IntVal 0);
+           (8, ObjVal ("Test", [("t2", 9); ("a", 10); ("b", 11)])); (9, IntVal 0); (10, IntVal 0); (11, IntVal 0)]) );
       "x <=> y"    >:: (fun _ ->
         assert_equal [(1, IntVal 5); (2, IntVal 10)]
           (eval_state [Swap(VarArray("x", None), VarArray("y", None))] [("x", 1); ("y", 2)] [] [(1, IntVal 10); (2, IntVal 5)]) );
       "x[0] <=> x[1]"    >:: (fun _ ->
         assert_equal [(1, LocsVec[2; 3]); (2, IntVal 100); (3, IntVal 10)]
-          (eval_state [Swap(VarArray("x", Some(Const 0)), VarArray("x", Some(Const 1)))] [("x", 1)] [] [(1, LocsVec[2; 3]); (2, IntVal 10); (3, IntVal 100)]) );
+          (eval_state [Swap(VarArray("x", Some(Const 0)), VarArray("x", Some(Const 1)))] [("x", 1)] [] 
+           [(1, LocsVec[2; 3]); (2, IntVal 10); (3, IntVal 100)]) );
       "from x = 0 do skip loop x += 1 until x = 10"    >:: (fun _ ->
         assert_equal [(1, IntVal 10)]
           (eval_state [Loop(Binary(Eq, Var "x", Const 0), [Skip], [Assign(VarArray("x", None), ModAdd, Const 1)], Binary(Eq, Var "x", Const 10))] [("x", 1)] [] [(1, IntVal 0)]) );
@@ -139,11 +169,65 @@ let tests = "test suite for eval.ml" >::: [
       "from x = 0 do x += 1 loop skip until x = 10"    >:: (fun _ ->
         assert_equal [(1, IntVal 10)]
           (eval_state [Loop(Binary(Eq, Var "x", Const 0), [Assign(VarArray("x", None), ModAdd, Const 1)], [Skip], Binary(Eq, Var "x", Const 10))] [("x", 1)] [] [(1, IntVal 0)]) );
-
+      "for i in (1..10) do x += i end"    >:: (fun _ ->
+        assert_equal [(1, IntVal 55)]
+          (eval_state [For ("i", Const 1, Const 10, [Assign (VarArray ("x", None), ModAdd, Var "i")])] [("x", 1)] [] [(1, IntVal 0)]) );
+      "for i in (10..1) do x -= i end"    >:: (fun _ ->
+        assert_equal [(1, IntVal 0)]
+          (eval_state [For ("i", Const 10, Const 1, [Assign (VarArray ("x", None), ModSub, Var "i")])] [("x", 1)] [] [(1, IntVal 55)]) );
+      "switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
+        assert_equal [(1, IntVal 2)]
+        (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
+                             (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
+                             [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
+         [("x", 1)] [] [(1, IntVal 1)]) );
+      "switch x(2) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
+        assert_equal [(1, IntVal 4)]
+        (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
+                             (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
+                             [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
+         [("x", 1)] [] [(1, IntVal 2)]) );
+      "switch x(3) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
+          assert_equal [(1, IntVal 13)]
+          (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
+                               (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
+                               [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
+           [("x", 1)] [] [(1, IntVal 3)]) );
+        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
+          assert_equal [(1, IntVal 11)]
+          (eval_state
+           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
+               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
+                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
+             [Skip], VarArray ("x", None))]
+           [("x", 1)] [] [(1, IntVal 1)]) );
+        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
+          assert_equal [(1, IntVal 11)]
+          (eval_state
+           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
+               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
+                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
+             [Skip], VarArray ("x", None))]
+           [("x", 1)] [] [(1, IntVal 1)]) );
+        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
+          assert_equal [(1, IntVal 10)]
+          (eval_state
+           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
+               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
+                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
+             [Skip], VarArray ("x", None))]
+           [("x", 1)] [] [(1, IntVal 2)]) );
+        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
+          assert_equal [(1, IntVal 8)]
+          (eval_state
+           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
+               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
+                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
+             [Skip], VarArray ("x", None))]
+           [("x", 1)] [] [(1, IntVal 3)]) );
       "if x = 0 then x += 1 else x -= 1 fi x = 1"    >:: (fun _ ->
         assert_equal [(1, IntVal 1)]
           (eval_state [Conditional(Binary(Eq, Var "x", Const 0), [Assign(VarArray("x", None), ModAdd, Const 1)], [Assign(VarArray("x", None), ModSub, Const 1)], Binary(Eq, Var "x", Const 1))] [("x", 1)] [] [(1, IntVal 0)]) );
-
       "if x = 0 then x += 1 else x -= 1 fi x = 1(true)"    >:: (fun _ ->
         assert_equal [(1, IntVal 0)]
           (eval_state [Conditional(Binary(Eq, Var "x", Const 0), [Assign(VarArray("x", None), ModAdd, Const 1)], [Assign(VarArray("x", None), ModSub, Const 1)], Binary(Eq, Var "x", Const 1))] [("x", 1)] [] [(1, IntVal 1)]) );      
@@ -359,11 +443,10 @@ let tests = "test suite for eval.ml" >::: [
               (5, IntVal 0)]
       ) ); 
 
-(*      "new Test ts[0]"    >:: (fun _ ->
+      "new Test ts[0]"    >:: (fun _ ->
         assert_equal   [(1, LocsVec [4; 5]); (2, LocsVal 3);
                         (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, LocsVal 6);
-                        (5, IntVal 0); (6, ObjVal ("Test", [("a", 7); ("b", 8)])); (7, IntVal 0);
-                        (8, IntVal 0)]
+                        (5, IntVal 0); (6, ObjVal ("Test", []))]
           (eval_state [ObjectConstruction ("Test", VarArray ("xs", Some (Const 0)))]
              [("xs", 1); ("this", 2)]
              [("Test",
@@ -402,9 +485,8 @@ let tests = "test suite for eval.ml" >::: [
                                      Nil)])]))]                          
              [(1, LocsVec [4; 5]); (2, LocsVal 3);
               (3, ObjVal ("Program", [("xs", 1); ("this", 2)])); (4, LocsVal 6);
-              (5, IntVal 0); (6, ObjVal ("Test", [("a", 7); ("b", 8)])); (7, IntVal 0);
-              (8, IntVal 0)]             
-      ) );*)
+              (5, IntVal 0); (6, ObjVal ("Test", [("a", 7); ("b", 8)]))]
+      ) );
       
       "copy Test t tcopy"    >:: (fun _ ->
         assert_equal [(1, LocsVal 5); (2, LocsVal 5); (3, LocsVal 4);

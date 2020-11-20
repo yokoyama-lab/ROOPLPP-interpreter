@@ -227,9 +227,9 @@ stm:
   | DELETE typeId anyId
     { ObjectDestruction($2, $3) } // delete Foo foo
   | COPY dataType anyId anyId
-    { CopyReference($2, $3, $4) } // copy int x y
+    { CopyReference($2, $3, $4) } // copy t x y
   | UNCOPY dataType anyId anyId
-    { UncopyReference($2, $3, $4) }            // uncopy int x y
+    { UncopyReference($2, $3, $4) } // uncopy int x y
   | SKIP
     { Skip } // skip
   | anyId SWAP anyId

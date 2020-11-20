@@ -34,6 +34,24 @@ let tests = "test suite for invert.ml" >::: [
                                    [Assign (VarArray("x", None), ModAdd, Const 1)],
                                    [Assign (VarArray("x", None), ModAdd, Const 2)],
                                    Binary (Gt, Var "x", Const 10))] ) );
+      "for i in (1..10) do x += i end"  >::
+        (fun _ -> assert_equal [For ("i", Const 10, Const 1, [Assign (VarArray ("x", None), ModSub, Var "i")])]
+         (invert [For ("i", Const 1, Const 10, [Assign (VarArray ("x", None), ModAdd, Var "i")])] ) );
+      "switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"  >::
+      (fun _ -> assert_equal [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
+                                      (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
+                                      [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))    ]
+         (invert [Switch (VarArray ("x", None), [(Case, Const 2, [Assign (VarArray ("x", None), ModSub, Const 1)], Const 1, Break);
+                          (Case, Const 4, [Assign (VarArray ("x", None), ModSub, Const 2)], Const 2, Break)],
+                          [Assign (VarArray ("x", None), ModSub, Const 10)], VarArray ("x", None))] ) );
+      "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"  >::
+      (fun _ -> assert_equal [Switch (VarArray ("x", None), [(Ecase, Const 8, [Assign (VarArray ("x", None), ModSub, Const 5)],
+                                                              Const 3, NoBreak); (Fcase, Const 10, [Assign (VarArray ("x", None), ModSub, Const 3)],
+                                                                Const 2, NoBreak); (Fcase, Const 11, [Assign (VarArray ("x", None), ModSub, Const 2)], Const 1, Break)], [Skip], VarArray ("x", None))]
+       (invert [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
+                                                Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
+                                                  Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)],
+                                                    Const 8, Break)], [Skip], VarArray ("x", None))] ) );
 
       "construct Test t x += 1 destruct Test"  >::
         (fun _ -> assert_equal [ObjectBlock ("Test", "t", [Assign (VarArray("x", None), ModSub, Const 1)])]

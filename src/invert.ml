@@ -1,5 +1,6 @@
+(**逆変換器：プログラムの文を逆変換する*)
 open Syntax
-   
+(**文を逆変換する関数*)   
 let rec invert_stm = function
   | Skip -> Skip
   | Assign(obj, modOp, e) ->
