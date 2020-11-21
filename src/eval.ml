@@ -621,9 +621,10 @@ let rec lookup_class id1 map =
   | [] -> failwith ("ERROR, not found")
         
 (**プログラムを実行する関数（クラスリストを受け取り、環境とストアの組を返す）*)        
-let eval_prog (Prog(cl)) (Prog(library)) =
+let eval_prog ?(library0 = Prog []) (Prog(cl)) =
+  let Prog(cl2) = library0 in
   (*マップ生成*)
-  let map0 = gen_map library in
+  let map0 = gen_map cl2 in
   (*標準ライブラリ読み込み*)  
   let map = map0 @ (gen_map cl) in
   (*mainメソッドを含んでいるクラスidとメソッドの文を取得*)

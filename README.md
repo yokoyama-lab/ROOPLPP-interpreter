@@ -40,6 +40,10 @@ make
 ```
 ./rplpp ../example/fib.rplpp
 ```
++ 実行時にオプションで-libraryを指定することで標準ライブラリ(library/Library.rplpp)を読みこむことができる．
+```
+./rplpp -library ../example/ ...
+```
 + 実行時にオプションで-inverseを指定することで逆プログラムを表示させることができる．(以下のコマンドでは，example/fib.rplppの逆プログラムが表示される)
 ```
 ./rplpp -inverse ../example/fib.rplpp

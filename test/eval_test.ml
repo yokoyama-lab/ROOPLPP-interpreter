@@ -626,7 +626,7 @@ let tests = "test suite for eval.ml" >::: [
              (4, ObjVal ("Test", []))]          
       ) );
 
-(*      "class Program
+      "class Program
        int result
        method main()
        call Plus1(result)
@@ -661,7 +661,7 @@ let tests = "test suite for eval.ml" >::: [
                                 [MDecl ("main", [],
                                         [LocalBlock (ObjectType "Test", "t", Nil,
                                                      [ObjectConstruction ("Test", VarArray ("t", None));
-                                                      ObjectCall (VarArray ("t", None), "Plus1", ["result"]);
+                                                      ObjectCall (VarArray ("t", None), "Plus1", [Id"result"]);
                                                       ObjectDestruction ("Test", VarArray ("t", None))],
                                                      Nil)])])])
       ) );
@@ -696,8 +696,8 @@ let tests = "test suite for eval.ml" >::: [
                                    [MDecl ("main", [],
                                            [LocalBlock (ObjectType "Sub", "s", Nil,
                                                         [ObjectConstruction ("Sub", VarArray ("s", None));
-                                                         ObjectCall (VarArray ("s", None), "Plus1", ["result"]);
-                                                         ObjectCall (VarArray ("s", None), "Plus2", ["result"]);
+                                                         ObjectCall (VarArray ("s", None), "Plus1", [Id "result"]);
+                                                         ObjectCall (VarArray ("s", None), "Plus2", [Id "result"]);
                                                          ObjectDestruction ("Sub", VarArray ("s", None))],
                                                         Nil)])])]
              )
@@ -736,13 +736,13 @@ let tests = "test suite for eval.ml" >::: [
     CDecl ("Program", None,
      [Decl (ObjectArrayType "Test", "ts"); Decl (IntegerType, "result")],
      [MDecl ("main", [],
-       [ArrayConstruction (("Super", Const 2), "ts");
+       [ArrayConstruction (("Super", Const 2), VarArray("ts", None));
         ObjectConstruction ("Sub", VarArray ("ts", Some (Const 0)));
-        ObjectCall (VarArray ("ts", Some (Const 0)), "Plus1", ["result"]);
-        ObjectCall (VarArray ("ts", Some (Const 0)), "Plus2", ["result"]);
+        ObjectCall (VarArray ("ts", Some (Const 0)), "Plus1", [Id "result"]);
+        ObjectCall (VarArray ("ts", Some (Const 0)), "Plus2", [Id "result"]);
         ObjectDestruction ("Sub", VarArray ("ts", Some (Const 0)));
-        ArrayDestruction (("Super", Const 2), "ts")])])]
-)
-       ) ); *)
-    ]
+        ArrayDestruction (("Super", Const 2), VarArray("ts", None))])]
+)]
+       ) )) 
+]    
 let _ = run_test_tt_main tests
