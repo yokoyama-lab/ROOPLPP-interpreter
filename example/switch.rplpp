@@ -1,16 +1,12 @@
 class Test
   method test(int x)
   switch x
-    fcase 10: x += 10 show(x)  esac 26
-    fcase 1: x += 2   show(x)  esac 7
-    ecase 2: x += 4   show(x)  esac 6
-             break
-    case 6:  x += 10 esac 16
-             break
     fcase 3: print("a") esac 3
     fcase 4: print("b") esac 4
     ecase 5: print("c") esac 5
              break
+    default: skip
+    break
   hctiws x
 
 class Program
