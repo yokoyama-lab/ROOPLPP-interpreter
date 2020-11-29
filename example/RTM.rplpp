@@ -1,3 +1,5 @@
+// Reversible Turing Machine Simulation program
+// Cservenka, M.H.: Design and Implementation of Dynamic Memory Management in a ReversibleObject-Oriented Programming Language, Master’s thesis, University of Copenhagen (2018) p.41~44
 class Cell
     Cell self
     Cell right
