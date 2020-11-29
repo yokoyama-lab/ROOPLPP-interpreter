@@ -181,7 +181,7 @@ let rec lookup_meth x vl meth =
 (**マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
 let rec lookup_map id map =
   try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith ("ERROR:class " ^ id ^ "is not valid")
+  with Not_found -> failwith ("ERROR:class " ^ id ^ " is not valid")
     
 (**環境に指定されたメソッドのフィールドを使われていないロケーションに追加する．eval_stateのOBJBLOKで使用*)
 let rec ext_env_field f n =
@@ -242,7 +242,8 @@ let rec eval_state stml env map st0 =
       | LocalCall (mid0, args) | LocalUncall(mid0, args) | ObjectCall(_, mid0, args) | ObjectUncall(_, mid0, args) ->
          let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)         
          let ObjVal(id, envf)  = lookup_st locs2 st in          (* μ(l') = (c, γ') *)
-         let (f, meth) = lookup_map id map in                   (* Γ(c) = (field, method) *)
+         let (f, meth) = try lookup_map id map with                   (* Γ(c) = (field, method) *)
+           | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
          let MDecl(mid, para, mstml) = lookup_meth mid0 vl meth in  (* メソッド名がmidのメソッドを求める(q) *)
          let pidl = List.map (fun (Decl(_, id)) -> id) para in  (* pidl=仮引数のidのみのリスト(z1,...,zk) *)
          let arg_locsl = search_a args env st (max_locs st) in  (* [l'_1...l'n] = search_a(a_i, γ, μ) (実引数のロケーションを求める) *)
@@ -409,7 +410,8 @@ let rec eval_state stml env map st0 =
        mycall locs locs2 1       
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
-       let (fl, ml) = lookup_map tid map in                 (* Γ(c)=(f1,...,fn, medhods) *)
+       let (fl, ml) = try lookup_map tid map with           (* Γ(c)=(f1,...,fn, medhods) *)
+         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
        let max_locs = max_locs st in                        (* ロケーションの最大値を求める *)
        let locs = max_locs + 1 in                           (* locs = l *)
        let locs0 = max_locs + 2 in                          (* locs0 = l0 *)
@@ -425,7 +427,8 @@ let rec eval_state stml env map st0 =
          failwith ((pretty_stms [stm] 0) ^ "\nERROR:" ^ (id ^ "'s instance field is not zero-cleared in this statement"))
     (*OBJNEW*)
     | ObjectConstruction(tid, obj) (* new c y *)->
-       let (fl, ml) = lookup_map tid map in                (* Γ(c)=(f1,...,fn, methods) *)
+       let (fl, ml) = try lookup_map tid map with          (* Γ(c)=(f1,...,fn, methods) *)
+         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
        let locs, v = lval_val obj env in                   (* l=γ(y) *)
        if v <> IntVal(0) then                              (* yがnilか確認 *)
          failwith ((pretty_stms [stm] 0) ^ "\nERROR: variable is not nil in this statement")
@@ -443,7 +446,8 @@ let rec eval_state stml env map st0 =
        let rec delete_st st locs n =
          if n <> 0 then delete_st (List.remove_assoc locs st) (locs + 1) (n - 1)
          else st in     
-       let (fl, _) = lookup_map tid map in
+       let (fl, _) = try lookup_map tid map with 
+         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
        let ObjVal(_, envf) = lookup_st locs0 st in          (* (c,γ')=μ(l0) *)

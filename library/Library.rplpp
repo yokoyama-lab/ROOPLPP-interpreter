@@ -7,18 +7,17 @@ class List
       	    head <=> cell
         fi head != nil && cell = nil
 
-    method get(int index, int i, Cell cell)      	
-	if index != i && cell = nil then
-	    i += 1
-	    call next::get(index, i, cell)
-	fi index = i && cell != nil
+    method get(int index, int v)
+    	local Cell cell = nil
+        local int i = 0
+	call head::get(index, i, cell)
+	v ^= cell.data
+	uncall head::get(index, i, cell)
+	delocal int i = 0
+	delocal Cell cell = nil
 	
-        if index = i && cell = nil then
-	    copy Cell this cell  
-	fi index = i && cell = this
-
-    method indexOf(Object o, int index)
-        call head::indexOf(o, index)
+    method indexOf(int v, int index)
+        call head::indexOf(v, index)
 
     method size(int result)
         result ^= length
@@ -33,7 +32,7 @@ class List
 // Cell class
 class Cell
     Cell next
-    Object data
+    int data
 
     method add(Cell head, int index, int i, Cell cell)
 	if index - 1 != i && cell != nil then
@@ -71,11 +70,11 @@ class Cell
 	    copy Cell this cell  
 	fi index = i && cell = this
 
-    method indexOf(Object o, int index)
-        if data != o then
+    method indexOf(int v, int index)
+        if data != v then
 	    index += 1
-	    call next::indexOf(o, index)
-	fi data != o
+	    call next::indexOf(v, index)
+	fi data != v
 		
     method pretty()
         show(data)
@@ -85,16 +84,16 @@ class Cell
         fi next != nil
 
 class LinkedList inherits List
-    method add(Object o)
-        call addLast(o)
+    method add(int v)
+        call addLast(v)
 	
-    method add(int index, Object o)
+    method add(int index, int v)
 	switch index
-	    case 0:      call addFirst(o) esac 0 break
-	    case length: call addLast(o) esac length - 1 break
+	    case 0:      call addFirst(v) esac 0 break
+	    case length: call addLast(v) esac length - 1 break
 	    default:     local Cell cell = nil
   	    		 new Cell cell
-      	    		 copy Node o cell.data
+      	    		 cell.data ^= v
             		 local int i = 0
       	    		 call head::add(head, index, i, cell)
       	    		 delocal int i = index - 1
@@ -103,10 +102,10 @@ class LinkedList inherits List
 			 break
 	hctiws index
 	
-    method addFirst(Object o)
+    method addFirst(int v)
         local Cell cell = nil
 	new Cell cell
-	copy Object o cell.data
+  cell.data ^= v
 	call insertHead(cell)
 	if head != nil && cell != nil then
             cell.next <=> head
@@ -115,10 +114,10 @@ class LinkedList inherits List
 	delocal Cell cell = nil
 	length += 1
 	
-    method addLast(Object o)            
+    method addLast(int v)            
         local Cell cell = nil
 	new Cell cell	
-	copy Object o cell.data
+	cell.data ^= v
 	call insertHead(cell)
 	if head != nil && cell != nil then
             call head::addLast(cell)
@@ -126,12 +125,14 @@ class LinkedList inherits List
 	delocal Cell cell = nil
         length += 1
 		
-    method remove(int index, Object o)
-        uncall add(index, o)
+    method remove(int index, int v)
+        uncall add(index, v)
 
     method pretty()
         print("Linked_List[")
-    	call head::pretty()
+        if head != nil then
+    	    call head::pretty()
+        fi head != nil
     	print("]\n")	
 
 class DoublyCell
@@ -185,11 +186,11 @@ class DoublyCell
 	    copy DoublyCell this cell
 	fi index = i && cell = this
 
-    method indexOf(Object o, int index)
-        if data != o then
+    method indexOf(int v, int index)
+        if data != v then
 	    index += 1
-	    call right::indexOf(o, index)
-	fi data != o
+	    call right::indexOf(v, index)
+	fi data != v
 
     method pretty()
         show(data)
@@ -208,16 +209,16 @@ class DoublyLinkedList
       	    head <=> cell
         fi head != nil && cell = nil
 
-    method add(Object o)
-        call addLast(o)
+    method add(int v)
+        call addLast(v)
 
-    method add(int index, Object o)
+    method add(int index, int v)
 	switch index
-	    case 0:      call addFirst(o) esac 0 break
-	    case length: call addLast(o) esac length - 1 break
+	    case 0:      call addFirst(v) esac 0 break
+	    case length: call addLast(v) esac length - 1 break
 	    default:     local DoublyCell cell = nil
   	    		 new DoublyCell cell
-      	    		 cell.data ^= o
+      	    		 cell.data ^= v
             		 local int i = 0
       	    		 call head::add(head, index, i, cell)
       	    		 delocal int i = index
@@ -226,10 +227,10 @@ class DoublyLinkedList
 			 break
 	hctiws index
         
-    method addFirst(Object o)
+    method addFirst(int v)
         local DoublyCell cell = nil
 	new DoublyCell cell
-	copy Object o cell.data
+	cell.data ^= v
 
 	call insertHead(cell)
         if head != nil && cell != nil then
@@ -244,10 +245,10 @@ class DoublyLinkedList
         length += 1
 	delocal DoublyCell cell = nil
 
-    method addLast(Object o)
+    method addLast(int v)
         local DoublyCell cell = nil
 	new DoublyCell cell
-	copy Object o cell.data
+	cell.data ^= v
 	
 	call insertHead(cell)
         if head != nil then
@@ -256,17 +257,17 @@ class DoublyLinkedList
 	delocal DoublyCell cell = nil
         length += 1
 
-    method get(int index, Object o)
+    method get(int index, int v)
         local DoublyCell cell = nil
         local int i = 0	
         call head::get(index, i, cell)
-	copy Object cell.data o
+	v ^= cell.data
 	uncall head::get(index, i, cell)
         delocal int i = 0
 	delocal DoublyCell cell = nil
 
-    method indexOf(Object o, int index)
-        call head::indexOf(o, index)
+    method indexOf(int v, int index)
+        call head::indexOf(v, index)
 
     method size(int result)
         result ^= length
@@ -277,10 +278,10 @@ class DoublyLinkedList
         print("]\n")
 
 class Stack inherits List
-    method push(Object o)
+    method push(int v)
         local Cell cell = nil
 	new Cell cell	
-	cell.data <=> o
+	cell.data <=> v
 
 	call insertHead(cell)
 	if head != nil && cell != nil then
@@ -289,11 +290,11 @@ class Stack inherits List
 	delocal Cell cell = nil
         length += 1
 
-    method pop(Object o)
-        uncall push(o)	
+    method pop(int v)
+        uncall push(v)	
 
-    method top(Object o)
-        call get(length - 1, o)
+    method top(int v)
+        call get(length - 1, v)
 
     method isEmpty(int flag)
         if head = nil then
@@ -309,10 +310,10 @@ class Stack inherits List
 
 // Queue
 class Queue inherits List
-    method addFirst(Object o)
+    method addFirst(int v)
         local Cell cell = nil
 	new Cell cell
-	cell.data <=> o
+	cell.data <=> v
 	call insertHead(cell)
 	if head != nil && cell != nil then
             cell.next <=> head
@@ -321,13 +322,13 @@ class Queue inherits List
 	delocal Cell cell = nil
 	length += 1
 
-    method top(Object o)
-        call get(0, o)
+    method top(int v)
+        call get(0, v)
 		
-    method enqueue(Object o)
+    method enqueue(int v)
         local Cell cell = nil
 	new Cell cell	
-	cell.data <=> o	
+	cell.data <=> v	
 	call insertHead(cell)
 	if head != nil && cell != nil then
             call head::addLast(cell)
@@ -335,8 +336,8 @@ class Queue inherits List
 	delocal Cell cell = nil
         length += 1	
 	
-    method dequeue(Object o)
-        uncall addFirst(o)
+    method dequeue(int v)
+        uncall addFirst(v)
 
     method pretty()
         print("Queue[")
@@ -479,3 +480,4 @@ class Tree
         print("Tree (")
    	call root::pretty()
     	print(")")
+
