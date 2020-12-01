@@ -1,4 +1,11 @@
-// Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P141-142
+//////////////////////////////////////////////////////////////////////////////
+// Excerpted from [1, pp.141-142]
+//
+// [1] Cservenka, M.H.: Design and Implementation of Dynamic Memory Management
+//     in a Reversible Object-Oriented Programming Language, Master's thesis,
+//     Department of Computer Science, University of Copenhagen (2018).
+//////////////////////////////////////////////////////////////////////////////
+
 class Node
     Node left
     Node right

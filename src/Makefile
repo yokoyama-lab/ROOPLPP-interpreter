@@ -9,8 +9,8 @@ TARGET= rplpp
 all:	$(TARGET)
 
 $(TARGET): 	$(COMPONENT)
-	ocamlc $(COMPONENT) -w -31 -o $(TARGET)
-#	ocamlmktop $(COMPONENT) -w -31 -o $(TARGET)
+	ocamlc $(COMPONENT) -o $(TARGET)
+
 parser.mli:	parser.mly
 	ocamlyacc parser.mly
 
@@ -24,7 +24,7 @@ backup:
 	/bin/cp -f Makefile $(SRC) back
 
 clean:
-	/bin/rm -f parser.ml parser.mli lexer.ml $(TARGET) *.cmi *.cmo *.mli parser.conflicts parser.output
+	$(RM) parser.ml parser.mli lexer.ml $(TARGET) *.cmi *.cmo *.mli parser.conflicts parser.output
 
 test:	$(TARGET)
 	./$(TARGET) ../example/fib.rplpp

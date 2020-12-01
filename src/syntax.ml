@@ -3,7 +3,7 @@ type id = string
 type typeId = id
 type methodId = id
 
-(**型*)              
+(**型*)
 type dataType =
   | IntegerType
   | ObjectType of typeId
@@ -68,7 +68,7 @@ type case =
 type break =
   | Break
   | NoBreak (**breakなし*)
-  
+
 (**文*)
 type stm =
   | Assign of obj * modOp * exp (**x (+,-,^)= e*)
@@ -95,12 +95,12 @@ type stm =
 
 (**メソッドの引数*)
 type decl = Decl of dataType * id
-                  
+
 (**メソッド*)
 type mDecl = MDecl of methodId * decl list * stm list (**method q(...) s*)
-                    
+
 (**クラス*)
 type cDecl = CDecl of typeId * typeId option * decl list * mDecl list (**class C int x ... method q() ... *)
-                    
+
 (**プログラム*)
 type prog = Prog of cDecl list (**class .. class*)

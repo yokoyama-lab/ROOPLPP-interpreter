@@ -1,7 +1,7 @@
 (**逆変換器：プログラムの文を逆変換する*)
 open Syntax
-(**文を逆変換する関数*)   
-let rec invert_stm = function
+(**文を逆変換する関数*)
+let rec invert_stm stm = match stm with
   | Skip -> Skip
   | Assign(obj, modOp, e) ->
      let invert_op = function
@@ -25,39 +25,38 @@ let rec invert_stm = function
          | (c, e1, s, e2, b) :: tl ->
             if b = Break then [(c, e1, s, e2, b)]
             else
-              (c, e1, s, e2, b) :: (append_k tl)
+              (c, e1, s, e2, b) :: append_k tl
+         | _ -> failwith "not implemented"
        in
        let rec search_kn cases =
          match cases with
-         | (_, _, _, _, b) :: tl ->
-            if b = Break then tl
-            else search_kn tl              
+         | (_, _, _, _, Break) :: tl -> tl
+         | _ :: tl -> search_kn tl
+         | _ -> failwith "not implemented"
        in
        let invert_cases2 cases =
          let cases2 =
-         match cases with
-         | (c, e1, s, e2, b) :: tl ->
-            List.rev((c, e1, s, e2, Break) :: tl)
-         in         
+           match cases with
+           | (c, e1, s, e2, b) :: tl ->
+              List.rev((c, e1, s, e2, Break) :: tl)
+           | _ -> failwith "not implemented"
+         in
          match cases2 with
          | (c, e1, s, e2, b) :: tl -> (c, e1, s, e2, NoBreak) :: tl
+         | _ -> failwith "not implemented"
        in
        match cases with
        | [] -> []
        | [x] -> [x]
        | (c, e1, s, e2, b) :: tl ->
-          if c = Case then [(c, e1, s, e2, b)] @ (invert_cases tl)
+          if c = Case then (c, e1, s, e2, b) :: invert_cases tl
           else if c = Fcase || c = Ecase then
-            let cases_k, cases_kn = (append_k cases), (search_kn cases) in
-            (invert_cases2 cases_k) @ (invert_cases cases_kn) 
+            let cases_k, cases_kn = append_k cases, search_kn cases in
+            invert_cases2 cases_k @ invert_cases cases_kn
           else failwith "error in switch statement"
      in
      let cases2 =
-       List.map (fun x ->
-           begin
-             match x with
-             | (c, e1, s, e2, b) -> (c, e2, invert s, e1, b)
-           end  ) cases
+       List.map (fun (c, e1, s, e2, b) -> (c, e2, invert s, e1, b)) cases
      in
      Switch(obj2, invert_cases cases2, invert stml, obj1)
   | ObjectBlock(tid, id, stml) ->
@@ -74,10 +73,10 @@ let rec invert_stm = function
   | UncopyReference(dt, obj1, obj2) -> CopyReference(dt, obj1, obj2)
   | ArrayConstruction(c, id) -> ArrayDestruction(c, id)
   | ArrayDestruction(c, id) -> ArrayConstruction(c, id)
-  | Show e -> Show e
-  | Print str -> Print str
+  | Show _ | Print _ -> stm
 and invert stml = List.rev (List.map invert_stm stml)
 
 let invert_method (MDecl(mid, para, stml)) = MDecl(mid, para, invert stml)
-let invert_prog2 (CDecl(tid, inher, fields, methods)) = CDecl(tid, inher, fields, List.map invert_method methods)
+let invert_prog2 (CDecl(tid, inher, fields, methods)) =
+  CDecl(tid, inher, fields, List.map invert_method methods)
 let invert_prog (Prog(cl)) = Prog(List.map invert_prog2 cl)

@@ -7,7 +7,7 @@ let parse str =
     (Lexing.from_channel str)
 
 let pretty prog = pretty_prog prog
-  
+
 let eval prog = print_result(eval_prog prog)
 let eval_lib lib prog = print_result(eval_prog ~library0:lib prog)
 
@@ -17,7 +17,7 @@ let () =
   let lib = ref false in
   Arg.parse
     [("-inverse", Arg.Set inv, "inversion");
-    ("-library", Arg.Set lib, "library")]
+     ("-library", Arg.Set lib, "library")]
     (fun s -> files := !files @ [s])
     ("ROOPLPP interpreter");
   match !files with
@@ -34,12 +34,15 @@ let () =
      let _ = close_in channel in
      if !inv then pretty_prog(invert_prog prog)
      else
-      try if !lib then let channel2 = open_in "../library/Library.rplpp" in
-      let library = parse channel2 in 
-      eval_lib library prog
-      else eval prog
-      with
-      Failure e ->  print_newline(); print_endline e
+       begin
+         try if !lib then let channel2 = open_in "../library/Library.rplpp" in
+                          let library = parse channel2 in
+                          eval_lib library prog
+             else eval prog
+         with
+           Failure e ->  print_newline(); print_endline e
+       end
+  | _ -> failwith "not implemented"
 
 (*let () =
   let file_name = Printf.sprintf "%s" (Sys.argv.(1)) in

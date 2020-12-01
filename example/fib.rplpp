@@ -1,4 +1,11 @@
-// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P11
+//////////////////////////////////////////////////////////////////////////////
+// Excerpted and revised from [1, p.11]
+//
+// [1] Cservenka, M.H.: Design and Implementation of Dynamic Memory Management
+//     in a Reversible Object-Oriented Programming Language, Master's thesis,
+//     Department of Computer Science, University of Copenhagen (2018).
+//////////////////////////////////////////////////////////////////////////////
+
 // computing n(th) Fibonacci pair
 class Fib
     int[] xs
