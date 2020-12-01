@@ -25,8 +25,8 @@ print_test.byte: 		print_test.ml
 	ocamlfind ocamlc -o $@ -package oUnit -linkpkg -g -I ../src value.cmo print.cmo print_test.ml
 
 clean:
-	/bin/rm -f *.byte
-	/bin/rm -f *.cmi *.cmo *.mli
+	$(RM) *.byte
+	$(RM) *.cmi *.cmo *.mli
 
 veryclean: clean
-	/bin/rm -f *.log *.cache
+	$(RM) *.log *.cache

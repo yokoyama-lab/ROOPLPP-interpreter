@@ -480,4 +480,3 @@ class Tree
         print("Tree (")
    	call root::pretty()
     	print(")")
-

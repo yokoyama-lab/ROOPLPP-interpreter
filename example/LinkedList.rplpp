@@ -1,4 +1,10 @@
-// adapted from Design and Implementation of Dynamic Memory Management in a Reversible Object-Oriented Programming Language P127-128
+//////////////////////////////////////////////////////////////////////////////
+// Excerpted and revised from [1, pp.127-128]
+//
+// [1] Cservenka, M.H.: Design and Implementation of Dynamic Memory Management
+//     in a Reversible Object-Oriented Programming Language, Master's thesis,
+//     Department of Computer Science, University of Copenhagen (2018).
+//////////////////////////////////////////////////////////////////////////////
 
 class Cell
     Cell next
