@@ -74,6 +74,7 @@ class Cell
         if data != v then
 	    index += 1
 	    call next::indexOf(v, index)
+
 	fi data != v
 		
     method pretty()
@@ -105,7 +106,7 @@ class LinkedList inherits List
     method addFirst(int v)
         local Cell cell = nil
 	new Cell cell
-  cell.data ^= v
+  	cell.data ^= v
 	call insertHead(cell)
 	if head != nil && cell != nil then
             cell.next <=> head
@@ -351,8 +352,23 @@ class Node
     Node parent
     int value
 
-    method setValue(int newValue)
-        value ^= newValue
+    method constructor(int val, Node left, Node right, Node parent)
+        call setValue(val)
+        call setLeftChild(left)
+        call setRightChild(right)
+        call setParent(parent)
+
+    method setValue(int val)
+        value ^= val
+
+    method setLeftChild(Node node)
+        copy Node node left
+
+    method setRightChild(Node node)
+        copy Node node right
+
+    method setParent(Node node)
+        copy Node node parent
 
     method insertNode(Node node, int nodeValue)
         if nodeValue < value then
@@ -437,47 +453,55 @@ class Tree
 	root <=> node
 	delocal Node node = nil
 
-    method step(Node cur, Node pre, int key)
+    method step(Node cur, Node pre)
         local Node next = nil
-	if cur.parent = pre then
-	    if cur.value > key && cur.left != nil then
-	        copy Node cur.left next
-                uncopy Node cur.parent pre		
-	    else
-	        if cur.value < key && cur.right != nil then		
-	            copy Node cur.right next
-                    uncopy Node cur.parent pre		    
-		else
-		    pre <=> next
-		fi cur.value < key && cur.right != nil
-	    fi cur.value > key && cur.left != nil
+        if cur.left=nil && cur.right=nil then
+            print("走査：") show(cur.value) print(" ")
+            pre <=> next
         else
-	    copy Node cur.parent next
-	    if cur.value > key then
-	        uncopy Node cur.left pre
-	    else
-	        uncopy Node cur.right pre
-	    fi cur.value > key
-        fi next.parent=cur || (cur.value < key && cur.right = nil) || (cur.value > key && cur.left = nil)
+            if cur.left=nil && cur.right!=pre then
+                print("走査：") show(cur.value) print(" ")
+                copy Node cur.right next
+                uncopy Node cur.parent pre
+            else
+                if cur.parent=pre then
+                    print("走査：") show(cur.value) print(" ")
+                    copy Node cur.left next
+                    uncopy Node cur.parent pre
+                else
+                    if cur.right=nil then
+                        copy Node cur.parent next
+                        uncopy Node cur.left pre
+                    else
+                        if cur.right=pre then
+                            copy Node cur.parent next
+                            uncopy Node cur.right pre
+                        else
+                             copy Node cur.right next
+                             uncopy Node cur.left pre
+                        fi cur.parent=next
+                    fi cur.right=nil
+                fi cur.left=next
+            fi cur.left=nil && cur.right=next
+        fi cur.left=nil && cur.right=nil
         pre <=> cur
         cur <=> next
         delocal Node next = nil
 
-    method search(int key, Node result)
+    method preorder_traversal()
+        local Node result = nil
+	copy Node root.left result
         local Node pre = nil
         copy Node root pre
-        from pre=root loop
-           call step(result, pre, key)
-        until result=root || result.value=key
-        if result!=root then
-            uncopy Node result.parent pre
-        else
-            uncopy Node root.left pre	    
-        fi result!=root
+	from pre=root do
+	    call step(result, pre)
+        until result=root
+        uncopy Node result.left pre
         delocal Node pre = nil
+	uncopy Node root result
+	delocal Node result = nil
 
     method pretty()
         print("Tree (")
    	call root::pretty()
     	print(")")
-
