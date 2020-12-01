@@ -105,6 +105,7 @@ let rec anyId2obj = function
 %nonassoc EQ NE
 %left ADD SUB
 %left MUL DIV MOD
+%nonassoc UNARY
 %left DOT               /* highest precedence */
 
 %start main
@@ -139,6 +140,7 @@ exp:
   | exp AND exp  { Binary(And,  $1, $3) } // e1 && e2
   | exp OR exp   { Binary(Or,   $1, $3) } // e1 && e2
   | LPAREN exp RPAREN { $2 }              // ( e )
+  | SUB exp %prec UNARY { Binary(Sub, Const 0, $2) } // -e
 //  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
 
 modop:

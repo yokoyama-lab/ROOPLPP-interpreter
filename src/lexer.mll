@@ -37,7 +37,7 @@ let u = ['\000'-'\255']           (* universal: any character *)
 
 rule token = parse
   (* 定数 *)
-  | '-'?digit+
+  | digit+
     { let str = Lexing.lexeme lexbuf in
       CONST (int_of_string str) }
   | '\"' ((u # ['\"' '\\' '\n']) | ('\\' ('\"' | '\\' | '\'' | 'n' | 't')))* '\"' {let s = lexeme lexbuf in STRING (unescapeInitTail s)}

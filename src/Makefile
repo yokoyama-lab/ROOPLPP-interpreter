@@ -38,7 +38,6 @@ test:	$(TARGET)
 	./$(TARGET) ../example/DoublyLinkedList.rplpp
 	./$(TARGET) ../example/DoublyLinkedList_print.rplpp
 	./$(TARGET) ../example/for.rplpp
-	./$(TARGET) ../example/for_array.rplpp
 	./$(TARGET) ../example/switch.rplpp
 	./$(TARGET) ../example/instanceSwap.rplpp
 	./$(TARGET) ../example/accessInstance.rplpp

@@ -54,7 +54,7 @@ let bin_op f v1 v2 =
 let rel_op op v1 v2 =
   match v1, v2 with
   | IntVal(n1), IntVal(n2) ->
-     if op (n1 = 1) (n2 = 1) then IntVal(1) else IntVal(0)
+     if op (n1 <> 1) (n2 <> 1) then IntVal(1) else IntVal(0)
   | _ -> failwith "ERROR:integer values expected"
 
 (**bin_op同様．比較算子専用*)
@@ -230,13 +230,6 @@ let rec eval_state stml env map st0 =
     in
     (** call処理の共通部分を実行する関数．invertFlagが1なら逆実行 *)
     let mycall locs locs2 invertFlag =
-      let rec ext_env_meth envf pidl locsl =
-        match pidl, locsl with
-        | [], [] -> envf
-        | pid :: p_tl, locs :: locs_tl ->
-           ext_envs (ext_env_meth envf p_tl locs_tl) pid locs
-        | _, _ -> failwith "ERROR"
-      in
       match stm with
       | LocalCall (mid0, args) | LocalUncall(mid0, args) | ObjectCall(_, mid0, args) | ObjectUncall(_, mid0, args) ->
          let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)         

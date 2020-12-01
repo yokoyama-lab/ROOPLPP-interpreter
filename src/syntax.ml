@@ -41,7 +41,7 @@ type modOp =
 
 (**式*)
 type exp =
-  | Const of int (**変数*)
+  | Const of int (**整数*)
   | Var of id (**変数*)
   | ArrayElement of id * exp (**配列*)
   | Nil (**Nil*)
