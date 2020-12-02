@@ -21,17 +21,6 @@ let tests = "test suite for eval.ml" >::: [
                                    [(1, LocsVec [2; 3; 4]); (2, IntVal 3); (3, IntVal 1); (4, IntVal 0)]) );
       "Nil"      >:: (fun _ ->
         assert_equal (IntVal 0) (eval_exp Nil [] []) );
-      "t.a"      >:: (fun _ ->
-        assert_equal (IntVal 10) (eval_exp (Dot (Var "t", Var "a")) 
-          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3);
-          (3, ObjVal ("Programs", [("t", 1); ("this", 2)])); (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, IntVal 0);
-          (6, IntVal 10); (7, IntVal 0)]) );
-      "t.t2.a"      >:: (fun _ ->
-        assert_equal (IntVal 100) (eval_exp (Dot (Dot (Var "t", Var "t2"), Var "a")) 
-          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
-          (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, LocsVal 8);
-          (6, IntVal 0); (7, IntVal 0); (8, ObjVal ("Test", [("t2", 9); ("a", 10); ("b", 11)])); (9, IntVal 0);
-          (10, IntVal 100); (11, IntVal 0)]) );
       "1 + 1"    >:: (fun _ ->
         assert_equal (IntVal 2) (eval_exp (Binary(Add, Const 1, Const 1)) [] []) );
       "x + x"    >:: (fun _ ->
@@ -116,6 +105,17 @@ let tests = "test suite for eval.ml" >::: [
         assert_equal (IntVal 0) (eval_exp (Binary(Ge, Const 1, Const 2)) [] []) );
       "LocsVal 2 >= LocsVal 2"    >:: (fun _ ->
         assert_equal (IntVal 1) (comp_op (>=) (LocsVal 1) (LocsVal 1)) );
+      "t.a"      >:: (fun _ ->
+        assert_equal (IntVal 10) (eval_exp (Dot (Var "t", Var "a")) 
+          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3);
+          (3, ObjVal ("Programs", [("t", 1); ("this", 2)])); (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, IntVal 0);
+          (6, IntVal 10); (7, IntVal 0)]) );
+      "t.t2.a"      >:: (fun _ ->
+        assert_equal (IntVal 100) (eval_exp (Dot (Dot (Var "t", Var "t2"), Var "a")) 
+          [("t", 1); ("this", 2)] [(1, LocsVal 4); (2, LocsVal 3); (3, ObjVal ("Programs", [("t", 1); ("this", 2)]));
+          (4, ObjVal ("Test", [("t2", 5); ("a", 6); ("b", 7)])); (5, LocsVal 8);
+          (6, IntVal 0); (7, IntVal 0); (8, ObjVal ("Test", [("t2", 9); ("a", 10); ("b", 11)])); (9, IntVal 0);
+          (10, IntVal 100); (11, IntVal 0)]) );
 
       
       "skip"    >:: (fun _ ->
