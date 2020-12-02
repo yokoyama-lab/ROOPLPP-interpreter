@@ -71,6 +71,7 @@ type break =
 
 (**文*)
 type stm =
+  | Skip (**Skip*)
   | Assign of obj * modOp * exp (**x (+,-,^)= e*)
   | Swap of obj * obj (**y <=> y*)
   | Conditional of exp * stm list * stm list * exp (**if e then s else s fi e  or  if e then s fi e*)
@@ -89,7 +90,6 @@ type stm =
   | UncopyReference of dataType * obj * obj (**uncopy int x y*)
   | ArrayConstruction of (typeId * exp) * obj (**new Foo[length] fooList*)
   | ArrayDestruction of (typeId * exp) * obj (**delete Foo[length] fooList*)
-  | Skip (**Skip*)
   | Show of exp (**show(x)*)
   | Print of string (**print("")*)
 
