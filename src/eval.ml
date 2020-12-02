@@ -54,7 +54,7 @@ let bin_op f v1 v2 =
 let rel_op op v1 v2 =
   match v1, v2 with
   | IntVal(n1), IntVal(n2) ->
-     if op (n1 <> 1) (n2 <> 1) then IntVal(1) else IntVal(0)
+     if op (n1 <> 0) (n2 <> 0) then IntVal(1) else IntVal(0)
   | _ -> failwith "ERROR:integer values expected"
 
 (**bin_op同様．比較算子専用*)
