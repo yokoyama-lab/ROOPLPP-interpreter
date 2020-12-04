@@ -444,63 +444,6 @@ class Tree
       	    call root::getSum(result)
     	fi root != nil
 
-    method insertDummy()
-        local Node node = nil
-	new Node node
-	node.value ^= -1
-	copy Node node root.parent
-	node.left <=> root
-	root <=> node
-	delocal Node node = nil
-
-    method step(Node cur, Node pre)
-        local Node next = nil
-        if cur.left=nil && cur.right=nil then
-            print("走査：") show(cur.value) print(" ")
-            pre <=> next
-        else
-            if cur.left=nil && cur.right!=pre then
-                print("走査：") show(cur.value) print(" ")
-                copy Node cur.right next
-                uncopy Node cur.parent pre
-            else
-                if cur.parent=pre then
-                    print("走査：") show(cur.value) print(" ")
-                    copy Node cur.left next
-                    uncopy Node cur.parent pre
-                else
-                    if cur.right=nil then
-                        copy Node cur.parent next
-                        uncopy Node cur.left pre
-                    else
-                        if cur.right=pre then
-                            copy Node cur.parent next
-                            uncopy Node cur.right pre
-                        else
-                             copy Node cur.right next
-                             uncopy Node cur.left pre
-                        fi cur.parent=next
-                    fi cur.right=nil
-                fi cur.left=next
-            fi cur.left=nil && cur.right=next
-        fi cur.left=nil && cur.right=nil
-        pre <=> cur
-        cur <=> next
-        delocal Node next = nil
-
-    method preorder_traversal()
-        local Node result = nil
-	copy Node root.left result
-        local Node pre = nil
-        copy Node root pre
-	from pre=root do
-	    call step(result, pre)
-        until result=root
-        uncopy Node result.left pre
-        delocal Node pre = nil
-	uncopy Node root result
-	delocal Node result = nil
-
     method pretty()
         print("Tree (")
    	call root::pretty()
