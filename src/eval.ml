@@ -211,8 +211,8 @@ let rec eval_state stml env map st0 =
        let LocsVec(locsvecx) = lookup_val x env st in
        let locsx' =
          if x_index < List.length locsvecx then x_index + List.hd locsvecx
-         else failwith ((pretty_stms [stm] 0) ^ "\nERROR:Array index " ^ x ^ "[" ^
-                          (string_of_int x_index) ^ "] is out of bounds in this stament")                
+         else failwith (pretty_stms [stm] 0 ^ "\nERROR:Array index " ^ x ^ "[" ^
+                          string_of_int x_index ^ "] is out of bounds in this stament")                
        in
        let v = lookup_st locsx' st in (**the value of x[e1]*)
        locsx', v
@@ -234,7 +234,7 @@ let rec eval_state stml env map st0 =
       | LocalCall (mid0, args) | LocalUncall(mid0, args) | ObjectCall(_, mid0, args) | ObjectUncall(_, mid0, args) ->
          let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)         
          let ObjVal(id, envf)  = lookup_st locs2 st in          (* μ(l') = (c, γ') *)
-         let (f, meth) = try lookup_map id map with                   (* Γ(c) = (field, method) *)
+         let f, meth = try lookup_map id map with                   (* Γ(c) = (field, method) *)
            | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
          let MDecl(mid, para, mstml) = lookup_meth mid0 vl meth in  (* メソッド名がmidのメソッドを求める(q) *)
          let pidl = List.map (fun (Decl(_, id)) -> id) para in  (* pidl=仮引数のidのみのリスト(z1,...,zk) *)
@@ -265,7 +265,7 @@ let rec eval_state stml env map st0 =
        let lvx, vx = lval_val y env in
        let v = eval_exp e env st in
        let v' = try (bin_op (f op) vx v) with
-                | Failure e -> failwith  ((pretty_stms [stm] 0) ^ "\nERROR:Integer value expected in this statement")
+                | Failure e -> failwith  (pretty_stms [stm] 0 ^ "\nERROR:Integer value expected in this statement")
        in
        ext_st st lvx v' (* the right value of x *)
     (*SWPVAR*) (*SWAPARRVAR*)
@@ -283,17 +283,17 @@ let rec eval_state stml env map st0 =
              let st3 = eval_state stml1 env map st2 in       (* 満たす場合、s1実行 *)
              eval_loop (e1, stml1, stml2, e2) env map st3    (* 意味関数L繰り返し *)
            else
-             failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be false in this statement")             
+             failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be false in this statement")             
          (*LOOPBASE*)
          else
-           (myassert(isTrue (eval_exp e2 env st), (pretty_stms [stm] 0) ^ "ERROR:assertion is incorrect in this statement"); st)
+           (myassert(isTrue (eval_exp e2 env st), pretty_stms [stm] 0 ^ "ERROR:assertion is incorrect in this statement"); st)
        in
        (* LOOPMAIN *)
        if isTrue (eval_exp e1 env st) then                   (* アサーション ?e1 != 0(true) *) 
          let st2 = eval_state stml1 env map st in            (* s1実行 *)
          eval_loop (e1, stml1, stml2, e2) env map st2        (* 意味関数Lへ *)
        else
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be true in this statement")
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be true in this statement")
     (*FOR CONST: for x in (e1..e2) do stml end *)
     | For(x, e1, e2, stml) ->
        let rec for_con (x, (e1, e2), stml) env map st =                         (*意味関数F*)
@@ -364,10 +364,10 @@ let rec eval_state stml env map st0 =
        in
        if index = -1 then
          if lookup_st v2_locs st2 <> eval_exp e' env st2 then st2
-         else failwith ((pretty_stms [stm] 0) ^ "\nERROR:default assertion is incorrect in this switch statement")
+         else failwith (pretty_stms [stm] 0 ^ "\nERROR:default assertion is incorrect in this switch statement")
        else if lookup_st v2_locs st2 = eval_exp e' env st2 then st2
        else
-         failwith ((pretty_stms [stm] 0) ^ ("\nERROR:assertion is incorrect when " ^ (pretty_obj obj1) ^ " = " ^ (pretty_exp e) ^ " in this switch statement"))
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect when " ^ (pretty_obj obj1) ^ " = " ^ (pretty_exp e) ^ " in this switch statement")
     | Conditional(e1, stml1, stml2, e2) ->           (* if e1 then s1 else s2 fi e2 *)
        (*IFTRUE*)
        if isTrue (eval_exp e1 env st) then     (* ?e1 != 0(true)  *)
@@ -375,16 +375,16 @@ let rec eval_state stml env map st0 =
          if isTrue (eval_exp e2 env st2) then  (* アサーション ?e2 != 0(true) *)
            st2
          else                                        (* アサーションを満たさない場合のエラー *)
-           failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be true in this statement")           
+           failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be true in this statement")           
        (*IFFALSE*)
        else if isFalse (eval_exp e1 env st) then (* ?e1 = 0(false) *)
          let st2 = eval_state stml2 env map st in    (* s2実行 *)
          if isFalse (eval_exp e2 env st2) then   (* アサーション ?e2 = 0(false) *)
            st2
          else                                        (* アサーションを満たさない場合のエラー *)
-           failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be false in this statement")
+           failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be false in this statement")
        else
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR:Assertion should be false in this statement")
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be false in this statement")
     (*LocalCALL*)
     | LocalCall(mid, args) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
@@ -419,14 +419,15 @@ let rec eval_state stml env map st0 =
        let st5 = eval_state stml env2 map st4 in            (* sを実行 *)
        if is_field_zero st5 locs1 (List.length fl)          (*l1からlnがゼロクリアされているか確認*)
        then st5 else
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR:" ^ (id ^ "'s instance field is not zero-cleared in this statement"))
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:" ^ id ^ "'s instance field is not zero-cleared in this statement")
     (*OBJNEW*)
     | ObjectConstruction(tid, obj) (* new c y *)->
        let (fl, ml) = try lookup_map tid map with          (* Γ(c)=(f1,...,fn, methods) *)
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
+         (* クラスが見つからない場合エラー *)
+         | Failure str -> failwith (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, v = lval_val obj env in                   (* l=γ(y) *)
        if v <> IntVal(0) then                              (* yがnilか確認 *)
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR: variable is not nil in this statement")
+         failwith (pretty_stms [stm] 0 ^ "\nERROR: variable is not nil in this statement")
        else
        let max_locs = max_locs st in                       (* ロケーションの最大値を求める *)
        let locs0 = max_locs + 1 in                         (* locs0 = l0 *)
@@ -442,7 +443,7 @@ let rec eval_state stml env map st0 =
          if n <> 0 then delete_st (List.remove_assoc locs st) (locs + 1) (n - 1)
          else st in
        let (fl, _) = try lookup_map tid map with
-         | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
+         | Failure str -> failwith (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
        let ObjVal(_, envf) = lookup_st locs0 st in          (* (c,γ')=μ(l0) *)
@@ -453,12 +454,12 @@ let rec eval_state stml env map st0 =
          let st3 = List.remove_assoc locs0 st2 in           (* ストアからロケーションl0を削除 *) 
          ext_st st3 locs (IntVal 0)                         (* lの値をゼロクリア *)
        else
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR:All instance field is not zero-cleared in this statement")
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:All instance field is not zero-cleared in this statement")
     (*ARRNEW*)
     | ArrayConstruction((tid, e), obj) ->                                      (* new a[e] x *)
        let locs, v = lval_val obj env in                                       (* xのロケーションを求める *)
        if v <> IntVal(0) then                                                  (* xがnilか確認 *)
-         failwith ((pretty_stms [stm] 0) ^ "\nERROR:Variable is not nil in this statement")
+         failwith (pretty_stms [stm] 0 ^ "\nERROR:Variable is not nil in this statement")
        else
        let IntVal(n) = eval_exp e env st in                                   (* 要素数を求める *)
        let st2 = ext_st st locs (LocsVec(gen_locsvec n (max_locs st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
@@ -616,7 +617,7 @@ let rec lookup_class id1 map =
          | Some(stm) -> (cid, stm)
          | _ -> failwith ("ERROR:method " ^ id1 ^ "is not exist")
        end
-  | [] -> failwith ("ERROR, not found")
+  | [] -> failwith ("ERROR:class " ^ id1 ^ " was found")
 
 (**プログラムを実行する関数（クラスリストを受け取り、環境とストアの組を返す）*)
 let eval_prog ?(library0 = Prog []) (Prog(cl)) =
@@ -626,9 +627,9 @@ let eval_prog ?(library0 = Prog []) (Prog(cl)) =
   (*標準ライブラリ読み込み*)
   let map = map0 @ (gen_map cl) in
   (*mainメソッドを含んでいるクラスidとメソッドの文を取得*)
-  let (mid, mainstml) = lookup_class "main" map in
+  let mid, mainstml = lookup_class "main" map in
   (*mainメソッドを含んでいるクラスのフィールドを取得*)
-  let (field, _) = lookup_map mid map in
+  let field, _ = lookup_map mid map in
   (*フィールドを識別子のみのリストに変換*)
   let fid = List.map (fun (Decl(_, id)) -> id) field in
   (*フィールドから環境を生成*)
