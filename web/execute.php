@@ -1,7 +1,9 @@
 <?php
 set_time_limit(10);             // 時間制限の設定
 
-function convertEOL($string, $to = "\n")
+// $string 内に含まれるOS毎に異なる改行文字を
+// $to に統一する(ここでは\n)
+function convertEOL(string $string, string $to = "\n")
 {
     return strtr($string, array(
         "\r\n" => $to,
@@ -9,6 +11,7 @@ function convertEOL($string, $to = "\n")
         "\n" => $to,
     ));
 }
+
 $dir = dirname(__FILE__);
 $cmd = "$dir/../src/./rplpp";
 
@@ -18,9 +21,22 @@ $post = json_decode($json_string, true);
 // 引数
 $invert = $post['invert'];
 if ($invert) { $cmd .= " -inverse"; }
+// TO-DO: CLIからのライブラリ使用方法に合わせる
+// つまり下記のように実現する
+//$library = $post['library'];
+//if ($library) { $cmd .= " -library"; }
 
 // プログラムを保存
 $prog_text = $post['prog'];
+
+// TO-DO: CLIからのライブラリ使用方法に合わせる
+// 現在ここでライブラリの内の文字列をプログラムに結合している
+$library = $post['library'];
+if ($library) {
+    $library_text = (string)file_get_contents("$dir/../library/Library.rplpp");
+    $prog_text = $library_text.$prog_text;
+}
+
 $prog_hash = substr(sha1($prog_text), 0, 8);
 $res = file_put_contents("$dir/programs/$prog_hash.rplpp", $prog_text);
 if ($res === FALSE) {
