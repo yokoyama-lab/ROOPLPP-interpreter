@@ -1,7 +1,9 @@
 <?php
 set_time_limit(10);             // 時間制限の設定
 
-function convertEOL($string, $to = "\n")
+// $string 内に含まれるOS毎に異なる改行文字を
+// $to に統一する(ここでは\n)
+function convertEOL(string $string, string $to = "\n")
 {
     return strtr($string, array(
         "\r\n" => $to,
@@ -9,6 +11,7 @@ function convertEOL($string, $to = "\n")
         "\n" => $to,
     ));
 }
+
 $dir = dirname(__FILE__);
 $cmd = "$dir/../src/./rplpp";
 
@@ -18,6 +21,8 @@ $post = json_decode($json_string, true);
 // 引数
 $invert = $post['invert'];
 if ($invert) { $cmd .= " -inverse"; }
+$library = $post['library'];
+if ($library) { $cmd .= " -library"; }
 
 // プログラムを保存
 $prog_text = $post['prog'];
