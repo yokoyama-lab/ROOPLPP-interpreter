@@ -30,6 +30,7 @@ interface RooplppWebInterpreterState {
   option: {
     [key in OptionIndex]: boolean
   }
+  example?: string // 例の表示をselectで行う間の仮のもの
 }
 
 class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, RooplppWebInterpreterState> {
@@ -98,6 +99,39 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
     })
   }
 
+  // プログラムサンプルリストのアイテムがチェンジされた時の処理
+  // 例の表示をselectで行う間の仮のもの
+  // editor内のプログラムを更新する
+  handleExampleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const target = event.target;
+    const value = target.value;
+    const name = target.name;
+
+    const state = Object.assign({}, this.state, { example: value });
+    this.setState(state);
+
+    if (value != '') {
+      axios({
+        method: 'GET',
+        url: HOSTNAME + '/example.php',
+        params: {
+          filename: value
+        }
+      }).then(response => {
+        console.log(response);
+        const state = Object.assign({}, this.state, { program: response.data[0] });
+        this.setState(state);
+      }).catch(err => {
+        console.log('err: ', err);
+        const state = Object.assign({}, this.state, { program: err });
+        this.setState(state);
+      })
+    } else {
+      const state = Object.assign({}, this.state, { program: '' });
+      this.setState(state);
+    }
+  }
+
   // editor内の文字列が変化した時の処理
   handleEditorChange(newValue: string) {
     this.setState({
@@ -136,7 +170,10 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
 
           { // プログラム例のリスト
           }
-          <ProgramList onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)} />
+          <ProgramList
+            onExampleChange={(event: React.ChangeEvent<HTMLSelectElement>) => this.handleExampleChange(event)}
+            onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)}
+          />
 
           { // オプション選択部分
           }
