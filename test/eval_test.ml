@@ -180,7 +180,7 @@ let tests = "test suite for eval.ml" >::: [
       "for i in (10..1) do x -= i end"    >:: (fun _ ->
         assert_equal [(1, IntVal 0)]
           (eval_state [For ("i", Const 10, Const 1, [Assign (VarArray ("x", None), ModSub, Var "i")])] [("x", 1)] [] [(1, IntVal 55)]) );
-      "switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
+      (*"switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
         assert_equal [(1, IntVal 2)]
         (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
                              (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
@@ -230,7 +230,7 @@ let tests = "test suite for eval.ml" >::: [
                  Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
              [Skip], VarArray ("x", None))]
            [("x", 1)] [] [(1, IntVal 3)]) );
-           
+       *)    
       "call Plus1(result)"    >:: (fun _ ->
         assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
           (eval_state [LocalCall("Plus1", [Id "result"])]

@@ -37,7 +37,7 @@ let tests = "test suite for invert.ml" >::: [
       "for i in (1..10) do x += i end"  >::
         (fun _ -> assert_equal [For ("i", Const 10, Const 1, [Assign (VarArray ("x", None), ModSub, Var "i")])]
          (invert [For ("i", Const 1, Const 10, [Assign (VarArray ("x", None), ModAdd, Var "i")])] ) );
-      "switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"  >::
+      (*"switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"  >::
       (fun _ -> assert_equal [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
                                       (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
                                       [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))    ]
@@ -52,7 +52,7 @@ let tests = "test suite for invert.ml" >::: [
                                                 Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
                                                   Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)],
                                                     Const 8, Break)], [Skip], VarArray ("x", None))] ) );
-
+*)
       "construct Test t x += 1 destruct Test"  >::
         (fun _ -> assert_equal [ObjectBlock ("Test", "t", [Assign (VarArray("x", None), ModSub, Const 1)])]
                     (invert [ObjectBlock ("Test", "t", [Assign (VarArray("x", None), ModAdd, Const 1)])] ) );
