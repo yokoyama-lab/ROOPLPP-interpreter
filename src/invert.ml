@@ -22,41 +22,45 @@ let rec invert_stm stm = match stm with
      let rec invert_cases cases =
        let rec append_k cases =
          match cases with
-         | (c, e1, s, e2, b) :: tl ->
-            if b = Break then [(c, e1, s, e2, b)]
+         | ((c1, e1), s, (c2, e2, b)) :: tl ->
+            if b = Break then [((c1, e1), s, (c2, e2, b))]
             else
-              (c, e1, s, e2, b) :: append_k tl
+              ((c1, e1), s, (c2, e2, b)) :: append_k tl
          | _ -> failwith "not implemented"
        in
        let rec search_kn cases =
          match cases with
-         | (_, _, _, _, Break) :: tl -> tl
+         | ((_, _), _, (_, _, Break)) :: tl -> tl
          | _ :: tl -> search_kn tl
          | _ -> failwith "not implemented"
        in
        let invert_cases2 cases =
+         let cases1 = List.map (fun ((c1, e1), s, (c2, e2, b)) ->
+                          if c1 = Case && c2 = Esac then ((c1, e1), s, (c2, e2, b))
+                          else if c1 = Case && c2 = NoEsac then ((NoCase, e1), s, (Esac, e2, b))
+                          else ((Case, e1), s, (NoEsac, e2, b))
+                        ) cases in
          let cases2 =
-           match cases with
-           | (c, e1, s, e2, b) :: tl ->
-              List.rev((c, e1, s, e2, Break) :: tl)
+           match cases1 with
+           | ((c1, e1), s, (c2, e2, b)) :: tl ->
+              List.rev(((c1, e1), s, (c2, e2, Break)) :: tl)
            | _ -> failwith "not implemented"
          in
          match cases2 with
-         | (c, e1, s, e2, b) :: tl -> (c, e1, s, e2, NoBreak) :: tl
+         | ((c1, e1), s, (c2, e2, b)) :: tl -> ((c1, e1), s, (c2, e2, NoBreak)) :: tl
          | _ -> failwith "not implemented"
        in
        match cases with
        | [] -> []
        | [x] -> [x]
-       | (c, e1, s, e2, b) :: tl ->
-          if c = Case then (c, e1, s, e2, b) :: invert_cases tl
-          else if c = Fcase || c = Ecase then
+       | ((c1, e1), s, (c2, e2, b)) :: tl ->
+          if b = Break then ((c1, e1), s, (c2, e2, b)) :: invert_cases tl
+          else
             let cases_k, cases_kn = append_k cases, search_kn cases in
             invert_cases2 cases_k @ invert_cases cases_kn
-          else failwith "error in switch statement"
      in
      let cases2 =
-       List.map (fun (c, e1, s, e2, b) -> (c, e2, invert s, e1, b)) cases
+       List.map (fun ((c1, e1), s, (c2, e2, b)) -> ((c1, e2), invert s, (c2, e1, b))) cases
      in
      Switch(obj2, invert_cases cases2, invert stml, obj1)
   | ObjectBlock(tid, id, stml) ->

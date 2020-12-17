@@ -1,25 +1,16 @@
-class Test
-  method test(int x)
-  switch x
-    fcase 3: print("a") esac 3
-    fcase 4: print("b") esac 4
-    ecase 5: print("c") esac 5
-             break
-    default: skip
-    break
-  hctiws x
-
 class Program
-int x
-Test t
-  method main()
-  x ^= 3
-  new Test t
-  print("初期値：")
-  show(x) print("\n")
-  print("順実行:")
-  call t::test(x)
-  print("\n")
-  print("逆実行:")
-  uncall t::test(x)
-  print("\n")
+    int x
+    method main()
+        x ^= 7
+        print("順実行:") call test() print("\n")
+        print("逆実行:") uncall test() print("\n")
+
+    method test()
+        switch x
+            case 0 print("0") esac 0 break
+            case 1 print("a")
+            case 2 print("b")
+            case 3 print("c") esac 3:2:1 break
+            case 5 print("5") esac 5 break
+            default skip break
+        hctiws x

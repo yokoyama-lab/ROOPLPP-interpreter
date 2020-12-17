@@ -90,9 +90,9 @@ class LinkedList inherits List
 	
     method add(int index, int v)
 	switch index
-	    case 0:      call addFirst(v) esac 0 break
-	    case length: call addLast(v) esac length - 1 break
-	    default:     local Cell cell = nil
+	    case 0      call addFirst(v) esac 0 break
+	    case length call addLast(v) esac length - 1 break
+	    default     local Cell cell = nil
   	    		 new Cell cell
       	    		 cell.data ^= v
             		 local int i = 0
@@ -215,9 +215,9 @@ class DoublyLinkedList
 
     method add(int index, int v)
 	switch index
-	    case 0:      call addFirst(v) esac 0 break
-	    case length: call addLast(v) esac length - 1 break
-	    default:     local DoublyCell cell = nil
+	    case 0      call addFirst(v) esac 0 break
+	    case length call addLast(v) esac length - 1 break
+	    default     local DoublyCell cell = nil
   	    		 new DoublyCell cell
       	    		 cell.data ^= v
             		 local int i = 0

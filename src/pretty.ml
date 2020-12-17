@@ -85,13 +85,18 @@ pretty_stm stm n =
       (* switch追加部分 *)
     | Switch(obj1, cases, stml, obj2) ->
        let rec pretty_cases =
-         let pretty_case = function | Case -> "case" | Fcase -> "fcase" | Ecase -> "ecase" in
-         let pretty_break = function | Break -> " break " | NoBreak -> "" in
+         let pretty_case = function | Case -> "case" | NoCase -> "" in
+         let pretty_esac = function | Esac -> "esac" | NoEsac -> "" in
+         let rec pretty_exps = function
+         | [] -> ""
+         | [e] -> pretty_exp e
+         | e::tl -> pretty_exp e ^ ":" ^ pretty_exps tl in
+         let pretty_break = function | Break -> "break " | NoBreak -> "" in
          function
          | [] -> ""
-         | (c, e1, s, e2, b) :: tl -> pretty_case c ^ " " ^ pretty_exp e1 ^ ":\n" ^ pretty_stms s (n + 1) ^ indent (n + 1) ^ "esac " ^ pretty_exp e2 ^ "\n" ^ indent (n + 1) ^ pretty_break b ^ "\n" ^ indent n ^ pretty_cases tl
+         | ((c1, exps1), s, (c2, exps2, b)) :: tl -> pretty_case c1 ^ " " ^ pretty_exps exps1 ^ "\n" ^ pretty_stms s (n + 1) ^ indent (n + 1) ^ pretty_esac c2 ^ " " ^ pretty_exps exps2 ^ "\n" ^ indent (n + 1) ^ pretty_break b ^ "\n" ^ indent n ^ pretty_cases tl
        in
-       "switch " ^ pretty_obj obj1 ^ "\n" ^ indent n ^ pretty_cases cases ^ "default:\n" ^ pretty_stms stml (n + 1) ^ indent (n + 1) ^ "break\n" ^ indent n ^ "hctiws " ^ pretty_obj obj2
+       "switch " ^ pretty_obj obj1 ^ "\n" ^ indent n ^ pretty_cases cases ^ "default\n" ^ pretty_stms stml (n + 1) ^ indent (n + 1) ^ "break\n" ^ indent n ^ "hctiws " ^ pretty_obj obj2
     | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ pretty_stms stm (n + 1) ^ "\n" ^ indent n ^ "destruct " ^ id
     | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ pretty_dataType dataType ^ " " ^ id ^ " = " ^ pretty_exp exp1 ^ "\n" ^ pretty_stms stm n  ^ indent n ^ "delocal " ^ pretty_dataType dataType ^ " " ^ id ^ " = " ^ pretty_exp exp2
     | LocalCall(methodId, ids) -> "call " ^ methodId ^ "(" ^ pretty_actArgs ids ^ ")"

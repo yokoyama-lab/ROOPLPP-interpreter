@@ -316,58 +316,68 @@ let rec eval_state stml env map st0 =
        else failwith ((pretty_stms [stm] 0) ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
     (*追加部分SWITCH*)
     | Switch(obj1, cases, stml, obj2) ->
-       let rec search_case n cases cnt env st =
-         match cases with
-         | [] -> failwith ((pretty_stms [stm] 0) ^ "\nERROR:not match in this case statement")
-         | (c, e, s, e', b) :: tl ->
-            if n = (eval_exp e env st) then (c, e, s, e', b), cnt
-            else search_case n tl (cnt + 1) env st
+       let rec eval_cases obj1 ((((c1, q1), s1, (p1, q'1, b1))::tl) as cs) s obj2 env map st =
+         let  isMatch obj q env st =
+           if List.length q = 0 then false
+           else
+             let locs, _ = lval_val obj env in
+             let v = lookup_st locs st in
+               List.exists (fun x -> let n = eval_exp x env st in n = v) q
+         in
+         let rec search_break = function
+           | ((_, _), s, (_, q', b))::tl ->
+              if b = Break then [(s,q')] else
+                (s,q') :: search_break tl
+           | [] -> failwith "ERROR: switch statement"
+         in
+         let rec eval_case1 sq obj2 length env map st =
+           match sq with
+           | [(s,q)] -> let st2 = eval_state s env map st in
+                        let locs, _ = lval_val obj2 env in
+                        let v = lookup_st locs st2 in
+                        if v = eval_exp (List.nth q (length - 1)) env st then
+                          st2
+                        else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:should be " ^ pretty_exp (List.nth q (length - 1)) ^ " in this switch statement")
+           | (s,_) :: tl -> let st2 = eval_state s env map st in                            
+                            eval_case1 tl obj2 length env map st2
+         in
+         let rec eval_case2 obj1 q1 sq obj2 n env map st =
+           let rec countMatch obj1 q n env st =
+             let _, v = lval_val obj1 env in
+             match q with
+             | [] -> failwith "ERROR switch3"
+             | e::tl -> if v = eval_exp e env st then n
+                        else countMatch obj1 tl (n + 1) env st
+           in
+           let count = countMatch obj1 q1 1 env st in
+           match sq with
+           | [] -> failwith "ERROR switch4"
+           | (s,(e::tl0))::tl ->
+              if count = n then
+                let st2 = eval_state s env map st in
+                let locs, _ = lval_val obj2 env in
+                let v = lookup_st locs st2 in
+                if v = eval_exp e env st then st2
+                else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:should be " ^ pretty_exp e ^ " in this switch statement")
+              else
+                let st2 = eval_state s env map st in
+                eval_case2 obj1 q1 tl obj2 (n + 1) env map st2
+         in
+         if List.length q1 = 1 && List.length q'1 = 1 && isMatch obj1 q1 env st then
+           let st2 = eval_state s1 env map st in
+           if isMatch obj2 q'1 env st2 then st2
+           else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:should be " ^ pretty_exp (List.hd q'1)  ^ " in this switch statement")
+         else if ((List.length q1 = 1 && p1 = NoEsac) || (List.length q'1 >= 2)) && isMatch obj1 q1 env st then
+           let sq = search_break cs in
+           eval_case1 sq obj2 (List.length sq) env map st
+         else if List.length q1 >= 2 && isMatch obj1 q1 env st then
+           let sq = search_break cs in
+           eval_case2 obj1 q1 sq obj2 1 env map st
+         else if List.length cs = 1 && not (isMatch obj1 q1 env st) then
+           eval_state s env map st
+         else eval_cases obj1 tl s obj2 env map st
        in
-       let rec search_ecase cases n cnt =
-         match cases with
-         | [] -> failwith "ERROR:not match in ecase"
-         | (c, _, _, _, _) :: tl ->
-              if (c = Ecase) && (cnt > n) then cnt
-              else search_ecase tl n (cnt + 1)
-       in
-       let rec search_state cases k j =
-         let (_, _, stm, _, _) = List.nth cases k in
-         if k = j then stm
-         else stm @ (search_state cases (k + 1) j)
-       in
-       let rec eval_case j k cases env map st =
-         if k = - 1 then
-           let m = search_ecase cases j 0 in
-           eval_state (search_state cases j m) env map st
-         else
-         let (ck, _, _, _, bk) = List.nth cases k in
-         match ck, bk with
-         | Ecase, _ -> eval_state (search_state cases k j) env map st
-         | _ , Break ->
-            let m = search_ecase cases j 0 in
-            eval_state (search_state cases j m) env map st
-         | _ ->  eval_case j (k - 1) cases env map st
-       in
-       let _, v1 = lval_val obj1 env in
-       let v2_locs, _ = lval_val obj2 env in
-       let (c, e, s, e', b), index =
-         try search_case v1 cases 0 env st with
-           Failure str -> let (_, e, _, e', b) = List.hd(List.rev cases) in
-                          (Case, e, stml, e', b), -1
-       in
-       let st2 =
-         begin
-         match c with
-         | Fcase -> eval_case index (index - 1) cases env map st
-         | _ -> eval_state s env map st
-         end
-       in
-       if index = -1 then
-         if lookup_st v2_locs st2 <> eval_exp e' env st2 then st2
-         else failwith (pretty_stms [stm] 0 ^ "\nERROR:default assertion is incorrect in this switch statement")
-       else if lookup_st v2_locs st2 = eval_exp e' env st2 then st2
-       else
-         failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect when " ^ (pretty_obj obj1) ^ " = " ^ (pretty_exp e) ^ " in this switch statement")
+       eval_cases obj1 cases stml obj2 env map st
     | Conditional(e1, stml1, stml2, e2) ->           (* if e1 then s1 else s2 fi e2 *)
        (*IFTRUE*)
        if isTrue (eval_exp e1 env st) then     (* ?e1 != 0(true)  *)

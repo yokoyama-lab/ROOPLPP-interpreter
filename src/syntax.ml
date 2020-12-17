@@ -61,8 +61,12 @@ type arg =
 (**case文で使われる*)
 type case =
   | Case
-  | Fcase
-  | Ecase
+  | NoCase
+
+(**case文で使われる*)
+type esac =
+  | Esac
+  | NoEsac
 
 (**case文で使われるbreak*)
 type break =
@@ -77,7 +81,7 @@ type stm =
   | Conditional of exp * stm list * stm list * exp (**if e then s else s fi e  or  if e then s fi e*)
   | Loop of exp * stm list * stm list * exp (**from e do s loop s until e or   or  from e do s until e  or  from e loop s until e*)
   | For of id * exp * exp * stm list  (**for x in (e..e) do s end*)(*追加部分for*)
-  | Switch of obj * (case * exp * stm list * exp * break) list * stm list * obj (**switch y case e s esac e break hctiws y*) (*追加部分switch*) 
+  | Switch of obj * ((case * exp list) * stm list * (esac * exp list * break)) list * stm list * obj (**switch y case e s esac e break hctiws y*) (*追加部分switch*) 
   | ObjectBlock of typeId * id * stm list (**construct c x  s  destruct x*)
   | LocalBlock of dataType * id * exp * stm list * exp (**local t x = e s delocal t x = e*)
   | LocalCall of methodId * arg list (**call q(e, ... , e)*)

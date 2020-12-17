@@ -173,10 +173,18 @@ anyId:
   | anyId DOT anyId  { InstVar($1, $3) }
 
 // 追加部分switch
+exps1:
+  | exps1 COLON exp { $1 @ [$3] }
+  | exp             { [$1] }
+
 case:
-  | CASE  { Case  }
-  | FCASE { Fcase }
-  | ECASE { Ecase }
+  | CASE exps1 { Case, $2   }
+  |            { NoCase, [] }
+
+esac:
+  | ESAC exps1 BREAK  { Esac, $2, Break     }
+  | ESAC exps1        { Esac, $2, NoBreak   }
+  |                   { NoEsac, [], NoBreak }
 
 break:
   | BREAK { Break  }
@@ -187,8 +195,8 @@ switchs1:
   | switch          { [$1] }
 
 switch:
-  | case exp COLON stms1 ESAC exp break
-    { $1, $2, $4, $6, $7 }
+  | case stms1 esac
+    { $1, $2, $3 }
 
 // statement
 stms1:
@@ -206,8 +214,8 @@ stm:
   | FOR ID IN LPAREN exp WDOT exp RPAREN DO stms1 END // for x in (e..e) do s end
     { For($2, $5, $7, $10 ) }
   // 追加部分switch
-  | SWITCH anyId switchs1 DEFAULT COLON stms1 BREAK HCTIWS anyId
-    { Switch($2,$3,$6,$9) }
+  | SWITCH anyId switchs1 DEFAULT stms1 BREAK HCTIWS anyId
+    { Switch($2, $3, $5, $8) }
   | CALL methodName LPAREN anyIds RPAREN
     { LocalCall($2, $4) } // call q(x, ... , x)
   | UNCALL methodName LPAREN anyIds RPAREN
