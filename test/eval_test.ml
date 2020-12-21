@@ -180,57 +180,156 @@ let tests = "test suite for eval.ml" >::: [
       "for i in (10..1) do x -= i end"    >:: (fun _ ->
         assert_equal [(1, IntVal 0)]
           (eval_state [For ("i", Const 10, Const 1, [Assign (VarArray ("x", None), ModSub, Var "i")])] [("x", 1)] [] [(1, IntVal 55)]) );
-      (*"switch x(1) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
-        assert_equal [(1, IntVal 2)]
-        (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
-                             (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
-                             [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
-         [("x", 1)] [] [(1, IntVal 1)]) );
-      "switch x(2) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 1)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 0)]) );
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
         assert_equal [(1, IntVal 4)]
-        (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
-                             (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
-                             [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
-         [("x", 1)] [] [(1, IntVal 2)]) );
-      "switch x(3) case 1: x += 1 esac 2 break case 2: x += 2 esac 4 break default: x += 10 break"    >:: (fun _ ->
-          assert_equal [(1, IntVal 13)]
-          (eval_state [Switch (VarArray ("x", None), [(Case, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 1)], Const 2, Break);
-                               (Case, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 2)], Const 4, Break)], 
-                               [Assign (VarArray ("x", None), ModAdd, Const 10)], VarArray ("x", None))] 
-           [("x", 1)] [] [(1, IntVal 3)]) );
-        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
-          assert_equal [(1, IntVal 11)]
-          (eval_state
-           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
-               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
-                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
-             [Skip], VarArray ("x", None))]
-           [("x", 1)] [] [(1, IntVal 1)]) );
-        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
-          assert_equal [(1, IntVal 11)]
-          (eval_state
-           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
-               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
-                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
-             [Skip], VarArray ("x", None))]
-           [("x", 1)] [] [(1, IntVal 1)]) );
-        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
-          assert_equal [(1, IntVal 10)]
-          (eval_state
-           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
-               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
-                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
-             [Skip], VarArray ("x", None))]
-           [("x", 1)] [] [(1, IntVal 2)]) );
-        "switch x fcase 1: x += 2 esac 11 fcase 2: x += 3 esac 10 ecase 3: x += 5 esac 8 break default : skip break hctiws x"    >:: (fun _ ->
-          assert_equal [(1, IntVal 8)]
-          (eval_state
-           [Switch (VarArray ("x", None), [(Fcase, Const 1, [Assign (VarArray ("x", None), ModAdd, Const 2)],
-               Const 11, NoBreak); (Fcase, Const 2, [Assign (VarArray ("x", None), ModAdd, Const 3)],
-                 Const 10, NoBreak); (Ecase, Const 3, [Assign (VarArray ("x", None), ModAdd, Const 5)], Const 8, Break)],
-             [Skip], VarArray ("x", None))]
-           [("x", 1)] [] [(1, IntVal 3)]) );
-       *)    
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 1)]) );
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 5)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 3)]) );
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 6)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 5)]) );
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 7)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 6)]) );
+      "switch x case 0 x += 1 esac 1 break case 1 x += 1 case 3 x += 1 case 5 x += 1 esac 6:5:4 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 8)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 0]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 1]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 3]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.NoEsac, [], Syntax.NoBreak));
+        ((Syntax.Case, [Syntax.Const 5]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModAdd, Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 7], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 8)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 0)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 1)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 5)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 6)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 3)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 5)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 1)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 4)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 6)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 7)]) );
+      "switch x case 1 x -= 1 esac 0 break case 6:5:4 x -= 1 esac 5 x -= 1 esac 3 x -= 1 esac 1 break case 
+      7 x -= 1 esac 6 break default skip break hctiws x"
+          >:: (fun _ ->
+        assert_equal [(1, IntVal 8)]
+          (eval_state [Syntax.Switch (Syntax.VarArray ("x", None), [((Syntax.Case, [Syntax.Const 1]),
+         [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 0], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 6; Syntax.Const 5; Syntax.Const 4]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 5], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 3], Syntax.NoBreak));
+        ((Syntax.NoCase, []), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 1], Syntax.Break));
+        ((Syntax.Case, [Syntax.Const 7]), [Syntax.Assign (Syntax.VarArray ("x", None), Syntax.ModSub,
+           Syntax.Const 1)], (Syntax.Esac, [Syntax.Const 6], Syntax.Break))], [Syntax.Skip], Syntax.VarArray ("x", None))] 
+        [("x", 1)] [] [(1, IntVal 8)]) );
       "call Plus1(result)"    >:: (fun _ ->
         assert_equal [(1, IntVal 1); (2, LocsVal 3); (3, ObjVal ("Program", [("result", 1); ("this", 2)]))]
           (eval_state [LocalCall("Plus1", [Id "result"])]
