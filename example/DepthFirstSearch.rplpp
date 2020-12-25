@@ -97,11 +97,16 @@ class Program
         node2Value += 22
         node3Value += 33
         node4Value += 44
-        call dummy::constructor(dummyValue, node1, empty, empty)
-        call node1::constructor(node1Value, node2, empty, dummy)
+        call dummy::setValue(dummyValue)
+        call dummy::setLeftChild(node1)
+        call node1::setValue(node1Value)
+        call node1::setLeftChild(node2)
+        call node1::setParent(dummy)
         call node2::constructor(node2Value, node3, node4, node1)
-        call node3::constructor(node3Value, empty, empty, node2)
-        call node4::constructor(node4Value, empty, empty, node2)
+        call node3::setValue(node3Value)
+        call node3::setParent(node2)
+        call node4::setValue(node4Value)
+        call node4::setParent(node2)
 
         new Tree tree
         key += 44
