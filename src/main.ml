@@ -2,11 +2,10 @@ open Print
 open Eval
 open Pretty
 open Invert
+
 let parse str =
   Parser.main Lexer.token
     (Lexing.from_channel str)
-
-let pretty prog = pretty_prog prog
 
 let eval prog = print_result(eval_prog prog)
 let eval_lib lib prog = print_result(eval_prog ~library0:lib prog)
@@ -19,7 +18,7 @@ let () =
     [("-inverse", Arg.Set inv, "inversion");
      ("-library", Arg.Set lib, "library")]
     (fun s -> files := !files @ [s])
-    ("ROOPLPP interpreter");
+    "ROOPLPP interpreter";
   match !files with
   | [file_name] ->
      let channel = open_in file_name in

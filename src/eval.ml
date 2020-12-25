@@ -47,8 +47,8 @@ let rec lookup_vec index vec =
 (**演算子、式を受け取り、演算をする関数*)
 let bin_op f v1 v2 =
   match v1, v2 with
-    | IntVal(n1), IntVal(n2) -> IntVal(f n1 n2)
-    | _ -> failwith "ERROR:integer values expected"
+  | IntVal(n1), IntVal(n2) -> IntVal(f n1 n2)
+  | _ -> failwith "ERROR:integer values expected"
 
 (**bin_op同様．関係演算子専用*)
 let rel_op op v1 v2 =
@@ -125,7 +125,7 @@ let rec eval_exp exp env st =
        | Ge   -> comp_op (>=)
      in
      try f b (eval_exp e1 env st) (eval_exp e2 env st) with
-     | Failure e -> failwith (pretty_exp exp ^ "\n" ^ (e ^ " in this expression"))
+     | Failure e -> failwith (pretty_exp exp ^ "\n" ^ e ^ " in this expression")
 
 (**ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る*)
 let rec gen_locsvec n locs =
@@ -191,7 +191,7 @@ let rec ext_env_field f n =
 第三引数にマップ、第四引数にストアを受け取り、更新されたストアを返す．*)
 let rec eval_state stml env map st0 =
   (** ストアのロケーションの最大値を求める *)
-  let max_locs st = List.fold_left (fun x y -> if x < y then y else x) 0 (List.map fst st) in
+  let max_locs st = List.fold_left max 0 (List.map fst st) in
   let isTrue = function
     | IntVal(0) -> false
     | IntVal(_) -> true
@@ -221,7 +221,7 @@ let rec eval_state stml env map st0 =
        match locs with
          LocsVal(l) ->
           begin
-            match (lookup_st l st) with
+            match lookup_st l st with
             | ObjVal(c, env') ->
                let li, v = lval_val xi env' in
                li, v
@@ -307,13 +307,13 @@ let rec eval_state stml env map st0 =
            let st3 = eval_state stml env map st2 in               (* stml1回実行 *)
            for_con (x, (Const v, Const n2), stml) env map st3     (* 再帰 *)
        in
-       let locs = (max_locs st) + 1 in                            (* 未使用のロケーションを取得 *)
+       let locs = max_locs st + 1 in                            (* 未使用のロケーションを取得 *)
        let env2 = ext_envs env x locs in                          (* γ[x->l] *)
        let st2 = ext_st st locs (eval_exp e1 env st) in           (* μ[l->n1 *)
        let st3 = eval_state stml env2 map st2 in                  (*stml1回実行*)
        if (lookup_val x env2 st2) = (lookup_val x env2 st3) then
          for_con (x, (e1, e2), stml) env2 map st3                 (*意味関数Fへ*)
-       else failwith ((pretty_stms [stm] 0) ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
+       else failwith (pretty_stms [stm] 0 ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
     (*追加部分SWITCH*)
     | Switch(obj1, cases, stml, obj2) ->
        let rec eval_cases obj1 ((((c1, q1), s1, (p1, q'1, b1))::tl) as cs) s obj2 env map st =
@@ -326,8 +326,7 @@ let rec eval_state stml env map st0 =
          in
          let rec search_break = function
            | ((_, _), s, (_, q', b))::tl ->
-              if b = Break then [(s,q')] else
-                (s,q') :: search_break tl
+              (s,q') :: if b = Break then [] else search_break tl
            | [] -> failwith "ERROR: switch statement"
          in
          let rec eval_case1 sq obj2 length env map st =
@@ -586,10 +585,10 @@ let rec map_method clist1 cl =
          then remove_method subm tl
          else MDecl(mid, dl, stml) :: remove_method subm tl
     in
-    (remove_method subm parem) @ subm
+    remove_method subm parem @ subm
   in
   match cl with
-  | CDecl(id, None, fl, m) -> m
+  | CDecl(_, None, _, m) -> m
   | CDecl(id, Some(cid), fl, m) ->
      let parent_class = lookup_class_map clist1 cid in (*a^-1(c')*)
      let parent_method = map_method clist1 parent_class in
@@ -603,7 +602,7 @@ let gen_map clist =
     match clist2 with
     | [] -> []
     | cl :: tl ->
-       (lookup_cid cl, (map_field clist1 cl, map_method clist1 cl)) :: (gen_map2 clist1 tl)
+       (lookup_cid cl, (map_field clist1 cl, map_method clist1 cl)) :: gen_map2 clist1 tl
   in
   gen_map2 clist clist
 
@@ -617,17 +616,11 @@ let rec lookup_class id1 map =
     | [] -> None
   in
   match map with
+  | [] -> failwith ("ERROR:class " ^ id1 ^ " was not found")
   | (cid, (fl, ml)) :: tl1 ->
-     let result =  (lookup_class_2 id1 ml) in
-     if result = None
-     then lookup_class id1 tl1
-     else
-       begin
-         match result with
-         | Some(stm) -> (cid, stm)
-         | _ -> failwith ("ERROR:method " ^ id1 ^ "is not exist")
-       end
-  | [] -> failwith ("ERROR:class " ^ id1 ^ " was found")
+     match lookup_class_2 id1 ml with
+     | None -> lookup_class id1 tl1
+     | Some(stm) -> (cid, stm)
 
 (**プログラムを実行する関数（クラスリストを受け取り、環境とストアの組を返す）*)
 let eval_prog ?(library0 = Prog []) (Prog(cl)) =
