@@ -1,0 +1,24 @@
+/* ==========================================================================
+   Object
+   ========================================================================== */
+
+/* Utility
+   ----------------------------------------------------------------- */
+
+/**
+ * 位置
+ */
+.align-center {
+    text-align: center;
+}
+
+.align-center--byflex {
+    display: flex;
+    flex-flow: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.align-center--important {
+    text-align: center !important;
+}

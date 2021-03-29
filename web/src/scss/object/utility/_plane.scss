@@ -1,0 +1,78 @@
+/* ==========================================================================
+   Object
+   ========================================================================== */
+
+/* Utility
+   ----------------------------------------------------------------- */
+
+/**
+ * プレーンテキスト
+ */
+p {
+    &.smaller {
+        font-size: smaller;
+    }
+    &.small {
+        font-size: small;
+    }
+    &.medium {
+        font-size: medium;
+    }
+    &.large {
+        font-size: large;
+    }
+    &.bold {
+        font-weight: bold;
+    }
+}
+span {
+    &.smaller {
+        font-size: smaller;
+    }
+    &.small {
+        font-size: small;
+    }
+    &.medium {
+        font-size: medium;
+    }
+    &.large {
+        font-size: large;
+    }
+    &.bold {
+        font-weight: bold;
+    }
+}
+dt {
+    &.smaller {
+        font-size: smaller;
+    }
+    &.small {
+        font-size: small;
+    }
+    &.medium {
+        font-size: medium;
+    }
+    &.large {
+        font-size: large;
+    }
+    &.bold {
+        font-weight: bold;
+    }
+}
+h3 {
+    &.smaller {
+        font-size: smaller;
+    }
+    &.small {
+        font-size: small;
+    }
+    &.medium {
+        font-size: medium;
+    }
+    &.large {
+        font-size: large;
+    }
+    &.bold {
+        font-weight: bold;
+    }
+}
