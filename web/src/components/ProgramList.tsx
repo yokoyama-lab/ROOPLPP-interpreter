@@ -1,4 +1,7 @@
 import React from 'react';
+import Button from '@material-ui/core/Button';
+import Menu from '@material-ui/core/Menu';
+import MenuItem from '@material-ui/core/MenuItem';
 
 interface ProgramListProps {
   onExampleChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
@@ -9,7 +12,6 @@ interface ProgramListProps {
 // {algorithmName: ページ上での表示名, algorithmSrc: サーバ上でのファイル名}
 // を下記配列に追加
 const PROGRAME_EXAMPLE_LIST: { algorithmName: string, algorithmSrc: string }[] = [
-  { algorithmName: '(none)', algorithmSrc: '' }, // セレクトボックスのダミー選択肢として
   { algorithmName: 'Fibonacci', algorithmSrc: 'fib.rplpp' },
   { algorithmName: 'Square root', algorithmSrc: 'sqrt.rplpp' },
   { algorithmName: 'Factorization', algorithmSrc: 'factor.rplpp' },
@@ -22,27 +24,42 @@ const PROGRAME_EXAMPLE_LIST: { algorithmName: string, algorithmSrc: string }[] =
 
 // プログラム例の一覧
 export default function ProgramList(props: ProgramListProps) {
-  const listItems = PROGRAME_EXAMPLE_LIST.map((programExample) =>
-    <li
-      onClick={() => props.onClick(programExample.algorithmSrc)}>
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const menuItems = PROGRAME_EXAMPLE_LIST.map((programExample) =>
+    <MenuItem
+      onClick={() => {
+        props.onClick(programExample.algorithmSrc)
+        handleClose()
+      }}
+    >
       {programExample.algorithmName}
-    </li>
+    </MenuItem>
   );
   return (
-    <select name="example" onChange={props.onExampleChange}>
-      {(() => {
-        const programs: JSX.Element[] = [];
-        PROGRAME_EXAMPLE_LIST.map((program) => {
-          programs.push(
-            <option
-              key={program.algorithmName}
-              value={program.algorithmSrc}>
-              {program.algorithmName}
-            </option>
-          );
-        });
-        return programs;
-      })()}
-    </select>
+    <>
+      <div>
+        <Button aria-controls="Example-menu" aria-haspopup="true" onClick={handleClick}>
+          Example
+        </Button>
+        <Menu
+          id="Example-menu"
+          anchorEl={anchorEl}
+          keepMounted
+          open={Boolean(anchorEl)}
+          onClose={handleClose}
+        >
+          {menuItems}
+        </Menu>
+      </div>
+    </>
   );
 }

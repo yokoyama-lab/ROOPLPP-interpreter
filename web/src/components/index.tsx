@@ -1,16 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import AceEditor from 'react-ace';
+import axios from 'axios';
+import className from 'classnames';
+
 import AppBar from '@material-ui/core/AppBar';
 import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography';
 import Button from '@material-ui/core/Button';
 import PlayCircleOutlineIcon from '@material-ui/icons/PlayCircleOutline';
-import axios from 'axios';
+import IconButton from '@material-ui/core/IconButton';
+import CloseIcon from '@material-ui/icons/Close';
 
 import ProgramList from './ProgramList';
 import Option from './Option';
-import Result from './Result';
 
 import '../scss/index.scss';
 
@@ -73,17 +76,13 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
         library: this.state.option.isImportLibrary ? 1 : 0,
       }
     }).then(response => {
-      console.log(response);
       const state = Object.assign({}, this.state, { result: { value: response.data[0], isActive: true } });
       this.setState(state);
     }).catch(err => {
-      console.log('err: ', err);
+      console.error('err: ', err);
       const state = Object.assign({}, this.state, { result: { value: err, isActive: true } });
       this.setState(state);
     });
-
-    console.log(this.state);
-
   }
 
   // プログラムサンプルリストのアイテムがクリックされた時の処理
@@ -188,45 +187,81 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
             </Button>
             { // プログラム例のリスト
             }
-            <ProgramList
-              onExampleChange={(event: React.ChangeEvent<HTMLSelectElement>) => this.handleExampleChange(event)}
-              onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)}
-            />
+            <div className="margin-left-xxxl--important">
+              <ProgramList
+                onExampleChange={(event: React.ChangeEvent<HTMLSelectElement>) => this.handleExampleChange(event)}
+                onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)}
+              />
+            </div>
+
             { // オプション選択部分
             }
-            <Option
-              option={this.state.option}
-              onChange={this.handleOptionChange.bind(this)}
-            />
+            <div className="margin-left-4xl--important">
+              <Option
+                option={this.state.option}
+                onChange={this.handleOptionChange.bind(this)}
+              />
+            </div>
+
           </Toolbar>
         </AppBar>
 
         { // エディタ部分 
         }
-        <div id="ace-editor">
+        <div id="ace-editor" className={this.state.result.isActive == true ? "is-result-open" : ""}>
           <AceEditor
             // TO-DO: mode="rooplppを作成する"
             // mode="java"
-            theme="github"
+            theme="tomorrow"
             name="rooplpp_program"
             value={this.state.program}
             editorProps={{ $blockScrolling: true }}
-            onChange={(newValue: string) => this.handleEditorChange(newValue)}
             width="100%"
             height="100%"
             fontSize={14}
             showPrintMargin={true}
             showGutter={true}
             highlightActiveLine={true}
+            onLoad={editorInstance => {
+              editorInstance.container.style.resize = "both";
+              // mouseup = css resize end
+              document.addEventListener("mouseup", e => (
+                editorInstance.resize()
+              ));
+            }}
+            onChange={(newValue: string) => this.handleEditorChange(newValue)}
           />
         </div>
 
         { // 計算結果表示部分
         }
-        <Result
-          result={this.state.result}
-          onResultHideBtnClick={() => this.handleResultHideClick()}
-        />
+        <div id="result" className={
+          className(
+            "background-color-grey",
+            {
+              "active": this.state.result.isActive,
+            })
+        }>
+          {// 閉じるボタン
+          }
+          <IconButton
+            aria-label="close"
+            size="small"
+            edge={false}
+            onClick={() => this.handleResultHideClick()}
+          >
+            <CloseIcon />
+          </IconButton>
+
+          {// 結果
+          }
+          <textarea
+            disabled
+            readOnly={true}
+            value={this.state.result.value}
+            className="background-color-white"
+          />
+        </div>
 
       </>
     );

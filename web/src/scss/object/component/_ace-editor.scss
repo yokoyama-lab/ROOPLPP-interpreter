@@ -2,4 +2,12 @@
     width: 100%;
     height: -webkit-calc(100% - 64px);
     height: calc(100% - 64px);
+
+    &.is-result-open {
+        height: -webkit-calc(60% - 64px);
+        height: calc(60% - 64px);
+
+        z-index: 5;
+        box-shadow: 0 8px 3px -3px #000;
+    }
 }
