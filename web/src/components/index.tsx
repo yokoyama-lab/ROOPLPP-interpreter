@@ -22,7 +22,7 @@ import '../scss/index.scss';
 // import "ace-builds/src-noconflict/mode-java";
 
 // ace-editorのテーマ
-import "ace-builds/src-noconflict/theme-github";
+import "ace-builds/src-noconflict/theme-tomorrow";
 
 // ドメイン名を取得
 // 非同期通信での送信先URLの生成に使用

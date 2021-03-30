@@ -36,6 +36,7 @@ export default function ProgramList(props: ProgramListProps) {
 
   const menuItems = PROGRAME_EXAMPLE_LIST.map((programExample) =>
     <MenuItem
+      key={programExample.algorithmName}
       onClick={() => {
         props.onClick(programExample.algorithmSrc)
         handleClose()
