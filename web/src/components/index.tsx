@@ -10,6 +10,7 @@ import Button from '@material-ui/core/Button';
 import PlayCircleOutlineIcon from '@material-ui/icons/PlayCircleOutline';
 import IconButton from '@material-ui/core/IconButton';
 import CloseIcon from '@material-ui/icons/Close';
+import CssBaseline from '@material-ui/core/CssBaseline';
 
 import ProgramList from './ProgramList';
 import Option from './Option';
@@ -163,6 +164,10 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
   render() {
     return (
       <>
+        {// CSSリセット
+        }
+        <CssBaseline />
+        
         <AppBar position="sticky" color="inherit">
           <Toolbar>
             <Typography variant="h6">Roopl++ Online Interpreter</Typography>
