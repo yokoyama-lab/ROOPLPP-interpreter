@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import AceEditor from 'react-ace';
 import axios from 'axios';
 import className from 'classnames';
 
@@ -14,15 +13,9 @@ import CloseIcon from '@material-ui/icons/Close';
 
 import ProgramList from './ProgramList';
 import Option from './Option';
+import Editor from './Editor';
 
 import '../scss/index.scss';
-
-// TO-DO: mode="rooplppを作成する"
-// ace-editorのシンタックスハイライト
-// import "ace-builds/src-noconflict/mode-java";
-
-// ace-editorのテーマ
-import "ace-builds/src-noconflict/theme-tomorrow";
 
 // ドメイン名を取得
 // 非同期通信での送信先URLの生成に使用
@@ -208,30 +201,11 @@ class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, 
 
         { // エディタ部分 
         }
-        <div id="ace-editor" className={this.state.result.isActive == true ? "is-result-open" : ""}>
-          <AceEditor
-            // TO-DO: mode="rooplppを作成する"
-            // mode="java"
-            theme="tomorrow"
-            name="rooplpp_program"
-            value={this.state.program}
-            editorProps={{ $blockScrolling: true }}
-            width="100%"
-            height="100%"
-            fontSize={14}
-            showPrintMargin={true}
-            showGutter={true}
-            highlightActiveLine={true}
-            onLoad={editorInstance => {
-              editorInstance.container.style.resize = "both";
-              // mouseup = css resize end
-              document.addEventListener("mouseup", e => (
-                editorInstance.resize()
-              ));
-            }}
-            onChange={(newValue: string) => this.handleEditorChange(newValue)}
-          />
-        </div>
+        <Editor 
+          isResultActive={this.state.result.isActive}
+          program={this.state.program}
+          onChange={(newValue: string) => this.handleEditorChange(newValue)}
+        />
 
         { // 計算結果表示部分
         }
