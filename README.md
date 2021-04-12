@@ -9,7 +9,7 @@ An interpreter for ROOPLPP in OCaml
  + extlib
  + OUnit(テストケースを実行する場合)
 
-+ node(オンラインインタープリタを使用する場合)
++ npm(オンラインインタープリタを使用する場合)
 
 ## Linux Ubuntuにてインストール例
 + 本リポジトリをダウンロード
