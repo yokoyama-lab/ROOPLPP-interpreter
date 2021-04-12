@@ -34,3 +34,4 @@ _opam/
 
 .DS_Store
 web/programs
+web/dist
