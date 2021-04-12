@@ -9,6 +9,8 @@ An interpreter for ROOPLPP in OCaml
  + extlib
  + OUnit(テストケースを実行する場合)
 
++ node(オンラインインタープリタを使用する場合)
+
 ## Linux Ubuntuにてインストール例
 + 本リポジトリをダウンロード
 ```
@@ -61,6 +63,13 @@ mkdir programs
 ```
 mkdir program
 chmod 777 programs
+```
+
++ フロント側で使用するファイルを作成
+
+```
+npm install
+npm run build
 ```
 
 + ディレクトリweb内で以下のコマンドを打ち,ローカルサーバを起動
