@@ -23,7 +23,7 @@ import Editor from './Editor';
 
 import '../scss/index.scss';
 
-// ドメイン名を取得
+// URLを取得(パラメータを除く)
 // 非同期通信での送信先URLの生成に使用
 const HOSTNAME = document.URL.split('?')[0];
 
