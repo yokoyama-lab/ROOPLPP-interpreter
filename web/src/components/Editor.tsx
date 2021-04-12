@@ -27,26 +27,24 @@ export default function Editor(props: Props) {
   );
 
   return (
-    <div id="ace-editor" className={props.isResultActive == true ? "is-result-open" : ""}>
-      <AceEditor
-        // TO-DO: mode="rooplppを作成する"
-        theme="tomorrow"
-        mode="c_cpp"
-        name="rooplpp_program"
-        value={props.program}
-        editorProps={{ $blockScrolling: true }}
-        width="100%"
-        height="100%"
-        fontSize={14}
-        showPrintMargin={true}
-        showGutter={true}
-        highlightActiveLine={true}
-        onLoad={editorInstance => {
-          editorInstance.container.style.resize = "both";
-          setEditor(editorInstance) // コンポーネントロード時にstateにセット
-        }}
-        onChange={props.onChange}
-      />
-    </div>
+    <AceEditor
+      // TO-DO: mode="rooplppを作成する"
+      theme="tomorrow"
+      mode="c_cpp"
+      name="rooplpp_program"
+      value={props.program}
+      editorProps={{ $blockScrolling: true }}
+      width="100%"
+      height="100%"
+      fontSize={14}
+      showPrintMargin={true}
+      showGutter={true}
+      highlightActiveLine={true}
+      onLoad={editorInstance => {
+        editorInstance.container.style.resize = "both";
+        setEditor(editorInstance) // コンポーネントロード時にstateにセット
+      }}
+      onChange={props.onChange}
+    />
   );
 }

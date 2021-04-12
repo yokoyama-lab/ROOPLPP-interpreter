@@ -4,7 +4,6 @@ import Menu from '@material-ui/core/Menu';
 import MenuItem from '@material-ui/core/MenuItem';
 
 interface ProgramListProps {
-  onExampleChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   onClick: (algorithmSrc: string) => void
 }
 

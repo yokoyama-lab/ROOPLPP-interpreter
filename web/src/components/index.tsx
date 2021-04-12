@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import axios from 'axios';
 import className from 'classnames';
 
 import AppBar from '@material-ui/core/AppBar';
@@ -10,7 +9,13 @@ import Button from '@material-ui/core/Button';
 import PlayCircleOutlineIcon from '@material-ui/icons/PlayCircleOutline';
 import IconButton from '@material-ui/core/IconButton';
 import CloseIcon from '@material-ui/icons/Close';
+import ShareIcon from '@material-ui/icons/Share';
 import CssBaseline from '@material-ui/core/CssBaseline';
+import Popover from '@material-ui/core/Popover';
+import TextField from '@material-ui/core/TextField';
+
+import getFire from '../common/getFire';
+import postFire from '../common/postFire';
 
 import ProgramList from './ProgramList';
 import Option from './Option';
@@ -20,233 +25,278 @@ import '../scss/index.scss';
 
 // ドメイン名を取得
 // 非同期通信での送信先URLの生成に使用
-const HOSTNAME = document.URL;
+const HOSTNAME = document.URL.split('?')[0];
 
-type OptionIndex = 'isInvert' | 'isImportLibrary';
-interface RooplppWebInterpreterProps {
-}
-interface RooplppWebInterpreterState {
-  program: string
-  result: {
-    value: string
-    isActive: boolean
-  }
-  option: {
-    [key in OptionIndex]: boolean
-  }
-  example?: string // 例の表示をselectで行う間の仮のもの
-}
+function App() {
+  const [program, setProgram] = useState(''); // エディタに記述したrooplppプログラム
+  const [result, setResult] = useState(''); // rooplppプログラムの計算結果
+  const [isResultOpen, setIsResultOpen] = useState(false) // 計算結果表示部分を表示しているかのフラグ
+  const [isInvert, setIsInvert] = useState(false) // オプション Invert
+  const [isImportLibrary, setIsImportLibrary] = useState(false) // オプション isImportLibrary
 
-class RooplppWebInterpreter extends React.Component<RooplppWebInterpreterProps, RooplppWebInterpreterState> {
-  constructor(props: RooplppWebInterpreterProps) {
-    super(props);
-    this.state = {
-      program: '',
-      result: {
-        value: '',
-        isActive: false
-      },
-      option: {
-        isInvert: false,
-        isImportLibrary: false
-      }
+  const [shareUrl, setShareUrl] = useState(''); // シェア用のURL
+  const [anchorEl, setAnchorEl] = React.useState<HTMLButtonElement | null>(null); // シェアボタン用
+
+  /**
+   * サーバに保存されたプログラムをロードする
+   */
+  const getSavedProgram = async (hash: string) => {
+    try {
+      const response = await getFire(HOSTNAME + '/load.php', { hash: hash });
+      setProgram(response.data[0]);
+    } catch (err) {
+      setProgram(err);
     }
   }
 
-  // executeボタンがクリックされた時の処理
-  // resultに結果を表示する
-  handleExecuteClick() {
-    // 関数動作条件
-    if (this.state.option?.isInvert == undefined && this.state.option?.isImportLibrary == undefined) {
-      return;
-    }
-
-    axios({
-      method: 'POST',
-      url: HOSTNAME + '/execute.php',
-      data: {
-        prog: this.state.program,
-        invert: this.state.option.isInvert ? 1 : 0,
-        library: this.state.option.isImportLibrary ? 1 : 0,
+  useEffect(
+    () => {
+      const url = new URL(window.location.href);
+      const params = url.searchParams;
+      if (params.get('hash') != null) {
+        getSavedProgram(params.get('hash') as string);
       }
-    }).then(response => {
-      const state = Object.assign({}, this.state, { result: { value: response.data[0], isActive: true } });
-      this.setState(state);
-    }).catch(err => {
-      console.error('err: ', err);
-      const state = Object.assign({}, this.state, { result: { value: err, isActive: true } });
-      this.setState(state);
-    });
-  }
+    },
+    []
+  );
 
-  // プログラムサンプルリストのアイテムがクリックされた時の処理
-  // editor内のプログラムを更新する
-  handleExampleClick(algorithmSrc: string) {
-    axios({
-      method: 'GET',
-      url: HOSTNAME + '/example.php',
-      params: {
-        filename: algorithmSrc
+  /**
+   * executeボタンがクリックされた時、プログラムの計算結果を取得し、resultに表示する
+   */
+  const handleExecuteClick = useCallback(
+    async () => {
+      try {
+        const response = await postFire(HOSTNAME + '/execute.php', {
+          prog: program,
+          invert: isInvert ? 1 : 0,
+          library: isImportLibrary ? 1 : 0,
+        });
+        setResult(response.data[0]);
+      } catch (err) {
+        setResult(err);
       }
-    }).then(response => {
-      console.log(response);
-      const state = Object.assign({}, this.state, { program: response.data[0] });
-      this.setState(state);
-    }).catch(err => {
-      console.log('err: ', err);
-      const state = Object.assign({}, this.state, { program: err });
-      this.setState(state);
-    })
-  }
+      setIsResultOpen(true);
+    },
+    [program, isInvert, isImportLibrary]
+  );
 
-  // プログラムサンプルリストのアイテムがチェンジされた時の処理
-  // 例の表示をselectで行う間の仮のもの
-  // editor内のプログラムを更新する
-  handleExampleChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const target = event.target;
-    const value = target.value;
-    const name = target.name;
+  /**
+   * プログラムサンプルリストのアイテムがクリックされた時、サンプルを取得し、エディタの内容を更新する
+   */
+  const handleExampleClick = useCallback(
+    async (algorithmSrc: string) => {
+      try {
+        const response = await getFire(HOSTNAME + '/example.php', { filename: algorithmSrc });
+        setProgram(response.data[0]);
+      } catch (err) {
+        setProgram(err);
+      }
+    },
+    []
+  );
 
-    const state = Object.assign({}, this.state, { example: value });
-    this.setState(state);
+  /**
+   * シェアボタンがクリックされた時の処理
+   */
+  const handleShareClick = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      setAnchorEl(event.currentTarget);
+      try {
+        const response = await postFire(HOSTNAME + '/share.php', { prog: program });
+        setShareUrl(`${HOSTNAME}?hash=${response.data[0]}`);
+      } catch (err) {
+        // To-Do: エラー処理を実装する
+      }
+    },
+    [program]
+  );
 
-    if (value != '') {
-      axios({
-        method: 'GET',
-        url: HOSTNAME + '/example.php',
-        params: {
-          filename: value
-        }
-      }).then(response => {
-        console.log(response);
-        const state = Object.assign({}, this.state, { program: response.data[0] });
-        this.setState(state);
-      }).catch(err => {
-        console.log('err: ', err);
-        const state = Object.assign({}, this.state, { program: err });
-        this.setState(state);
-      })
-    } else {
-      const state = Object.assign({}, this.state, { program: '' });
-      this.setState(state);
-    }
-  }
+  /**
+   * シェアボタンをクリックしたときに表示されるポップアップを削除する処理
+   */
+  const handleShareURLClose = useCallback(
+    () => {
+      setAnchorEl(null);
+      setShareUrl(``);
+    },
+    []
+  );
 
-  // editor内の文字列が変化した時の処理
-  handleEditorChange(newValue: string) {
-    this.setState({
-      program: newValue
-    });
-  }
+  /**
+   * オプションがクリックされたときの処理 (invert, import library)
+   */
+  const handleOptionClick = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const target = event.target;
+      const value = target.type == 'checkbox' ? target.checked : target.value;
+      const name = target.name;
 
-  // resultを隠すボタンがクリックされた時の処理
-  handleResultHideClick() {
-    // resultのisActiveを反転させる
-    const result = Object.assign({}, this.state.result, { isActive: !this.state.result?.isActive });
-    const state = Object.assign({}, this.state, { result: result });
+      if (name == 'isInvert') {
+        setIsInvert(value as boolean);
+      }
+      if (name == 'isImportLibrary') {
+        setIsImportLibrary(value as boolean);
+      }
+    },
+    []
+  );
 
-    this.setState(state);
-  }
+  /**
+   * エディタの内容が変更した時の処理
+   */
+  const handleProgramChange = useCallback(
+    (program: string) => {
+      setProgram(program);
+    },
+    []
+  );
 
-  // オプションがクリックされたときの処理 (invert, import library)
-  handleOptionChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const target = event.target;
-    const value = target.type == 'checkbox' ? target.checked : target.value;
-    const name = target.name;
+  /**
+   * 計算結果表示部分の閉じるボタンが押された時
+   */
+  const handleResultCloseButtonClick = useCallback(
+    () => {
+      setIsResultOpen(false);
+    },
+    []
+  );
 
-    // 現在のoptionのnameをvalueに更新してコピー
-    const option = Object.assign({}, this.state.option, { [name]: value });
-    const state = Object.assign({}, this.state, { option: option });
+  return (
+    <>
+      {// CSSリセット
+      }
+      <CssBaseline />
 
-    this.setState(state);
-  }
+      <AppBar position="sticky" color="inherit">
+        <Toolbar>
+          <Typography variant="h6">Roopl++ Online Interpreter</Typography>
 
-  render() {
-    return (
-      <>
-        {// CSSリセット
-        }
-        <CssBaseline />
-        
-        <AppBar position="sticky" color="inherit">
-          <Toolbar>
-            <Typography variant="h6">Roopl++ Online Interpreter</Typography>
-
-            {// 実行ボタン
-            }
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<PlayCircleOutlineIcon />}
-              onClick={this.handleExecuteClick.bind(this)}
-              className="margin-left-xxxl--important"
-            >
-              Execute
-            </Button>
-            { // プログラム例のリスト
-            }
-            <div className="margin-left-xxxl--important">
-              <ProgramList
-                onExampleChange={(event: React.ChangeEvent<HTMLSelectElement>) => this.handleExampleChange(event)}
-                onClick={(algorithmSrc: string) => this.handleExampleClick(algorithmSrc)}
-              />
-            </div>
-
-            { // オプション選択部分
-            }
-            <div className="margin-left-4xl--important">
-              <Option
-                option={this.state.option}
-                onChange={this.handleOptionChange.bind(this)}
-              />
-            </div>
-
-          </Toolbar>
-        </AppBar>
-
-        { // エディタ部分 
-        }
-        <Editor 
-          isResultActive={this.state.result.isActive}
-          program={this.state.program}
-          onChange={(newValue: string) => this.handleEditorChange(newValue)}
-        />
-
-        { // 計算結果表示部分
-        }
-        <div id="result" className={
-          className(
-            "background-color-grey",
-            {
-              "active": this.state.result.isActive,
-            })
-        }>
-          {// 閉じるボタン
+          {// 実行ボタン
           }
-          <IconButton
-            aria-label="close"
+          <Button
+            variant="outlined"
             size="small"
-            edge={false}
-            onClick={() => this.handleResultHideClick()}
+            startIcon={<PlayCircleOutlineIcon />}
+            onClick={handleExecuteClick}
+            className="margin-left-xxxl--important"
           >
-            <CloseIcon />
-          </IconButton>
-
-          {// 結果
+            Execute
+          </Button>
+          { // プログラム例のリスト
           }
-          <textarea
-            disabled
-            readOnly={true}
-            value={this.state.result.value}
-            className="background-color-white"
-          />
-        </div>
+          <div className="margin-left-xxxl--important">
+            <ProgramList
+              onClick={(algorithmSrc: string) => handleExampleClick(algorithmSrc)}
+            />
+          </div>
 
-      </>
-    );
-  }
+          {// シェアボタン
+          }
+          <Button
+            variant="text"
+            size="small"
+            startIcon={<ShareIcon />}
+            onClick={handleShareClick}
+            className="margin-left-xxxl--important"
+          >
+            Share
+          </Button>
+          <Popover
+            open={anchorEl != null ? true : false}
+            anchorEl={anchorEl}
+            onClose={handleShareURLClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'center',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'center',
+            }}
+          >
+            <div
+              className={className(
+                'padding-top-md',
+                'padding-bottom-md',
+                'padding-left-md',
+                'padding-right-md'
+              )}
+            >
+              <TextField
+                size='small'
+                value={shareUrl}
+                label="URL"
+                variant="outlined"
+                InputProps={{
+                  readOnly: true,
+                }}
+                style = {{width: '300px'}}
+              />
+            </div>
+          </Popover>
+
+          { // オプション選択部分
+          }
+          <div className="margin-left-4xl--important">
+            <Option
+              option={
+                {
+                  isInvert: isInvert,
+                  isImportLibrary: isImportLibrary
+                }
+              }
+              onChange={handleOptionClick}
+            />
+          </div>
+        </Toolbar>
+      </AppBar>
+
+      { // エディタ部分(計算結果が存在するとき大きさが縮小する)
+      }
+      <div id="ace-editor" className={className({
+        "is-result-open": isResultOpen
+      })}
+      >
+        <Editor
+          isResultActive={isResultOpen}
+          program={program}
+          onChange={(newValue: string) => handleProgramChange(newValue)}
+        />
+      </div>
+
+      { // 計算結果表示部分(計算結果が存在するときに表示される)
+      }
+      <div id="result" className={
+        className(
+          "background-color-grey",
+          {
+            "active": isResultOpen
+          })
+      }>
+        {// 閉じるボタン
+        }
+        <IconButton
+          aria-label="close"
+          size="small"
+          edge={false}
+          onClick={handleResultCloseButtonClick}
+        >
+          <CloseIcon />
+        </IconButton>
+
+        {// 結果
+        }
+        <textarea
+          disabled
+          readOnly={true}
+          value={result}
+          className="background-color-white"
+        />
+      </div>
+    </>
+  );
 }
 
 window.onload = () => {
-  ReactDOM.render(<RooplppWebInterpreter />, document.getElementById('root'));
+  ReactDOM.render(<App />, document.getElementById('root'));
 };
