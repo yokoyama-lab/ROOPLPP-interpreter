@@ -11,6 +11,8 @@ src/lexer.ml
 src/parser.ml
 src/parser.mli
 src/rplpp
+test/*.bak
+test/*.cache
 
 # ocamlbuild working directory
 _build/
