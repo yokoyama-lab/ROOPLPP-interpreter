@@ -19,7 +19,7 @@
     "ace-builds": "^1.4.12",
     "axios": "^0.21.1",
     "browserslist": "^4.16.5",
-    "glob-parent": "^3.1.0",
+    "glob-parent": "^5.1.2",
     "lodash": "^4.17.21",
     "path-parse": "^1.0.7",
     "react": "^17.0.1",
