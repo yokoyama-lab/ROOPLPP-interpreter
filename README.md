@@ -2,24 +2,19 @@
 An interpreter for ROOPLPP in OCaml
 
 ## Requirements
-+ php
 + OCaml
  + ocamlfind
  + ocamlyacc
  + extlib
  + OUnit(テストケースを実行する場合)
 
++ php(オンラインインタープリタを使用する場合)
 + npm(オンラインインタープリタを使用する場合)
 
 ## Linux Ubuntuにてインストール例
 + 本リポジトリをダウンロード
 ```
 git clone https://github.com/yokoyama-lab/ROOPLPP-interpreter.git
-```
-
-+ phpをインストール
-```
-sudo apt install php
 ```
 
 + OCamlやその他の必要なものをインストール
@@ -51,6 +46,11 @@ make
 ./rplpp -inverse ../example/fib.rplpp
 ```
 ## オンラインインタープリタ実行方法
++ phpをインストール
+```
+sudo apt install php
+```
+
 + ディレクトリwebに移動し,ディレクトリprogramsを作成
 
 ```
