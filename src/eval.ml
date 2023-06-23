@@ -264,7 +264,7 @@ let rec eval_state stml env map st0 =
     | Assign(y, op, e) (*y op= e2*) ->
        let lvx, vx = lval_val y env in
        let v = eval_exp e env st in
-       let v' = try (bin_op (f op) vx v) with
+       let v' = try bin_op (f op) vx v with
                 | Failure e -> failwith  (pretty_stms [stm] 0 ^ "\nERROR:Integer value expected in this statement")
        in
        ext_st st lvx v' (* the right value of x *)
@@ -559,10 +559,10 @@ let rec lookup_class_map clist cid =
      else lookup_class_map tl cid
 
 (**gen_mapで使用する関数 ROOPL++26ページの関数fieldに相当*)
-let rec map_field clist1 cl =
-  match cl with
-  | CDecl(id, None, fl, m) -> fl
-  | CDecl(id, Some(cid), fl, m) ->
+let rec map_field clist1 (CDecl(id, opt, fl, m)) =
+  match opt with
+  | None -> fl
+  | Some(cid) ->
      let parent_class = lookup_class_map clist1 cid in (*a^-1(c')*)
      let parent_method = map_field clist1 parent_class in
      parent_method @ fl
@@ -608,8 +608,7 @@ let gen_map clist =
 
   (**マップのリストから指定されたメソッド名を含んでいるクラス名とそのメソッドの文のタプルを返す*)
 let rec lookup_class id1 map =
-  let rec lookup_class_2 id2 ml =
-    match ml with
+  let rec lookup_class_2 id2 = function
     | MDecl(mid, paral, stml) :: tl2 ->
        if mid = id2 then Some(stml)
        else lookup_class_2 id2 tl2
