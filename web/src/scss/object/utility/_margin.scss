@@ -1,0 +1,102 @@
+/* ==========================================================================
+   Object
+   ========================================================================== */
+
+/* Utility
+   ----------------------------------------------------------------- */
+
+/**
+ * マージン
+ */
+// 上方向
+.margin-top-sm {
+    margin-top: 5px;
+}
+.margin-top-md {
+    margin-top: 10px;
+}
+.margin-top-lg {
+    margin-top: 15px;
+}
+.margin-top-xl {
+    margin-top: 20px;
+}
+.margin-top-xxl {
+    margin-top: 25px;
+}
+.margin-top-xxxl {
+    margin-top: 30px;
+}
+
+// 下方向
+.margin-bottom-sm {
+    margin-bottom: 5px;
+}
+.margin-bottom-md {
+    margin-bottom: 10px;
+}
+.margin-bottom-lg {
+    margin-bottom: 15px;
+}
+.margin-bottom-xl {
+    margin-bottom: 20px;
+}
+.margin-bottom-xxl {
+    margin-bottom: 25px;
+}
+.margin-bottom-xxxl {
+    margin-bottom: 30px;
+}
+
+// 右
+.margin-right-sm {
+    margin-right: 5px;
+}
+.margin-right-md {
+    margin-right: 10px;
+}
+.margin-right-lg {
+    margin-right: 15px;
+}
+.margin-right-xl {
+    margin-right: 20px;
+}
+.margin-right-xxl {
+    margin-right: 25px;
+}
+.margin-right-xxxl {
+    margin-right: 30px;
+}
+
+// 左
+.margin-left-sm {
+    margin-left: 5px;
+}
+.margin-left-md {
+    margin-left: 10px;
+}
+.margin-left-lg {
+    margin-left: 15px;
+}
+.margin-left-xl {
+    margin-left: 20px;
+}
+.margin-left-xxl {
+    margin-left: 25px;
+}
+.margin-left-xxxl {
+    margin-left: 30px;
+}
+.margin-left-xxxl--important {
+    margin-left: 30px !important;
+}
+.margin-left-4xl {
+    margin-left: 45px;
+}
+.margin-left-4xl--important {
+    margin-left: 45px !important;
+}
+.negative-margin-left-md {
+    margin-left: -10px;
+}
+// 中央よせ
