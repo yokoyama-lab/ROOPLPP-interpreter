@@ -3,8 +3,15 @@
 
 $dir = dirname(__FILE__);
 
-$json_string = file_get_contents("php://input");
+$max_input_size = 1024 * 1024;
+$json_string = file_get_contents("php://input", false, null, 0, $max_input_size);
 $post = json_decode($json_string, true);
+
+if ($post === null || !isset($post['prog'])) {
+    header("HTTP/1.1 400 Bad Request");
+    echo json_encode(["error" => "Invalid request"]);
+    exit;
+}
 
 // プログラムを保存
 $prog_text = $post['prog'];

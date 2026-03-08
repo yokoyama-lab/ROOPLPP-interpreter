@@ -24,13 +24,13 @@ let rec invert_stm stm = match stm with
          match cases with
          | (((_, _), _, (_, _, b)) as c) :: tl ->
             c :: if b = Break then [] else append_k tl
-         | _ -> failwith "not implemented"
+         | [] -> []
        in
        let rec search_kn cases =
          match cases with
          | ((_, _), _, (_, _, Break)) :: tl -> tl
          | _ :: tl -> search_kn tl
-         | _ -> failwith "not implemented"
+         | [] -> []
        in
        let invert_cases2 cases =
          let cases1 = List.map (fun (((c1, e1), s, (c2, e2, b)) as c) ->
@@ -42,11 +42,11 @@ let rec invert_stm stm = match stm with
            match cases1 with
            | ((c1, e1), s, (c2, e2, b)) :: tl ->
               List.rev(((c1, e1), s, (c2, e2, Break)) :: tl)
-           | _ -> failwith "not implemented"
+           | [] -> []
          in
          match cases2 with
          | ((c1, e1), s, (c2, e2, b)) :: tl -> ((c1, e1), s, (c2, e2, NoBreak)) :: tl
-         | _ -> failwith "not implemented"
+         | [] -> []
        in
        match cases with
        | [] | [_] -> cases

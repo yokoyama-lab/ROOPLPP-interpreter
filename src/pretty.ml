@@ -134,9 +134,9 @@ let pretty_method (MDecl(id, args, stms)) =
   "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ pretty_stms stms 2
 (**メソッドをプリントする関数(リストを受け取る)*)
 let rec pretty_methods = function
+  | [] -> ""
   | [m] -> pretty_method m
   | hd :: tl -> pretty_method hd ^ "\n    " ^ pretty_methods tl
-  | _ -> failwith "not implemented"
 
 (**クラスをプリントする関数*)
 let pretty_c (CDecl(c, inherits, fields, methods)) =
@@ -149,9 +149,9 @@ let pretty_c (CDecl(c, inherits, fields, methods)) =
 
 (**クラスをプリントする関数(リストを受け取る)*)
 let rec pretty_cl = function
+  | [] -> ""
   | [cl] -> pretty_c cl
   | hd :: tl -> pretty_c hd ^ "\n" ^ pretty_cl tl
-  | _ -> failwith "not implemented"
 
 (**プログラムをプリントする関数*)
 let pretty_prog (Prog(cl)) = print_string(pretty_cl cl ^ "\n")

@@ -75,7 +75,7 @@ let rec anyId2obj = function
 %token ECASE     // "ecase"
 %token ESAC      // "ESAC"
 %token BREAK     // "break"
-%token DEFAULT   // "default
+%token DEFAULT   // "default"
 
 %token INT       // "int"
 %token NIL       // "nil"
@@ -224,10 +224,13 @@ stm:
     { ObjectCall($2, $4, $6) } // call x::q(x, ..., x)
   | UNCALL anyId WCOLON methodName LPAREN anyIds RPAREN
     { ObjectUncall($2, $4, $6) } // uncall x::q(x, ..., x)
-  | LOCAL dataType ID EQ exp stms1 DELOCAL dataType ID EQ exp // TODO: check ids and types
-    { LocalBlock($2, $3, $5, $6, $11) } // local ... delocal ... dataTypes must be equal.
-  | CONSTRUCT typeId ID stms1 DESTRUCT ID    // TODO: check ids
-    { ObjectBlock($2, $3, $4) } // construct c x  s  destruct x
+  | LOCAL dataType ID EQ exp stms1 DELOCAL dataType ID EQ exp
+    { if $3 <> $9 then Printf.eprintf "Warning: LOCAL/DELOCAL variable names do not match: %s vs %s\n" $3 $9;
+      if $2 <> $8 then Printf.eprintf "Warning: LOCAL/DELOCAL types do not match for variable %s\n" $3;
+      LocalBlock($2, $3, $5, $6, $11) }
+  | CONSTRUCT typeId ID stms1 DESTRUCT ID
+    { if $3 <> $6 then Printf.eprintf "Warning: CONSTRUCT/DESTRUCT variable names do not match: %s vs %s\n" $3 $6;
+      ObjectBlock($2, $3, $4) }
   | NEW arrayTypeName anyId
     { ArrayConstruction($2, $3) } // new Foo[length] fooList
   | NEW typeId anyId

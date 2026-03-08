@@ -4,13 +4,13 @@ open Value
 open Pretty
 open Invert
 
-let myassert (cond, msg) =  assert (if not cond then print_endline msg; cond)
+let myassert (cond, msg) = if not cond then failwith msg
 
 (**環境を拡張する関数(同じ識別子がある場合古いものを削除し、新しいものを追加する)*)
 let ext_envs env x v = (x,v) :: List.remove_assoc x env
 
 (**ストアを拡張する関数(古いものを削除、昇順にソートされる)*)
-let ext_st st x v = List.sort (fun x y -> if x < y then -1 else 1) ((x,v) :: (List.remove_assoc x st))
+let ext_st st x v = List.sort (fun x y -> compare (fst x) (fst y)) ((x,v) :: (List.remove_assoc x st))
 
 (**eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
 let rec ext_st_zero st locs n =
@@ -40,9 +40,20 @@ let lookup_val x env st = lookup_st (lookup_envs x env) st
 (**ロケーションのベクトルから指定されたインデックスのロケーションを返す（添字は0から）*)
 let rec lookup_vec index vec =
   match vec with
-  | [] -> failwith "ERROR in lookup_vec"
-  | l :: tl -> if index <> 0 then lookup_vec (index - 1) tl
-               else l
+  | [] -> failwith "ERROR:index out of bounds in lookup_vec"
+  | l :: tl -> if index > 0 then lookup_vec (index - 1) tl
+               else if index = 0 then l
+               else failwith "ERROR:negative index in lookup_vec"
+
+(**ゼロ除算チェック付き除算*)
+let safe_div n1 n2 =
+  if n2 = 0 then failwith "ERROR:division by zero"
+  else n1 / n2
+
+(**ゼロ除算チェック付き剰余*)
+let safe_mod n1 n2 =
+  if n2 = 0 then failwith "ERROR:modulo by zero"
+  else n1 mod n2
 
 (**演算子、式を受け取り、演算をする関数*)
 let bin_op f v1 v2 =
@@ -66,23 +77,26 @@ let rec eval_exp exp env st =
     match y with
     | Var(x) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | ArrayElement(x, e) ->
-       let IntVal(x_index) = eval_exp e env st in
-       let LocsVec(locsvecx) = lookup_val x env st in
+       let x_index = match eval_exp e env st with
+         | IntVal(n) -> n
+         | _ -> failwith "ERROR:array index must be an integer" in
+       let locsvecx = match lookup_val x env st with
+         | LocsVec(v) -> v
+         | _ -> failwith "ERROR:expected array value" in
        let locsx' = lookup_vec x_index locsvecx in
        let v = lookup_st locsx' st in
        locsx', v
     | Dot(x, xi) ->
        let _, locs = lval_val x env in
-       match locs with
+       (match locs with
        | LocsVal(l)->
-          begin
-            match lookup_st l st with
+          (match lookup_st l st with
             | ObjVal(c, env') ->
                let li, v = lval_val xi env' in
                li, v
-            | _ -> failwith "not implemented"
-          end
-       | _ -> - 1, IntVal 0
+            | _ -> failwith "ERROR:expected object value for dot access")
+       | _ -> failwith "ERROR:expected location value for dot access")
+    | _ -> failwith "ERROR:not an l-value expression"
   in
   match exp with
   (*CON*)
@@ -91,12 +105,16 @@ let rec eval_exp exp env st =
   | Var(x) -> lookup_st (lookup_envs x env) st
   (*ARRELEM*)
   | ArrayElement(id, e) ->
-     let IntVal(index) = eval_exp e env st in
+     let index = match eval_exp e env st with
+       | IntVal(n) -> n
+       | _ -> failwith "ERROR:array index must be an integer" in
      let locs = lookup_envs id env in
-     let LocsVec(lv) = lookup_st locs st in
-     let locs2 = if index < List.length lv then index + List.hd lv
+     let lv = match lookup_st locs st with
+       | LocsVec(v) -> v
+       | _ -> failwith "ERROR:expected array value" in
+     let locs2 = if index >= 0 && index < List.length lv then index + List.hd lv
                  else failwith (pretty_exp exp ^ "\nERROR:Array index " ^ id ^ "[" ^
-                                  string_of_int index ^ "] is out of bounds in this stament")
+                                  string_of_int index ^ "] is out of bounds in this statement")
      in
      lookup_st locs2 st
   (*NIL*)
@@ -111,8 +129,8 @@ let rec eval_exp exp env st =
        | Sub  -> bin_op (-)
        | Xor  -> bin_op (lxor)
        | Mul  -> bin_op ( * )
-       | Div  -> bin_op (/)
-       | Mod  -> bin_op (mod)
+       | Div  -> bin_op safe_div
+       | Mod  -> bin_op safe_mod
        | Band -> bin_op (land)
        | Bor  -> bin_op (lor)
        | And  -> rel_op (&&)
@@ -162,7 +180,7 @@ let rec remove_a argl locsl vl st =
   | [], [], [] -> st
   | arg :: arg_tl, locs :: locs_tl, v :: v_tl ->
      remove_a arg_tl locs_tl v_tl (remove_a1 arg locs v st)
-  | _ -> failwith "not implemented"
+  | _ -> failwith "ERROR:mismatched argument list lengths in method call"
 
 (**オブジェクトフィールドの値がすべてゼロクリアされているか確認する関数*)
 let rec is_field_zero st locs n =
@@ -207,33 +225,38 @@ let rec eval_state stml env map st0 =
     match y with
     | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | VarArray(x, Some e) ->
-       let IntVal(x_index) = eval_exp e env st in
-       let LocsVec(locsvecx) = lookup_val x env st in
+       let x_index = match eval_exp e env st with
+         | IntVal(n) -> n
+         | _ -> failwith "ERROR:array index must be an integer" in
+       let locsvecx = match lookup_val x env st with
+         | LocsVec(v) -> v
+         | _ -> failwith "ERROR:expected array value" in
        let locsx' =
-         if x_index < List.length locsvecx then x_index + List.hd locsvecx
+         if x_index >= 0 && x_index < List.length locsvecx then x_index + List.hd locsvecx
          else failwith (pretty_stms [stm] 0 ^ "\nERROR:Array index " ^ x ^ "[" ^
-                          string_of_int x_index ^ "] is out of bounds in this stament")                
+                          string_of_int x_index ^ "] is out of bounds in this statement")                
        in
        let v = lookup_st locsx' st in (**the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->
        let _, locs = lval_val x env in
-       match locs with
+       (match locs with
          LocsVal(l) ->
-          begin
-            match lookup_st l st with
+          (match lookup_st l st with
             | ObjVal(c, env') ->
                let li, v = lval_val xi env' in
                li, v
-          end
-       | _ -> - 1, IntVal 0
+            | _ -> failwith "ERROR:expected object value for instance variable access")
+       | _ -> failwith "ERROR:expected location value for instance variable access")
     in
     (** call処理の共通部分を実行する関数．invertFlagが1なら逆実行 *)
     let mycall locs locs2 invertFlag =
       match stm with
       | LocalCall (mid0, args) | LocalUncall(mid0, args) | ObjectCall(_, mid0, args) | ObjectUncall(_, mid0, args) ->
          let vl = List.map (fun x -> argv x env st) args in     (* v_i = arg(a_i, γ, μ) (実引数の値を求める) *)         
-         let ObjVal(id, envf)  = lookup_st locs2 st in          (* μ(l') = (c, γ') *)
+         let id, envf = match lookup_st locs2 st with
+           | ObjVal(id, envf) -> id, envf
+           | _ -> failwith (pretty_stms [stm] 0 ^ "\nERROR:expected object value for method call") in
          let f, meth = try lookup_map id map with                   (* Γ(c) = (field, method) *)
            | Failure str -> failwith ((pretty_stms [stm] 0) ^ "\n" ^ str ^ " in this statement") in
          let MDecl(mid, para, mstml) = lookup_meth mid0 vl meth in  (* メソッド名がmidのメソッドを求める(q) *)
@@ -286,7 +309,7 @@ let rec eval_state stml env map st0 =
              failwith (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be false in this statement")             
          (*LOOPBASE*)
          else
-           (myassert(isTrue (eval_exp e2 env st), pretty_stms [stm] 0 ^ "ERROR:assertion is incorrect in this statement"); st)
+           (myassert(isTrue (eval_exp e2 env st), pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect in this statement"); st)
        in
        (* LOOPMAIN *)
        if isTrue (eval_exp e1 env st) then                   (* アサーション ?e1 != 0(true) *) 
@@ -297,7 +320,8 @@ let rec eval_state stml env map st0 =
     (*FOR CONST: for x in (e1..e2) do stml end *)
     | For(x, e1, e2, stml) ->
        let rec for_con (x, (e1, e2), stml) env map st =                         (*意味関数F*)
-         let IntVal n1, IntVal n2 = eval_exp e1 env st, eval_exp e2 env st in   (*e1,e2を評価*)
+         let n1 = match eval_exp e1 env st with IntVal(n) -> n | _ -> failwith "ERROR:for range must be integer" in
+         let n2 = match eval_exp e2 env st with IntVal(n) -> n | _ -> failwith "ERROR:for range must be integer" in
          if n1 = n2 then List.remove_assoc (lookup_envs x env) st               (* ストアからロケーションxを取り除く *)
          else
            let v = if n1 < n2 then (n1 + 1)
@@ -316,7 +340,10 @@ let rec eval_state stml env map st0 =
        else failwith (pretty_stms [stm] 0 ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
     (*追加部分SWITCH*)
     | Switch(obj1, cases, stml, obj2) ->
-       let rec eval_cases obj1 ((((c1, q1), s1, (p1, q'1, b1))::tl) as cs) s obj2 env map st =
+       let rec eval_cases obj1 cs s obj2 env map st =
+         match cs with
+         | [] -> eval_state s env map st
+         | (((c1, q1), s1, (p1, q'1, b1))::tl) ->
          let  isMatch obj q env st =
            if List.length q = 0 then false
            else
@@ -327,30 +354,34 @@ let rec eval_state stml env map st0 =
          let rec search_break = function
            | ((_, _), s, (_, q', b))::tl ->
               (s,q') :: if b = Break then [] else search_break tl
-           | [] -> failwith "ERROR: switch statement"
+           | [] -> failwith "ERROR:no matching case found in switch statement"
          in
          let rec eval_case1 sq obj2 length env map st =
            match sq with
+           | [] -> failwith "ERROR:empty case list in switch statement"
            | [(s,q)] -> let st2 = eval_state s env map st in
                         let locs, _ = lval_val obj2 env in
                         let v = lookup_st locs st2 in
-                        if v = eval_exp (List.nth q (length - 1)) env st then
-                          st2
-                        else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:should be " ^ pretty_exp (List.nth q (length - 1)) ^ " in this switch statement")
-           | (s,_) :: tl -> let st2 = eval_state s env map st in                            
+                        if length > 0 && length - 1 < List.length q then
+                          (if v = eval_exp (List.nth q (length - 1)) env st then
+                            st2
+                          else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:should be " ^ pretty_exp (List.nth q (length - 1)) ^ " in this switch statement"))
+                        else failwith (pretty_stms [stm] 0 ^ "\nERROR:assertion index out of bounds in switch statement")
+           | (s,_) :: tl -> let st2 = eval_state s env map st in
                             eval_case1 tl obj2 length env map st2
          in
          let rec eval_case2 obj1 q1 sq obj2 n env map st =
            let rec countMatch obj1 q n env st =
              let _, v = lval_val obj1 env in
              match q with
-             | [] -> failwith "ERROR switch3"
+             | [] -> failwith "ERROR:no matching value found in switch case expression list"
              | e::tl -> if v = eval_exp e env st then n
                         else countMatch obj1 tl (n + 1) env st
            in
            let count = countMatch obj1 q1 1 env st in
            match sq with
-           | [] -> failwith "ERROR switch4"
+           | [] -> failwith "ERROR:no matching case found in switch case evaluation"
+           | (s,[])::_ -> failwith "ERROR:empty expression list in switch case"
            | (s,(e::tl0))::tl ->
               if count = n then
                 let st2 = eval_state s env map st in
@@ -397,20 +428,22 @@ let rec eval_state stml env map st0 =
     (*LocalCALL*)
     | LocalCall(mid, args) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
        mycall locs locs2 0
     (*LocalUNCALL*)
     | LocalUncall(mid, args) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let LocsVal(locs2) = lookup_st locs st in              (* μ(l) = l' *)
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
        mycall locs locs2 1
     (*CALLOBJ*)
     | ObjectCall(obj, mid, args) (* call x0::q(a1,...,an) *)->
-       let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *)
+       let locs, v = lval_val obj env in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object call" in
        mycall locs locs2 0
     (*UNCALLOBJ*)
     | ObjectUncall(obj, mid, args) (* uncall x0::q(a1,...,an) *)->
-       let locs, LocsVal(locs2) = lval_val obj env in         (* l = search_l(x0), l' = μ(l) *)
+       let locs, v = lval_val obj env in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object uncall" in
        mycall locs locs2 1
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
@@ -454,8 +487,8 @@ let rec eval_state stml env map st0 =
        let (fl, _) = try lookup_map tid map with
          | Failure str -> failwith (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
-       let LocsVal(locs0) = lookup_st locs st in            (* l=μ(l0) *)
-       let ObjVal(_, envf) = lookup_st locs0 st in          (* (c,γ')=μ(l0) *)
+       let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location for object destruction" in
+       let envf = match lookup_st locs0 st with ObjVal(_, e) -> e | _ -> failwith "ERROR:expected object value for destruction" in
        let locs1 = if List.length envf = 0 then 0
                    else List.hd (List.map snd envf) in      (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)
@@ -470,14 +503,14 @@ let rec eval_state stml env map st0 =
        if v <> IntVal(0) then                                                  (* xがnilか確認 *)
          failwith (pretty_stms [stm] 0 ^ "\nERROR:Variable is not nil in this statement")
        else
-       let IntVal(n) = eval_exp e env st in                                   (* 要素数を求める *)
+       let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
        let st2 = ext_st st locs (LocsVec(gen_locsvec n (max_locs st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
        ext_st_zero st2 (max_locs st2 + 1)  n                                  (* ストア拡張 μ[l'1->0,...,l'n->0 *)
     (*ARRDELETE*)
     | ArrayDestruction((tid, e), obj) ->           (* delete a[e] x *)
-       let IntVal(n) = eval_exp e env st in        (* 要素数を求める *)
+       let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
        let veclocs,_ = lval_val obj env in         (* l=γ(x) *)
-       let LocsVec(vec) = lookup_st veclocs st in  (* μ(l) = {l'1,...,l'n} *)
+       let vec = match lookup_st veclocs st with LocsVec(v) -> v | _ -> failwith "ERROR:expected array value for deletion" in
        let locs = lookup_vec 0 vec in              (* locs = l'1 *)
        if is_field_zero st locs n                  (* 配列要素すべてがゼロクリアされているか確認 *)
        then
@@ -529,7 +562,7 @@ let gen_env fid1 : env =
 let gen_st env1 objval =
   let rec gen_st2 env2 objval n =
     match env2 with
-    | [] -> failwith "ERROR"
+    | [] -> failwith "ERROR:empty environment in gen_st (no main class fields found)"
     | [f] -> [(n, LocsVal (n + 1)); (n + 1, objval)]
     | f :: tl -> ext_st (gen_st2 tl objval (n + 1)) n (IntVal(0))
   in

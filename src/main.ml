@@ -41,13 +41,4 @@ let () =
          with
            Failure e ->  print_newline(); print_endline e
        end
-  | _ -> failwith "not implemented"
-
-(*
-let parse str =
-  Parser.main Lexer.token
-    (Lexing.from_string str)
-*)
-(*let eval prog = eval_prog(parse prog)
-let evalp s = print_result(eval_prog(parse s))
- *)
+  | _ -> Printf.eprintf "Usage: rplpp [-inverse] [-library] <file.rplpp>\n"; exit 1
