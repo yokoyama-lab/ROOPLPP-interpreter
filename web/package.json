@@ -24,7 +24,7 @@
     "browserslist": "^4.16.5",
     "css-loader": "^6.8.1",
     "glob-parent": "^5.1.2",
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.23",
     "path-parse": "^1.0.7",
     "react": "^17.0.1",
     "react-ace": "^9.1.4",
