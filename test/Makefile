@@ -1,7 +1,7 @@
 #
 # Makefile
 #
-all: test_eval test_invert test_print
+all: test_eval test_invert test_print test_pretty test_env
 
 test_eval: eval_test.byte
 	./eval_test.byte
@@ -23,6 +23,20 @@ test_print: print_test.byte
 print_test.byte: 		print_test.ml
 	(cd ../src; make)
 	ocamlfind ocamlc -o $@ -package ounit2 -linkpkg -g -I ../src value.cmo print.cmo print_test.ml
+
+test_pretty: pretty_test.byte
+	./pretty_test.byte
+
+pretty_test.byte: 		pretty_test.ml
+	(cd ../src; make)
+	ocamlfind ocamlc -o $@ -package ounit2 -linkpkg -g -I ../src util.cmo syntax.cmo value.cmo pretty.cmo pretty_test.ml
+
+test_env: env_store_test.byte
+	./env_store_test.byte
+
+env_store_test.byte: 		env_store_test.ml
+	(cd ../src; make)
+	ocamlfind ocamlc -o $@ -package ounit2 -linkpkg -g -I ../src util.cmo pretty.cmo invert.cmo print.cmo value.cmo syntax.cmo eval.cmo env_store_test.ml
 
 clean:
 	$(RM) *.byte

@@ -5,6 +5,22 @@ open Syntax
 let rec indent n = if n = 0 then ""
                    else indent (n - 1) ^ "    "
 
+(**文字列リテラルを lexer が再読込できる形にエスケープする関数。
+   lexer.mll の文字列規則は "\\\"" "\\\\" "\\n" "\\t" のみ受理し、
+   それ以外のバイト（UTF-8 日本語等を含む ≥128）は生のまま受理する。
+   OCaml の String.escaped は ≥128 を \DDD（10進エスケープ）にしてしまい
+   lexer が再読込できないため、ここでは lexer 互換のエスケープのみ行う。*)
+let escape_string_literal (s : string) : string =
+  let buf = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | '"'  -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | _    -> Buffer.add_char buf c) s;
+  Buffer.contents buf
+
 (**型をプリントする関数*)
 let pretty_dataType = function
   | IntegerType -> "int"
@@ -111,7 +127,7 @@ pretty_stm stm n =
     | ArrayDestruction((typeId, exp), obj) -> "delete " ^ typeId ^ "[" ^ pretty_exp exp ^ "] " ^ pretty_obj obj
     | Skip -> "skip"
     | Show(exp) -> "show" ^ "(" ^ pretty_exp exp ^ ")"
-    | Print(str) -> "print" ^ "(\""  ^ String.escaped str ^ "\")"
+    | Print(str) -> "print" ^ "(\""  ^ escape_string_literal str ^ "\")"
     in
     s
 

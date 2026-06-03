@@ -1,0 +1,33 @@
+// Reversible Josephus problem
+// n people in a circle, every k-th person is eliminated
+// Records elimination order for reversibility
+// J(n, k) using the recurrence: J(1)=0, J(n) = (J(n-1)+k) mod n
+// n=7, k=3 -> survivor position = 3 (0-indexed)
+
+class Josephus
+    method solve(int n, int k, int result, int[] hist)
+        result ^= 0
+        for i in (2..n) do
+            hist[i-2] += result
+            local int tmp = result + k
+            local int r = tmp % i
+            result -= result
+            result += r
+            delocal int r = result
+            delocal int tmp = result + i * ((hist[i-2] + k) / i)
+        end
+
+class Program
+    int result
+    int[] hist
+    method main()
+        new int[6] hist
+        local Josephus j = nil
+        new Josephus j
+        local int n = 7
+        local int k = 3
+        call j::solve(n, k, result, hist)
+        delocal int k = 3
+        delocal int n = 7
+        delete Josephus j
+        delocal Josephus j = nil
