@@ -99,6 +99,63 @@ let tests1 = "test suite for invert.ml" >::: [
                              Assign (VarArray("x", None), ModAdd, Const 3)] ) );      
 ]
           
+(* Involution: inverting twice is the identity. This is the defining law of
+   the source-to-source inverter and the basis of the -inverse feature
+   (running a program then its inverse must restore the start). tests2 above
+   pins down each constructor's single inverse; this suite checks every
+   constructor survives a round trip, including the non-trivial Switch
+   rewrite (case fall-through / break bookkeeping in invert.ml). *)
+let tests3 = "involution: invert (invert s) = s" >:::
+  List.map
+    (fun (title, stml) ->
+      title >:: (fun _ -> assert_equal stml (invert (invert stml))))
+    [ "skip", [Skip];
+      "assign +=", [Assign(VarArray("x", None), ModAdd, Const 1)];
+      "assign ^=", [Assign(VarArray("x", None), ModXor, Var "y")];
+      "swap", [Swap(VarArray("x", None), VarArray("y", None))];
+      "conditional",
+      [Conditional(Binary(Eq, Var "x", Const 0),
+                   [Assign(VarArray("x", None), ModAdd, Const 1)],
+                   [Skip],
+                   Binary(Eq, Var "x", Const 1))];
+      "loop",
+      [Loop(Binary(Eq, Var "x", Const 0),
+            [Skip],
+            [Assign(VarArray("x", None), ModAdd, Const 1)],
+            Binary(Eq, Var "x", Const 10))];
+      "for",
+      [For("i", Const 1, Const 10, [Assign(VarArray("x", None), ModAdd, Var "i")])];
+      "object block",
+      [ObjectBlock("C", "t", [Assign(VarArray("x", None), ModSub, Const 1)])];
+      "local block",
+      [LocalBlock(IntegerType, "i", Const 0,
+                  [Assign(VarArray("i", None), ModAdd, Const 1)], Const 1)];
+      "local call", [LocalCall("q", [Id "a"])];
+      "local uncall", [LocalUncall("q", [Id "a"])];
+      "object call", [ObjectCall(VarArray("t", None), "q", [Id "a"])];
+      "object uncall", [ObjectUncall(VarArray("t", None), "q", [Id "a"])];
+      "construct", [ObjectConstruction("C", VarArray("t", None))];
+      "destruct", [ObjectDestruction("C", VarArray("t", None))];
+      "copy", [CopyReference(ObjectType "C", VarArray("a", None), VarArray("b", None))];
+      "uncopy", [UncopyReference(ObjectType "C", VarArray("a", None), VarArray("b", None))];
+      "array construct", [ArrayConstruction(("int", Const 2), VarArray("xs", None))];
+      "array destruct", [ArrayDestruction(("int", Const 2), VarArray("xs", None))];
+      "show", [Show(Var "x")];
+      "print", [Print "hi"];
+      "switch with fall-through",
+      [Switch(VarArray("x", None),
+              [((Case, [Const 0]), [Print "0"], (Esac, [Const 0], Break));
+               ((Case, [Const 1]), [Print "a"], (NoEsac, [], NoBreak));
+               ((Case, [Const 2]), [Print "b"], (NoEsac, [], NoBreak));
+               ((Case, [Const 3]), [Print "c"], (Esac, [Const 3; Const 2; Const 1], Break))],
+              [Skip], VarArray("x", None))];
+      "sequence",
+      [Assign(VarArray("x", None), ModAdd, Const 1);
+       Swap(VarArray("x", None), VarArray("y", None));
+       Assign(VarArray("y", None), ModSub, Const 2)];
+    ]
+
 let _ =
   run_test_tt_main tests1;
   run_test_tt_main tests2;
+  run_test_tt_main tests3;

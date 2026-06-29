@@ -1,4 +1,5 @@
 open OUnit2
+open Syntax
 open Pretty
 
 (* Regression tests for the string-literal escaping used by -inverse output.
@@ -30,6 +31,49 @@ let tests = "test suite for pretty.ml string escaping" >::: [
 
       "plain ASCII is unchanged" >:: (fun _ ->
         assert_equal ~printer:(fun x -> x) "hello" (escape_string_literal "hello"));
+
+      (* Control / non-printable bytes must NOT be emitted raw (a raw ESC would
+         inject an ANSI sequence into -inverse output, a raw NUL would corrupt
+         regenerated source). They are escaped as \DDD, which lexer.mll now
+         re-lexes. UTF-8 bytes (>= 0x80) still pass through verbatim (above). *)
+      "ESC (0x1b) becomes \\027" >:: (fun _ ->
+        assert_equal ~printer:(fun x -> x) "\\027" (escape_string_literal "\x1b"));
+
+      "NUL (0x00) becomes \\000" >:: (fun _ ->
+        assert_equal ~printer:(fun x -> x) "\\000" (escape_string_literal "\x00"));
+
+      "DEL (0x7f) becomes \\127" >:: (fun _ ->
+        assert_equal ~printer:(fun x -> x) "\\127" (escape_string_literal "\x7f"));
     ]
 
-let _ = run_test_tt_main tests
+(* pretty_exp must parenthesize a binary operand that is itself a binary
+   expression, otherwise non-default-precedence grouping is lost when the
+   -inverse output is re-parsed. Regression for the josephus example, whose
+   `i * ((a + k) / i)` previously printed as `i * a + k / i`. *)
+let exp_tests = "test suite for pretty.ml expression parenthesizing" >::: [
+      "no spurious parens for a flat expression" >:: (fun _ ->
+        assert_equal ~printer:(fun x -> x) "1 + 2"
+          (pretty_exp (Binary(Add, Const 1, Const 2))));
+
+      "grouping that changes the value is preserved" >:: (fun _ ->
+        (* i * ((hist[i - 2] + k) / i) *)
+        let e = Binary(Mul, Var "i",
+                       Binary(Div,
+                              Binary(Add, ArrayElement("hist", Binary(Sub, Var "i", Const 2)), Var "k"),
+                              Var "i")) in
+        assert_equal ~printer:(fun x -> x)
+          "i * ((hist[i - 2] + k) / i)" (pretty_exp e));
+
+      "left-nested same-precedence keeps grouping" >:: (fun _ ->
+        (* (a - b) - c, which differs from a - (b - c) *)
+        let e = Binary(Sub, Binary(Sub, Var "a", Var "b"), Var "c") in
+        assert_equal ~printer:(fun x -> x) "(a - b) - c" (pretty_exp e));
+
+      "array index is delimited by brackets, not parens" >:: (fun _ ->
+        assert_equal ~printer:(fun x -> x) "xs[i + 1]"
+          (pretty_exp (ArrayElement("xs", Binary(Add, Var "i", Const 1)))));
+    ]
+
+let _ =
+  run_test_tt_main tests;
+  run_test_tt_main exp_tests

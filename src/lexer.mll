@@ -4,10 +4,20 @@ open Syntax
 open Lexing
 
 let unescapeInitTail (s:string) : string =
+  let is_digit c = c >= '0' && c <= '9' in
   let rec unesc s = match s with
       '\\'::c::cs when List.mem c ['\"'; '\\'; '\''] -> c :: unesc cs
     | '\\'::'n'::cs  -> '\n' :: unesc cs
     | '\\'::'t'::cs  -> '\t' :: unesc cs
+    (* \DDD : 10進3桁エスケープ。pretty.ml の escape_string_literal が
+       制御文字（ESC, NUL 等）に対して出力する。0..255 のみ採用し、
+       範囲外（\256 以上）は次の規則でバックスラッシュをそのまま通す。 *)
+    | '\\'::d1::d2::d3::cs
+         when is_digit d1 && is_digit d2 && is_digit d3
+              && (Char.code d1 - 48) * 100 + (Char.code d2 - 48) * 10
+                 + (Char.code d3 - 48) < 256 ->
+       Char.chr ((Char.code d1 - 48) * 100 + (Char.code d2 - 48) * 10
+                 + (Char.code d3 - 48)) :: unesc cs
     | '\"'::[]    -> []
     | c::cs      -> c :: unesc cs
     | _         -> []
@@ -40,7 +50,7 @@ rule token = parse
   | digit+
     { let str = Lexing.lexeme lexbuf in
       CONST (int_of_string str) }
-  | '\"' ((u # ['\"' '\\' '\n']) | ('\\' ('\"' | '\\' | '\'' | 'n' | 't')))* '\"' {let s = lexeme lexbuf in STRING (unescapeInitTail s)}
+  | '\"' ((u # ['\"' '\\' '\n']) | ('\\' ('\"' | '\\' | '\'' | 'n' | 't')) | ('\\' digit digit digit))* '\"' {let s = lexeme lexbuf in STRING (unescapeInitTail s)}
 
   (* コメント *)
   | "//" [^'\n']* { token lexbuf }
