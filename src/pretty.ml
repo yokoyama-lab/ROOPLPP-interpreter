@@ -5,6 +5,29 @@ open Syntax
 let rec indent n = if n = 0 then ""
                    else indent (n - 1) ^ "    "
 
+(**文字列リテラルを lexer が再読込できる形にエスケープする関数。
+   lexer.mll の文字列規則は "\\\"" "\\\\" "\\'" "\\n" "\\t" と \DDD（10進3桁）を
+   受理し、それ以外のバイト（UTF-8 日本語等を含む ≥128）は生のまま受理する。
+   方針:
+   - " \ は \" \\ に、改行・タブは \n \t にする。
+   - 制御文字（< 0x20）と DEL(0x7f) は \DDD にする。生のまま出すと -inverse の
+     端末出力に ANSI エスケープ（ESC=0x1b）等が混入し、再生成ソースに NUL 等の
+     制御バイトが埋まるため。改行は raw だと lexer が文字列の途中で切るので必須。
+   - 0x20..0x7e（" \ を除く）と ≥0x80（UTF-8）は生のまま通す（日本語可読性のため）。
+   OCaml の String.escaped は ≥128 も \DDD にしてしまい日本語が壊れるので使わない。*)
+let escape_string_literal (s : string) : string =
+  let buf = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | '"'  -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | c when Char.code c < 0x20 || Char.code c = 0x7f ->
+       Buffer.add_string buf (Printf.sprintf "\\%03d" (Char.code c))
+    | c    -> Buffer.add_char buf c) s;
+  Buffer.contents buf
+
 (**型をプリントする関数*)
 let pretty_dataType = function
   | IntegerType -> "int"
@@ -41,14 +64,23 @@ let pretty_modOp = function
   | ModSub -> "-="
   | ModXor -> "^="
 
-(**式をプリントする関数*)
+(**式をプリントする関数。
+   二項演算の被演算子が二項演算のときは括弧で囲む。こうしないと優先順位の
+   違いで再パース時にグループ化が失われる（例: i * ((a + k) / i) が
+   i * a + k / i になってしまう）。( e ) はパーサで捨てられ AST に残らない
+   ため、常に括弧を付けても parse(pretty p) = p は保たれる。*)
 let rec pretty_exp = function
   | Const n -> string_of_int n
   | Var id -> id
   | ArrayElement(id, exp) -> id ^ "[" ^ pretty_exp exp ^ "]"
   | Nil -> "nil"
-  | Binary(binOp, exp1, exp2) -> pretty_exp exp1 ^ " " ^ pretty_binOp binOp ^ " " ^ pretty_exp exp2
+  | Binary(binOp, exp1, exp2) ->
+     paren_binary exp1 ^ " " ^ pretty_binOp binOp ^ " " ^ paren_binary exp2
   | Dot(exp1, exp2) -> pretty_exp exp1 ^ "." ^ pretty_exp exp2
+(**被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）*)
+and paren_binary = function
+  | Binary _ as e -> "(" ^ pretty_exp e ^ ")"
+  | e -> pretty_exp e
 
 (**変数、配列、ドット演算子をプリントする関数*)
 let rec pretty_obj = function
@@ -111,7 +143,7 @@ pretty_stm stm n =
     | ArrayDestruction((typeId, exp), obj) -> "delete " ^ typeId ^ "[" ^ pretty_exp exp ^ "] " ^ pretty_obj obj
     | Skip -> "skip"
     | Show(exp) -> "show" ^ "(" ^ pretty_exp exp ^ ")"
-    | Print(str) -> "print" ^ "(\""  ^ String.escaped str ^ "\")"
+    | Print(str) -> "print" ^ "(\""  ^ escape_string_literal str ^ "\")"
     in
     s
 

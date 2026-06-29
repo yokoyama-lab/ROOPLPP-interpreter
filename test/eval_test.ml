@@ -844,5 +844,56 @@ let tests = "test suite for eval.ml" >::: [
         ArrayDestruction (("Super", Const 2), VarArray("ts", None))])]
 )]
        ) )) 
-]    
-let _ = run_test_tt_main tests
+]
+
+(* Runtime reversibility: running a statement list forward and then its
+   inverse must restore the store exactly. The suite above checks forward
+   evaluation of each construct; this one ties eval.ml together with
+   invert.ml and asserts the law that makes the language reversible,
+   namely  eval_state (s @ invert s) = id  on the store.
+   (eval_state keeps the store sorted by location, so each st0 below is
+   written in sorted order to compare equal.) *)
+let reversible =
+  "reversibility: eval (s @ invert s) restores the store" >:::
+  List.map
+    (fun (title, env, st0, stml) ->
+      title >:: (fun _ ->
+        assert_equal st0 (eval_state (stml @ Invert.invert stml) env [] st0)))
+    [ "x += 5", ["x", 1], [(1, IntVal 10)],
+      [Assign(VarArray("x", None), ModAdd, Const 5)];
+
+      "swap x y", ["x", 1; "y", 2], [(1, IntVal 10); (2, IntVal 5)],
+      [Swap(VarArray("x", None), VarArray("y", None))];
+
+      "if/fi", ["x", 1], [(1, IntVal 0)],
+      [Conditional(Binary(Eq, Var "x", Const 0),
+                   [Assign(VarArray("x", None), ModAdd, Const 1)],
+                   [Assign(VarArray("x", None), ModSub, Const 1)],
+                   Binary(Eq, Var "x", Const 1))];
+
+      "from/loop/until", ["x", 1], [(1, IntVal 0)],
+      [Loop(Binary(Eq, Var "x", Const 0),
+            [Skip],
+            [Assign(VarArray("x", None), ModAdd, Const 1)],
+            Binary(Eq, Var "x", Const 10))];
+
+      "for i in (1..10)", ["x", 1], [(1, IntVal 0)],
+      [For("i", Const 1, Const 10, [Assign(VarArray("x", None), ModAdd, Var "i")])];
+
+      "array element x[0] += 1", ["x", 1],
+      [(1, LocsVec [2; 3]); (2, IntVal 0); (3, IntVal 0)],
+      [Assign(VarArray("x", Some(Const 0)), ModAdd, Const 1)];
+
+      "local block", ["x", 1], [(1, IntVal 0)],
+      [LocalBlock(IntegerType, "n", Const 5,
+                  [Assign(VarArray("x", None), ModAdd, Var "n")], Const 5)];
+
+      "sequence", ["x", 1; "y", 2], [(1, IntVal 3); (2, IntVal 7)],
+      [Assign(VarArray("x", None), ModAdd, Var "y");
+       Swap(VarArray("x", None), VarArray("y", None));
+       Assign(VarArray("y", None), ModXor, Const 4)];
+    ]
+
+let _ =
+  run_test_tt_main tests;
+  run_test_tt_main reversible
