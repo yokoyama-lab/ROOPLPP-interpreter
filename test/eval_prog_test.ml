@@ -133,11 +133,31 @@ class Program
     delocal int t = (result + n * ((k + n) / n)) + t
 |}
 
+(* ---- integer-literal forms: hex / binary / char ---------------------- *)
+
+(* Hex (0x..), binary (0b..) and char ('A') literals all lex to a plain
+   Const, so they need no parser/eval/invert changes and pretty-print back as
+   decimal (the AST round-trips, the surface form is not preserved). *)
+let hex_src     = "class Program\n int result\n method main()\n  result ^= 0xFF\n"
+let hex_up_src  = "class Program\n int result\n method main()\n  result ^= 0X10\n"
+let bin_src     = "class Program\n int result\n method main()\n  result ^= 0b1010\n"
+let char_src    = "class Program\n int result\n method main()\n  result ^= 'A'\n"
+let charesc_src = "class Program\n int result\n method main()\n  result ^= '\\n'\n"
+
+let literal_tests = "integer literal forms" >::: [
+    "hex 0xFF = 255"   >:: (fun _ -> assert_equal [("result", IntVal 255)] (run hex_src));
+    "hex 0X10 = 16"    >:: (fun _ -> assert_equal [("result", IntVal 16)]  (run hex_up_src));
+    "binary 0b1010=10" >:: (fun _ -> assert_equal [("result", IntVal 10)]  (run bin_src));
+    "char 'A' = 65"    >:: (fun _ -> assert_equal [("result", IntVal 65)]  (run char_src));
+    "char '\\n' = 10"  >:: (fun _ -> assert_equal [("result", IntVal 10)]  (run charesc_src));
+  ]
+
 (* ---- reversibility properties over parsed programs ------------------ *)
 
 let named_progs =
   [ "fib", fib_src; "forsum", forsum_src; "cond", cond_src; "local", local_src;
-    "roundtrip", roundtrip_src ]
+    "roundtrip", roundtrip_src;
+    "hex", hex_src; "binary", bin_src; "char", char_src ]
 
 let double_invert_tests =
   "invert_prog is an involution" >::: List.map
@@ -157,5 +177,6 @@ let reparse_tests =
 
 let _ =
   run_test_tt_main eval_tests;
+  run_test_tt_main literal_tests;
   run_test_tt_main double_invert_tests;
   run_test_tt_main reparse_tests
