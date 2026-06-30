@@ -1,0 +1,6 @@
+; The original Makefile built with ocamlc's default warnings (shown, not fatal).
+; Keep that behaviour so dune does not turn pre-existing warnings (e.g. the
+; docstring placement in syntax.ml) into build errors.
+(env
+ (_
+  (flags (:standard -warn-error -a))))

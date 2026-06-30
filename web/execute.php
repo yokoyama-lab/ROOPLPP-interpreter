@@ -22,7 +22,11 @@ function convertEOL(string $string, string $to = "\n")
 }
 
 $dir = dirname(__FILE__);
-$rplpp_path = realpath("$dir/../src/rplpp");
+// dune build -> _build/default/bin/main.exe; fall back to a legacy src/rplpp build
+$rplpp_path = realpath("$dir/../_build/default/bin/main.exe");
+if ($rplpp_path === false) {
+    $rplpp_path = realpath("$dir/../src/rplpp");
+}
 if ($rplpp_path === false) {
     header("HTTP/1.1 500 Internal Server Error");
     echo json_encode(["error" => "Interpreter not found"]);

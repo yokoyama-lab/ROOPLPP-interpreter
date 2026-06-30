@@ -1,0 +1,10 @@
+; ROOPL++ interpreter library: AST, lexer, parser, evaluator, inverter, printers.
+; Unwrapped so the executable and tests can `open Eval` / `open Syntax` etc.
+; and refer to Parser/Lexer directly, as the original code does.
+(library
+ (name rooplpp)
+ (wrapped false))
+
+(ocamllex lexer)
+
+(ocamlyacc parser)

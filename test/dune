@@ -1,0 +1,4 @@
+; OUnit2 suites; each *_test.ml is its own test executable run by `dune test`.
+(tests
+ (names eval_test invert_test print_test pretty_test env_store_test eval_prog_test)
+ (libraries rooplpp ounit2))

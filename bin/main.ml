@@ -34,7 +34,7 @@ let () =
      if !inv then pretty_prog(invert_prog prog)
      else
        begin
-         try if !lib then let channel2 = open_in "../library/Library.rplpp" in
+         try if !lib then let channel2 = open_in "library/Library.rplpp" in
                           let library = parse channel2 in
                           eval_lib library prog
              else eval prog

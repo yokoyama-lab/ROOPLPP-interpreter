@@ -19,9 +19,6 @@ let rec ext_st_zero st locs n =
   else
     st
 
-(**マップ拡張用：eval_progで使用*)
-let rec ext_map map c fm = (c, fm) :: map
-
 (**第一引数に変数名、第２引数に環境を指定し、環境の中に指定した変数名があれば、
 その変数のロケーションを返す関数*)
 let lookup_envs x env =
