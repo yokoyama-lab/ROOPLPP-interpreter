@@ -1,25 +1,17 @@
 <?php
 // 共有URLをパラメタにして、保存されているプログラムを呼び出す
+require __DIR__ . '/bootstrap.php';
 
 $hash = filter_input(INPUT_GET, "hash");
 
 // パストラバーサル防止：ハッシュは英数字のみ許可
 if ($hash === null || $hash === false || !preg_match('/^[a-f0-9]+$/i', $hash)) {
-    header("HTTP/1.1 400 Bad Request");
-    echo json_encode(["error" => "Invalid hash format"]);
-    exit;
+    json_error(400, "Invalid hash format");
 }
 
-$dir = dirname(__FILE__);
-$filepath = "$dir/programs/$hash.rplpp";
-
+$filepath = __DIR__ . "/programs/$hash.rplpp";
 if (!file_exists($filepath)) {
-    header("HTTP/1.1 404 Not Found");
-    echo json_encode(["error" => "Program not found"]);
-    exit;
+    json_error(404, "Program not found");
 }
 
-$con = file_get_contents($filepath);
-
-header('Content-type:application/json; charset=utf8');
-echo json_encode(array($con));
+json_out([file_get_contents($filepath)]);
