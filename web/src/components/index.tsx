@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import className from 'classnames';
 
-import AppBar from '@material-ui/core/AppBar';
-import Toolbar from '@material-ui/core/Toolbar';
-import Typography from '@material-ui/core/Typography';
-import Button from '@material-ui/core/Button';
-import PlayCircleOutlineIcon from '@material-ui/icons/PlayCircleOutline';
-import IconButton from '@material-ui/core/IconButton';
-import CloseIcon from '@material-ui/icons/Close';
-import ShareIcon from '@material-ui/icons/Share';
-import CssBaseline from '@material-ui/core/CssBaseline';
-import Popover from '@material-ui/core/Popover';
-import TextField from '@material-ui/core/TextField';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
+import ShareIcon from '@mui/icons-material/Share';
+import CssBaseline from '@mui/material/CssBaseline';
+import Popover from '@mui/material/Popover';
+import TextField from '@mui/material/TextField';
 
 import getFire from '../common/getFire';
 import postFire from '../common/postFire';
@@ -301,5 +301,8 @@ function App() {
 }
 
 window.onload = () => {
-  ReactDOM.render(<App />, document.getElementById('root'));
+  const container = document.getElementById('root');
+  if (container) {
+    createRoot(container).render(<App />);
+  }
 };
