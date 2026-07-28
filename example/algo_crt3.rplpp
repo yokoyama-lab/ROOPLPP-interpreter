@@ -1,0 +1,77 @@
+// Reversible CRT for 3 simultaneous congruences
+// x ≡ 2 (mod 3), x ≡ 3 (mod 5), x ≡ 2 (mod 7)
+// x = 23 (23%3=2, 23%5=3, 23%7=2)
+// Uses iterative Garner's algorithm
+
+class CRT3
+    method modpow(int base, int exp, int p, int result, int[] hist)
+        result ^= 1
+        if exp >= 1 then
+            for i in (1..exp) do
+                hist[i-1] += result
+                local int tmp = result
+                result -= tmp
+                result += (tmp * base) % p
+                delocal int tmp = hist[i-1]
+            end
+        fi exp >= 1
+
+    method solve(int[] a, int[] m, int nmod, int result,
+                 int[] hist1, int[] hist2)
+        result += a[0]
+        local int prod = m[0]
+        for i in (1..nmod-1) do
+            local int exp = m[i] - 2
+            local int inv = 0
+            if i = 1 then
+                call modpow(prod, exp, m[i], inv, hist1)
+            else
+                call modpow(prod, exp, m[i], inv, hist2)
+            fi i = 1
+            local int diff = ((a[i] - result) % m[i] + m[i]) % m[i]
+            local int t = (diff * inv) % m[i]
+            result += prod * t
+            delocal int t = (result - a[0]) / prod
+            delocal int diff = diff
+            if i = 1 then
+                uncall modpow(prod, exp, m[i], inv, hist1)
+            else
+                uncall modpow(prod, exp, m[i], inv, hist2)
+            fi i = 1
+            delocal int inv = 0
+            delocal int exp = m[i] - 2
+            local int oldProd = prod
+            prod -= oldProd
+            prod += oldProd * m[i]
+            delocal int oldProd = prod / m[i]
+        end
+        delocal int prod = prod
+
+class Program
+    int[] a
+    int[] m
+    int result
+    method main()
+        new int[3] a
+        new int[3] m
+        a[0] += 2
+        a[1] += 3
+        a[2] += 2
+        m[0] += 3
+        m[1] += 5
+        m[2] += 7
+        local CRT3 c = nil
+        new CRT3 c
+        local int nmod = 3
+        local int[] hist1 = nil
+        new int[3] hist1
+        local int[] hist2 = nil
+        new int[5] hist2
+        call c::solve(a, m, nmod, result, hist1, hist2)
+        delete int[5] hist2
+        delocal int[] hist2 = nil
+        delete int[3] hist1
+        delocal int[] hist1 = nil
+        delocal int nmod = 3
+        delete CRT3 c
+        delocal CRT3 c = nil

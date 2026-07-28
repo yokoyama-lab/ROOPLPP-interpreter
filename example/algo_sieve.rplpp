@@ -1,0 +1,32 @@
+// Reversible Sieve of Eratosthenes
+// Marks composite numbers in sieve array (0=prime, positive=composite)
+// sieve[i] records which prime marked it (for reversibility)
+// n=20: primes are {2,3,5,7,11,13,17,19}
+
+class Sieve
+    method run(int[] sieve, int n)
+        for i in (2..n-1) do
+            if sieve[i] = 0 then
+                // i is prime; mark its multiples
+                local int j = i + i
+                from j = i + i loop
+                    if sieve[j] = 0 then
+                        sieve[j] += i
+                    fi sieve[j] = i
+                    j += i
+                until j >= n
+                delocal int j = j
+            fi sieve[i] = 0
+        end
+
+class Program
+    int[] sieve
+    method main()
+        new int[20] sieve
+        local Sieve s = nil
+        new Sieve s
+        local int n = 20
+        call s::run(sieve, n)
+        delocal int n = 20
+        delete Sieve s
+        delocal Sieve s = nil

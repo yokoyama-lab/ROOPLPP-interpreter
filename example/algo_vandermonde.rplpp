@@ -1,0 +1,41 @@
+// Reversible Vandermonde matrix generation
+// V[i][j] = points[i]^j
+// points = [1, 2, 3, 4] -> V is 4x4
+// V = [[1,1,1,1], [1,2,4,8], [1,3,9,27], [1,4,16,64]]
+
+class Vandermonde
+    method generate(int[] points, int n, int[] v)
+        for i in (0..n-1) do
+            local int idx = i * n
+            v[idx] += 1
+            local int pw = 1
+            for j in (1..n-1) do
+                local int idx2 = i * n + j
+                local int oldPw = pw
+                pw -= oldPw
+                pw += oldPw * points[i]
+                delocal int oldPw = pw / points[i]
+                v[idx2] += pw
+                delocal int idx2 = i * n + j
+            end
+            delocal int pw = pw
+            delocal int idx = i * n
+        end
+
+class Program
+    int[] points
+    int[] v
+    method main()
+        new int[4] points
+        new int[16] v
+        points[0] += 1
+        points[1] += 2
+        points[2] += 3
+        points[3] += 4
+        local Vandermonde vd = nil
+        new Vandermonde vd
+        local int n = 4
+        call vd::generate(points, n, v)
+        delocal int n = 4
+        delete Vandermonde vd
+        delocal Vandermonde vd = nil

@@ -1,0 +1,36 @@
+// Reversible power-of-two test
+// Decomposes n into bits; isPow2=1 iff exactly one bit is set
+// n=16 -> isPow2=1, nbits=5
+// n=12 -> isPow2=0, nbits=4
+
+class IsPower2
+    method test(int n, int isPow2, int ones, int[] bits, int nbits)
+        // Decompose n into bits (LSB first)
+        from nbits = 0 loop
+            bits[nbits] += n % 2
+            ones += bits[nbits]
+            n -= bits[nbits]
+            local int half = n / 2
+            n -= half
+            delocal int half = n
+            nbits += 1
+        until n = 0
+        // Check if exactly one bit was set
+        if ones = 1 then
+            isPow2 ^= 1
+        fi ones = 1
+
+class Program
+    int isPow2
+    int ones
+    int[] bits
+    int nbits
+    method main()
+        new int[5] bits
+        local IsPower2 p = nil
+        new IsPower2 p
+        local int n = 16
+        call p::test(n, isPow2, ones, bits, nbits)
+        delocal int n = 0
+        delete IsPower2 p
+        delocal IsPower2 p = nil

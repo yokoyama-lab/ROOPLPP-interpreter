@@ -1,0 +1,38 @@
+// Reversible bit reversal of an n-bit integer
+// val=13 (1101 in 4 bits) -> result=11 (1011)
+// Decomposes to bits (LSB first), then reconstructs reading LSB first (= reversed)
+
+class ReverseBits
+    method reverse(int val, int nbits, int result, int[] bits)
+        // Decompose val into bits (LSB first)
+        for i in (0..nbits-1) do
+            bits[i] += val % 2
+            val -= bits[i]
+            local int half = val / 2
+            val -= half
+            delocal int half = val
+        end
+        // Build result reading bits LSB-first (Horner's method = bit reversal)
+        result += bits[0]
+        for i in (1..nbits-1) do
+            local int tmp = result
+            result -= tmp
+            result += tmp * 2
+            delocal int tmp = result / 2
+            result += bits[i]
+        end
+
+class Program
+    int result
+    int[] bits
+    method main()
+        new int[4] bits
+        local ReverseBits r = nil
+        new ReverseBits r
+        local int val = 13
+        local int nbits = 4
+        call r::reverse(val, nbits, result, bits)
+        delocal int nbits = 4
+        delocal int val = 0
+        delete ReverseBits r
+        delocal ReverseBits r = nil

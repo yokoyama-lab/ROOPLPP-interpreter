@@ -1,0 +1,39 @@
+// Reversible Euler totient function (sieve method)
+// phi[n] = number of integers 1..n coprime to n
+// Computes phi for all n up to maxN
+
+class EulerTotient
+    method sieve(int[] phi, int maxN)
+        // Initialize phi[i] = i
+        for i in (1..maxN) do
+            phi[i] += i
+        end
+        // Sieve: for each prime p, multiply phi[kp] by (1 - 1/p) = (p-1)/p
+        for p in (2..maxN) do
+            if phi[p] = p then
+                // p is prime
+                for k in (1..maxN / p) do
+                    local int idx = k * p
+                    // phi[idx] = phi[idx] / p * (p-1)
+                    local int oldPhi = phi[idx]
+                    local int newPhi = (oldPhi / p) * (p - 1)
+                    phi[idx] -= oldPhi
+                    phi[idx] += newPhi
+                    delocal int newPhi = phi[idx]
+                    delocal int oldPhi = oldPhi
+                    delocal int idx = k * p
+                end
+            fi phi[p] = p - 1
+        end
+
+class Program
+    int[] phi
+    method main()
+        new int[21] phi
+        local EulerTotient et = nil
+        new EulerTotient et
+        local int maxN = 20
+        call et::sieve(phi, maxN)
+        delocal int maxN = 20
+        delete EulerTotient et
+        delocal EulerTotient et = nil

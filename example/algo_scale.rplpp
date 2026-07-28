@@ -1,0 +1,33 @@
+// Reversible array scaling: multiply each element by a constant factor
+// a = [2, 4, 6, 8] * 3 -> a = [6, 12, 18, 24]
+// Stores original values for reversibility (uncall divides)
+
+class Scale
+    method scaleUp(int[] a, int n, int factor, int[] orig)
+        for i in (0..n-1) do
+            orig[i] += a[i]
+            local int tmp = a[i]
+            a[i] -= tmp
+            a[i] += tmp * factor
+            delocal int tmp = a[i] / factor
+        end
+
+class Program
+    int[] a
+    int[] orig
+    method main()
+        new int[4] a
+        new int[4] orig
+        a[0] += 2
+        a[1] += 4
+        a[2] += 6
+        a[3] += 8
+        local Scale s = nil
+        new Scale s
+        local int n = 4
+        local int factor = 3
+        call s::scaleUp(a, n, factor, orig)
+        delocal int factor = 3
+        delocal int n = 4
+        delete Scale s
+        delocal Scale s = nil

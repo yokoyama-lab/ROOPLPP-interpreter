@@ -1,0 +1,41 @@
+// Reversible array min and max
+// Records differences for reversibility
+// a = [3, 7, 1, 9, 4] -> minv = 1, maxv = 9
+
+class MinMax
+    method find(int[] a, int n, int minv, int maxv, int[] mindiff, int[] maxdiff)
+        minv += a[0]
+        maxv += a[0]
+        for i in (1..n-1) do
+            if a[i] < minv then
+                mindiff[i] += minv - a[i]
+                minv -= mindiff[i]
+            fi mindiff[i] != 0
+            if a[i] > maxv then
+                maxdiff[i] += a[i] - maxv
+                maxv += maxdiff[i]
+            fi maxdiff[i] != 0
+        end
+
+class Program
+    int[] a
+    int minv
+    int maxv
+    int[] mindiff
+    int[] maxdiff
+    method main()
+        new int[5] a
+        new int[5] mindiff
+        new int[5] maxdiff
+        a[0] += 3
+        a[1] += 7
+        a[2] += 1
+        a[3] += 9
+        a[4] += 4
+        local MinMax m = nil
+        new MinMax m
+        local int n = 5
+        call m::find(a, n, minv, maxv, mindiff, maxdiff)
+        delocal int n = 5
+        delete MinMax m
+        delocal MinMax m = nil

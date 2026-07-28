@@ -1,0 +1,47 @@
+// Reversible counting sort for values in [0..maxval]
+// Input preserved in 'orig' for reversibility
+// a = [3, 1, 0, 3, 2, 1] -> sorted = [0, 1, 1, 2, 3, 3]
+
+class CountingSort
+    method sort(int[] a, int n, int maxval, int[] sorted, int[] count)
+        // Step 1: Count occurrences
+        for i in (0..n-1) do
+            count[a[i]] += 1
+        end
+        // Step 2: Compute prefix sums (cumulative count)
+        for i in (1..maxval) do
+            count[i] += count[i-1]
+        end
+        // Step 3: Place elements in sorted order (from right to left for stability)
+        for i in (0..n-1) do
+            local int ri = n - 1 - i
+            local int val = a[ri]
+            count[val] -= 1
+            sorted[count[val]] += a[ri]
+            delocal int val = a[ri]
+            delocal int ri = n - 1 - i
+        end
+
+class Program
+    int[] a
+    int[] sorted
+    int[] count
+    method main()
+        new int[6] a
+        new int[6] sorted
+        new int[4] count
+        a[0] += 3
+        a[1] += 1
+        a[2] += 0
+        a[3] += 3
+        a[4] += 2
+        a[5] += 1
+        local CountingSort c = nil
+        new CountingSort c
+        local int n = 6
+        local int maxval = 3
+        call c::sort(a, n, maxval, sorted, count)
+        delocal int maxval = 3
+        delocal int n = 6
+        delete CountingSort c
+        delocal CountingSort c = nil

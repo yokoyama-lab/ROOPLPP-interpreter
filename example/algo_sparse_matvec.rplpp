@@ -1,0 +1,61 @@
+// Reversible sparse matrix-vector multiplication (CSR format)
+// CSR: values[], colIdx[], rowPtr[]
+// Matrix (3x3):
+//   [1 0 2]   x = [3]   y = [1*3+2*5] = [13]
+//   [0 3 0]   x   [4]   y   [3*4]     = [12]
+//   [4 0 5]       [5]       [4*3+5*5] = [37]
+
+class SparseMatVec
+    method multiply(int[] val, int[] col, int[] rowPtr, int nrows,
+                    int[] x, int[] y)
+        for i in (0..nrows-1) do
+            local int start = rowPtr[i]
+            local int stop = rowPtr[i+1]
+            for j in (start..stop-1) do
+                y[i] += val[j] * x[col[j]]
+            end
+            delocal int stop = rowPtr[i+1]
+            delocal int start = rowPtr[i]
+        end
+
+class Program
+    int[] val
+    int[] col
+    int[] rowPtr
+    int[] x
+    int[] y
+    method main()
+        // Non-zero values: [1, 2, 3, 4, 5]
+        new int[5] val
+        val[0] += 1
+        val[1] += 2
+        val[2] += 3
+        val[3] += 4
+        val[4] += 5
+        // Column indices: [0, 2, 1, 0, 2]
+        new int[5] col
+        col[0] += 0
+        col[1] += 2
+        col[2] += 1
+        col[3] += 0
+        col[4] += 2
+        // Row pointers: [0, 2, 3, 5]
+        new int[4] rowPtr
+        rowPtr[0] += 0
+        rowPtr[1] += 2
+        rowPtr[2] += 3
+        rowPtr[3] += 5
+        // Vector x = [3, 4, 5]
+        new int[3] x
+        x[0] += 3
+        x[1] += 4
+        x[2] += 5
+        // Output y
+        new int[3] y
+        local SparseMatVec s = nil
+        new SparseMatVec s
+        local int nrows = 3
+        call s::multiply(val, col, rowPtr, nrows, x, y)
+        delocal int nrows = 3
+        delete SparseMatVec s
+        delocal SparseMatVec s = nil

@@ -1,0 +1,54 @@
+// Reversible modular matrix multiplication C += A * B mod p
+// Useful for Fibonacci mod p via matrix exponentiation
+// A = [[1,1],[1,0]], B = [[1,1],[1,0]], p=1000000007
+// C = A*B mod p = [[2,1],[1,1]]
+
+class ModMatMul
+    method multiply(int[] a, int[] b, int[] c, int n, int p)
+        for i in (0..n-1) do
+            for j in (0..n-1) do
+                for k in (0..n-1) do
+                    local int ci = i * n + j
+                    local int ai = i * n + k
+                    local int bi = k * n + j
+                    c[ci] += a[ai] * b[bi]
+                    delocal int bi = k * n + j
+                    delocal int ai = i * n + k
+                    delocal int ci = i * n + j
+                end
+                // Take mod
+                local int ci2 = i * n + j
+                local int r = c[ci2] % p
+                c[ci2] -= c[ci2]
+                c[ci2] += r
+                delocal int r = c[ci2]
+                delocal int ci2 = i * n + j
+            end
+        end
+
+class Program
+    int[] a
+    int[] b
+    int[] c
+    method main()
+        new int[4] a
+        new int[4] b
+        new int[4] c
+        // Fibonacci matrix
+        a[0] += 1
+        a[1] += 1
+        a[2] += 1
+        a[3] += 0
+        b[0] += 1
+        b[1] += 1
+        b[2] += 1
+        b[3] += 0
+        local ModMatMul m = nil
+        new ModMatMul m
+        local int n = 2
+        local int p = 1000000007
+        call m::multiply(a, b, c, n, p)
+        delocal int p = 1000000007
+        delocal int n = 2
+        delete ModMatMul m
+        delocal ModMatMul m = nil

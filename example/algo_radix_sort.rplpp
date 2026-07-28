@@ -1,0 +1,66 @@
+// Reversible radix sort (LSD, base 10, 2-digit numbers)
+// a = [53, 21, 87, 45, 12, 76, 34, 98] -> sorted
+
+class RadixSort
+    method sortByDigit(int[] a, int n, int divisor, int[] buf, int[] digits,
+                       int[] count, int[] pos)
+        for i in (0..n-1) do
+            digits[i] += (a[i] / divisor) % 10
+        end
+        for i in (0..n-1) do
+            count[digits[i]] += 1
+        end
+        pos[0] += 0
+        for i in (1..9) do
+            pos[i] += pos[i-1] + count[i-1]
+        end
+        for i in (0..n-1) do
+            buf[pos[digits[i]]] += a[i]
+            pos[digits[i]] += 1
+        end
+        for i in (0..n-1) do
+            a[i] -= a[i]
+            a[i] += buf[i]
+            buf[i] -= buf[i]
+        end
+
+class Program
+    int[] a
+    int[] d1
+    int[] d2
+    int[] count1
+    int[] count2
+    int[] pos1
+    int[] pos2
+    method main()
+        new int[8] a
+        new int[8] d1
+        new int[8] d2
+        new int[10] count1
+        new int[10] count2
+        new int[10] pos1
+        new int[10] pos2
+        a[0] += 53
+        a[1] += 21
+        a[2] += 87
+        a[3] += 45
+        a[4] += 12
+        a[5] += 76
+        a[6] += 34
+        a[7] += 98
+        local RadixSort rs = nil
+        new RadixSort rs
+        local int n = 8
+        local int div1 = 1
+        local int div10 = 10
+        local int[] buf = nil
+        new int[8] buf
+        call rs::sortByDigit(a, n, div1, buf, d1, count1, pos1)
+        call rs::sortByDigit(a, n, div10, buf, d2, count2, pos2)
+        delete int[8] buf
+        delocal int[] buf = nil
+        delocal int div10 = 10
+        delocal int div1 = 1
+        delocal int n = 8
+        delete RadixSort rs
+        delocal RadixSort rs = nil

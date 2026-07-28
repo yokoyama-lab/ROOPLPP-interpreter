@@ -1,0 +1,33 @@
+// Reversible array interleave: merge two arrays alternately
+// a = [1, 2, 3], b = [4, 5, 6] -> out = [1, 4, 2, 5, 3, 6]
+
+class Interleave
+    method merge(int[] a, int[] b, int n, int[] out)
+        for i in (0..n-1) do
+            local int idx = i * 2
+            out[idx] += a[i]
+            out[idx + 1] += b[i]
+            delocal int idx = i * 2
+        end
+
+class Program
+    int[] a
+    int[] b
+    int[] out
+    method main()
+        new int[3] a
+        new int[3] b
+        new int[6] out
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        b[0] += 4
+        b[1] += 5
+        b[2] += 6
+        local Interleave il = nil
+        new Interleave il
+        local int n = 3
+        call il::merge(a, b, n, out)
+        delocal int n = 3
+        delete Interleave il
+        delocal Interleave il = nil

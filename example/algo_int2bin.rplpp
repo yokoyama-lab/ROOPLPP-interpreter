@@ -1,0 +1,27 @@
+// Reversible integer to binary conversion
+// n=13 (1101 binary) -> bits=[1,0,1,1] (LSB first), nbits=4
+// uncall recovers n from bits
+
+class Int2Bin
+    method convert(int n, int[] bits, int nbits)
+        from nbits = 0 loop
+            bits[nbits] += n % 2
+            n -= bits[nbits]
+            local int half = n / 2
+            n -= half
+            delocal int half = n
+            nbits += 1
+        until n = 0
+
+class Program
+    int[] bits
+    int nbits
+    method main()
+        new int[4] bits
+        local Int2Bin c = nil
+        new Int2Bin c
+        local int n = 13
+        call c::convert(n, bits, nbits)
+        delocal int n = 0
+        delete Int2Bin c
+        delocal Int2Bin c = nil

@@ -1,0 +1,39 @@
+// Reversible full adder (bit-level addition)
+// Computes sum and carry for two n-bit numbers stored as bit arrays
+// a = [1,0,1] (5 in LSB-first), b = [1,1,0] (3 in LSB-first)
+// -> sum = [0,0,0,1] (8 in LSB-first), carry trace for reversibility
+
+class BitAdder
+    method add(int[] a, int[] b, int n, int[] sum, int[] carry)
+        carry[0] ^= 0
+        for i in (0..n-1) do
+            local int total = a[i] + b[i] + carry[i]
+            sum[i] += total % 2
+            carry[i+1] += total / 2
+            delocal int total = sum[i] + carry[i+1] * 2
+        end
+        sum[n] += carry[n]
+
+class Program
+    int[] a
+    int[] b
+    int[] sum
+    int[] carry
+    method main()
+        new int[3] a
+        new int[3] b
+        new int[4] sum
+        new int[4] carry
+        // 5 = 101 in binary, LSB first = [1, 0, 1]
+        a[0] += 1
+        a[2] += 1
+        // 3 = 011 in binary, LSB first = [1, 1, 0]
+        b[0] += 1
+        b[1] += 1
+        local BitAdder ba = nil
+        new BitAdder ba
+        local int n = 3
+        call ba::add(a, b, n, sum, carry)
+        delocal int n = 3
+        delete BitAdder ba
+        delocal BitAdder ba = nil

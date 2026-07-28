@@ -1,0 +1,31 @@
+// Reversible modular exponentiation: base^exp mod m
+// Uses iterative method storing intermediate results for reversibility
+// base=2, exp=10, m=1000 -> result=24 (2^10 = 1024, 1024 mod 1000 = 24)
+
+class ModPow
+    method modpow(int base, int exp, int m, int result, int[] hist)
+        result ^= 1
+        for i in (1..exp) do
+            hist[i-1] += result
+            local int tmp = result
+            result -= tmp
+            result += (tmp * base) % m
+            delocal int tmp = hist[i-1]
+        end
+
+class Program
+    int result
+    int[] hist
+    method main()
+        new int[10] hist
+        local ModPow p = nil
+        new ModPow p
+        local int base = 2
+        local int exp = 10
+        local int m = 1000
+        call p::modpow(base, exp, m, result, hist)
+        delocal int m = 1000
+        delocal int exp = 10
+        delocal int base = 2
+        delete ModPow p
+        delocal ModPow p = nil

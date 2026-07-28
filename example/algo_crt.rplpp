@@ -1,0 +1,50 @@
+// Reversible Chinese Remainder Theorem for 2 congruences
+// Find x such that x ≡ a1 (mod m1) and x ≡ a2 (mod m2)
+// a1=2, m1=3, a2=3, m2=5 -> x=8 (8%3=2, 8%5=3)
+// Uses Garner's algorithm: x = a1 + m1 * ((a2 - a1) * m1^{-1} mod m2)
+
+class CRT
+    method modpow(int base, int exp, int p, int result, int[] hist)
+        result ^= 1
+        if exp >= 1 then
+            for i in (1..exp) do
+                hist[i-1] += result
+                local int tmp = result
+                result -= tmp
+                result += (tmp * base) % p
+                delocal int tmp = hist[i-1]
+            end
+        fi exp >= 1
+
+    method solve(int a1, int m1, int a2, int m2, int result, int[] hist)
+        // Compute m1^{-1} mod m2 via Fermat's little theorem
+        local int exp = m2 - 2
+        local int m1inv = 0
+        call modpow(m1, exp, m2, m1inv, hist)
+        // t = (a2 - a1) * m1inv mod m2
+        local int diff = a2 - a1
+        local int t = ((diff * m1inv) % m2 + m2) % m2
+        result += a1 + m1 * t
+        delocal int t = (result - a1) / m1
+        delocal int diff = a2 - a1
+        delocal int m1inv = m1inv
+        delocal int exp = m2 - 2
+
+class Program
+    int result
+    int[] hist
+    method main()
+        new int[3] hist
+        local CRT c = nil
+        new CRT c
+        local int a1 = 2
+        local int m1 = 3
+        local int a2 = 3
+        local int m2 = 5
+        call c::solve(a1, m1, a2, m2, result, hist)
+        delocal int m2 = 5
+        delocal int a2 = 3
+        delocal int m1 = 3
+        delocal int a1 = 2
+        delete CRT c
+        delocal CRT c = nil

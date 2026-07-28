@@ -1,0 +1,30 @@
+// Reversible population count (Hamming weight)
+// Counts the number of 1-bits in an integer
+// Stores the bit values for reversibility
+// n=42 (binary: 101010) -> count=3, bits=[0,1,0,1,0,1] (LSB first)
+
+class Popcount
+    method count(int n, int cnt, int[] bits, int nbits)
+        from nbits = 0 loop
+            bits[nbits] += n % 2
+            cnt += bits[nbits]
+            n -= bits[nbits]
+            local int half = n / 2
+            n -= half
+            delocal int half = n
+            nbits += 1
+        until n = 0
+
+class Program
+    int cnt
+    int[] bits
+    int nbits
+    method main()
+        new int[6] bits
+        local Popcount p = nil
+        new Popcount p
+        local int n = 42
+        call p::count(n, cnt, bits, nbits)
+        delocal int n = 0
+        delete Popcount p
+        delocal Popcount p = nil

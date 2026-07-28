@@ -1,0 +1,51 @@
+// Reversible RSA-like encryption (small numbers for demonstration)
+// p=7, q=11, n=77, phi=60, e=13, d=37 (13*37=481=8*60+1)
+// Encrypt: c = m^e mod n, Decrypt: m = c^d mod n
+// call encrypts, uncall decrypts (natural reversibility!)
+
+class RSA
+    method modpow(int base, int exp, int n, int result, int[] hist)
+        result ^= 1
+        if exp >= 1 then
+            for i in (1..exp) do
+                hist[i-1] += result
+                local int tmp = result
+                result -= tmp
+                result += (tmp * base) % n
+                delocal int tmp = hist[i-1]
+            end
+        fi exp >= 1
+
+    // Encrypt: cipher = plain^e mod n
+    method encrypt(int plain, int e, int n, int cipher, int[] hist)
+        call modpow(plain, e, n, cipher, hist)
+
+class Program
+    int cipher
+    int[] hist
+    method main()
+        new int[13] hist
+        local RSA r = nil
+        new RSA r
+        local int plain = 42
+        local int e = 13
+        local int n = 77
+        print("plain = ")
+        show(plain)
+        print("\n")
+        call r::encrypt(plain, e, n, cipher, hist)
+        print("cipher = ")
+        show(cipher)
+        print("\n")
+        // uncall decrypts (this is where reversibility shines!)
+        uncall r::encrypt(plain, e, n, cipher, hist)
+        print("decrypted = ")
+        show(cipher)
+        print("\n")
+        // Re-encrypt for clean state
+        call r::encrypt(plain, e, n, cipher, hist)
+        delocal int n = 77
+        delocal int e = 13
+        delocal int plain = 42
+        delete RSA r
+        delocal RSA r = nil

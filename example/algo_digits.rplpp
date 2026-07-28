@@ -1,0 +1,35 @@
+// Reversible digit extraction (base 10)
+// n = 12345 -> digits = [5, 4, 3, 2, 1] (LSB first), ndigits = 5
+// Similar to int2bin but base 10
+
+class Digits
+    method extract(int n, int[] digits, int ndigits)
+        from ndigits = 0 loop
+            digits[ndigits] += n % 10
+            n -= digits[ndigits]
+            local int tenth = n / 10
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            n -= tenth
+            delocal int tenth = n
+            ndigits += 1
+        until n = 0
+
+class Program
+    int[] digits
+    int ndigits
+    method main()
+        new int[5] digits
+        local Digits d = nil
+        new Digits d
+        local int n = 12345
+        call d::extract(n, digits, ndigits)
+        delocal int n = 0
+        delete Digits d
+        delocal Digits d = nil

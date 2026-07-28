@@ -1,0 +1,31 @@
+// Reversible Euclidean rhythm generation
+// Distributes k beats evenly among n positions
+// E(k=3, n=8) -> [1, 0, 0, 1, 0, 0, 1, 0] (tresillo rhythm)
+// E(k=5, n=8) -> [1, 0, 1, 1, 0, 1, 1, 0] (cinquillo)
+// Uses Bjorklund's algorithm via integer division
+
+class EuclideanRhythm
+    method generate(int k, int n, int[] pattern)
+        for i in (0..n-1) do
+            // Beat at position i iff floor(i*k/n) > floor((i-1)*k/n)
+            // Equivalently: (i*k) % n < k (Bresenham-like condition)
+            local int mod = (i * k) % n
+            if mod < k then
+                pattern[i] ^= 1
+            fi mod < k
+            delocal int mod = (i * k) % n
+        end
+
+class Program
+    int[] pattern
+    method main()
+        new int[8] pattern
+        local EuclideanRhythm er = nil
+        new EuclideanRhythm er
+        local int k = 5
+        local int n = 8
+        call er::generate(k, n, pattern)
+        delocal int n = 8
+        delocal int k = 5
+        delete EuclideanRhythm er
+        delocal EuclideanRhythm er = nil

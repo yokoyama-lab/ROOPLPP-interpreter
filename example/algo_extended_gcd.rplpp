@@ -1,0 +1,53 @@
+// Reversible Extended Euclidean Algorithm
+// Finds gcd(a, b) and coefficients x, y such that a*x + b*y = gcd(a, b)
+// gcd(35, 15) = 5, with 35*1 + 15*(-2) = 5
+
+class ExtGCD
+    method extgcd(int a, int b, int[] quots, int steps)
+        // Phase 1: Standard Euclidean to find GCD (store quotients)
+        from steps = 0 loop
+            local int r = a % b
+            local int q = a / b
+            quots[steps] += q
+            steps += 1
+            a -= b * q
+            a <=> b
+            delocal int q = quots[steps - 1]
+            delocal int r = b
+        until b = 0
+
+    // Compute Bezout coefficients from quotient history
+    // Back-substitution: (x, y) = (y_old, x_old - q * y_old)
+    method bezout(int[] quots, int steps, int x, int y)
+        x ^= 1
+        y ^= 0
+        for i in (1..steps) do
+            local int idx = steps - i
+            local int q = quots[idx]
+            local int newY = x - q * y
+            x -= x
+            x += y
+            y -= y
+            y += newY
+            delocal int newY = y
+            delocal int q = quots[idx]
+            delocal int idx = steps - i
+        end
+
+class Program
+    int a
+    int b
+    int x
+    int y
+    int[] quots
+    int steps
+    method main()
+        a += 35
+        b += 15
+        new int[2] quots
+        local ExtGCD e = nil
+        new ExtGCD e
+        call e::extgcd(a, b, quots, steps)
+        call e::bezout(quots, steps, x, y)
+        delete ExtGCD e
+        delocal ExtGCD e = nil

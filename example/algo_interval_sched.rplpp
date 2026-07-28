@@ -1,0 +1,50 @@
+// Reversible interval scheduling (greedy, pre-sorted by end time)
+// Select max non-overlapping intervals
+// Intervals sorted by end: [(1,3),(2,5),(4,7),(6,9),(8,10)]
+// Selected: (1,3), (4,7), (8,10) -> count = 3
+
+class IntervalSched
+    method schedule(int[] start, int[] finish, int n, int count,
+                    int[] selected)
+        // First interval always selected
+        selected[0] ^= 1
+        count += 1
+        local int lastEnd = finish[0]
+        for i in (1..n-1) do
+            if start[i] >= lastEnd then
+                selected[i] ^= 1
+                count += 1
+                local int oldEnd = lastEnd
+                lastEnd -= oldEnd
+                lastEnd += finish[i]
+                delocal int oldEnd = oldEnd
+            fi selected[i] = 1
+        end
+        delocal int lastEnd = lastEnd
+
+class Program
+    int[] start
+    int[] finish
+    int count
+    int[] selected
+    method main()
+        new int[5] start
+        new int[5] finish
+        new int[5] selected
+        start[0] += 1
+        start[1] += 2
+        start[2] += 4
+        start[3] += 6
+        start[4] += 8
+        finish[0] += 3
+        finish[1] += 5
+        finish[2] += 7
+        finish[3] += 9
+        finish[4] += 10
+        local IntervalSched is = nil
+        new IntervalSched is
+        local int n = 5
+        call is::schedule(start, finish, n, count, selected)
+        delocal int n = 5
+        delete IntervalSched is
+        delocal IntervalSched is = nil

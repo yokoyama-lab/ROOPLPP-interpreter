@@ -1,0 +1,45 @@
+// Reversible Run-Length Encoding
+// Input:  data = [1, 1, 1, 2, 2, 3, 3, 3, 3, 1]
+// Output: vals = [1, 2, 3, 1], runs = [3, 2, 4, 1], nruns = 4
+
+class RLE
+    method encode(int[] data, int len, int[] vals, int[] runs, int nruns)
+        vals[0] += data[0]
+        runs[0] += 1
+        for i in (1..len-1) do
+            if data[i] = data[i-1] then
+                runs[nruns] += 1
+            else
+                nruns += 1
+                vals[nruns] += data[i]
+                runs[nruns] += 1
+            fi data[i] = data[i-1]
+        end
+        nruns += 1
+
+class Program
+    int[] data
+    int[] vals
+    int[] runs
+    int nruns
+    method main()
+        new int[10] data
+        new int[4] vals
+        new int[4] runs
+        data[0] += 1
+        data[1] += 1
+        data[2] += 1
+        data[3] += 2
+        data[4] += 2
+        data[5] += 3
+        data[6] += 3
+        data[7] += 3
+        data[8] += 3
+        data[9] += 1
+        local RLE r = nil
+        new RLE r
+        local int len = 10
+        call r::encode(data, len, vals, runs, nruns)
+        delocal int len = 10
+        delete RLE r
+        delocal RLE r = nil

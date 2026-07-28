@@ -1,0 +1,82 @@
+// Reversible Bitonic Sort (data-oblivious sorting network)
+// Only uses compare-and-swap (naturally reversible)
+// All comparison patterns are fixed, no data-dependent branching issues
+// hist records which swaps actually happened for reversibility
+// a = [5, 1, 4, 2, 8, 3, 7, 6] -> a = [1, 2, 3, 4, 5, 6, 7, 8]
+
+class BitonicSort
+    // Compare and conditionally swap a[i] and a[j] in ascending order
+    method compSwap(int[] a, int i, int j, int[] hist, int h)
+        if a[i] > a[j] then
+            hist[h] ^= 1
+            a[i] <=> a[j]
+        fi hist[h] = 1
+
+    // Bitonic merge: merge a bitonic sequence in a[lo..lo+cnt-1]
+    // dir=1 for ascending, dir=0 for descending
+    method bitonicMerge(int[] a, int lo, int cnt, int dir, int[] hist, int h)
+        if cnt > 1 then
+            local int half = cnt / 2
+            for i in (lo..lo+half-1) do
+                local int j = i + half
+                if dir = 1 then
+                    call compSwap(a, i, j, hist, h)
+                else
+                    call compSwap(a, j, i, hist, h)
+                fi dir = 1
+                h += 1
+                delocal int j = i + half
+            end
+            call bitonicMerge(a, lo, half, dir, hist, h)
+            local int lo2 = lo + half
+            call bitonicMerge(a, lo2, half, dir, hist, h)
+            delocal int lo2 = lo + half
+            delocal int half = cnt / 2
+        fi cnt > 1
+
+    // Bitonic sort: recursively build bitonic sequences and merge
+    method bitonicSort(int[] a, int lo, int cnt, int dir, int[] hist, int h)
+        if cnt > 1 then
+            local int half = cnt / 2
+            // Sort first half ascending
+            local int d0 = 1
+            call bitonicSort(a, lo, half, d0, hist, h)
+            delocal int d0 = 1
+            // Sort second half descending
+            local int lo2 = lo + half
+            local int d1 = 0
+            call bitonicSort(a, lo2, half, d1, hist, h)
+            delocal int d1 = 0
+            delocal int lo2 = lo + half
+            // Merge the bitonic sequence
+            call bitonicMerge(a, lo, cnt, dir, hist, h)
+            delocal int half = cnt / 2
+        fi cnt > 1
+
+class Program
+    int[] a
+    int[] hist
+    method main()
+        new int[8] a
+        new int[24] hist
+        a[0] += 5
+        a[1] += 1
+        a[2] += 4
+        a[3] += 2
+        a[4] += 8
+        a[5] += 3
+        a[6] += 7
+        a[7] += 6
+        local BitonicSort b = nil
+        new BitonicSort b
+        local int lo = 0
+        local int cnt = 8
+        local int dir = 1
+        local int h = 0
+        call b::bitonicSort(a, lo, cnt, dir, hist, h)
+        delocal int h = h
+        delocal int dir = 1
+        delocal int cnt = 8
+        delocal int lo = 0
+        delete BitonicSort b
+        delocal BitonicSort b = nil

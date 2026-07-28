@@ -1,0 +1,52 @@
+// Reversible Longest Increasing Subsequence via O(n^2) DP
+// dp[i] = length of LIS ending at index i
+// a = [10, 9, 2, 5, 3, 7, 101, 18] -> LIS length = 4 (e.g. [2,3,7,101])
+
+class LIS
+    method solve(int[] a, int n, int[] dp, int maxLen)
+        for i in (0..n-1) do
+            dp[i] += 1
+            if i >= 1 then
+                for j in (0..i-1) do
+                    if a[j] < a[i] then
+                        local int cand = dp[j] + 1
+                        local int oldDp = dp[i]
+                        if cand > dp[i] then
+                            dp[i] -= dp[i]
+                            dp[i] += cand
+                        fi dp[i] > oldDp
+                        delocal int oldDp = oldDp
+                        delocal int cand = dp[j] + 1
+                    fi a[j] < a[i]
+                end
+            fi i >= 1
+            local int oldMax = maxLen
+            if dp[i] > maxLen then
+                maxLen -= maxLen
+                maxLen += dp[i]
+            fi maxLen > oldMax
+            delocal int oldMax = oldMax
+        end
+
+class Program
+    int[] a
+    int[] dp
+    int maxLen
+    method main()
+        new int[8] a
+        new int[8] dp
+        a[0] += 10
+        a[1] += 9
+        a[2] += 2
+        a[3] += 5
+        a[4] += 3
+        a[5] += 7
+        a[6] += 101
+        a[7] += 18
+        local LIS l = nil
+        new LIS l
+        local int n = 8
+        call l::solve(a, n, dp, maxLen)
+        delocal int n = 8
+        delete LIS l
+        delocal LIS l = nil

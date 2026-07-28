@@ -1,0 +1,38 @@
+// Reversible Pascal's triangle (flattened)
+// Index of (row, col) = row*(row+1)/2 + col
+// n=5 rows -> [1, 1,1, 1,2,1, 1,3,3,1, 1,4,6,4,1]
+
+class Pascal
+    method compute(int[] tri, int n)
+        tri[0] += 1
+        for row in (1..n-1) do
+            local int base = row * (row + 1) / 2
+            local int prev = (row - 1) * row / 2
+            tri[base] += 1
+            tri[base + row] += 1
+            if row >= 2 then
+                for col in (1..row-1) do
+                    local int idx = base + col
+                    local int pidx1 = prev + col - 1
+                    local int pidx2 = prev + col
+                    tri[idx] += tri[pidx1] + tri[pidx2]
+                    delocal int pidx2 = prev + col
+                    delocal int pidx1 = prev + col - 1
+                    delocal int idx = base + col
+                end
+            fi row >= 2
+            delocal int prev = (row - 1) * row / 2
+            delocal int base = row * (row + 1) / 2
+        end
+
+class Program
+    int[] tri
+    method main()
+        new int[15] tri
+        local Pascal p = nil
+        new Pascal p
+        local int n = 5
+        call p::compute(tri, n)
+        delocal int n = 5
+        delete Pascal p
+        delocal Pascal p = nil

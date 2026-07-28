@@ -1,0 +1,40 @@
+// Reversible integer approximation of 4-point DCT-II
+// Uses the butterfly factorization:
+// Stage 1: (x0+x3, x1+x2, x1-x2, x0-x3)
+// Stage 2: apply rotation-like operations
+// Input: [100, 200, 300, 400] -> DCT coefficients
+
+class DCTInteger
+    method dct4(int[] x, int[] y)
+        // Stage 1: butterfly sums/differences
+        local int a = x[0] + x[3]
+        local int b = x[1] + x[2]
+        local int c = x[1] - x[2]
+        local int d = x[0] - x[3]
+        // Stage 2: combine
+        y[0] += a + b
+        y[2] += a - b
+        // y[1] and y[3] approximate DCT with integer weights
+        // Using integer approximation: cos(pi/8)≈7/8, cos(3pi/8)≈3/8
+        y[1] += d * 7 + c * 3
+        y[3] += d * 3 - c * 7
+        delocal int d = x[0] - x[3]
+        delocal int c = x[1] - x[2]
+        delocal int b = x[1] + x[2]
+        delocal int a = x[0] + x[3]
+
+class Program
+    int[] x
+    int[] y
+    method main()
+        new int[4] x
+        new int[4] y
+        x[0] += 100
+        x[1] += 200
+        x[2] += 300
+        x[3] += 400
+        local DCTInteger dct = nil
+        new DCTInteger dct
+        call dct::dct4(x, y)
+        delete DCTInteger dct
+        delocal DCTInteger dct = nil

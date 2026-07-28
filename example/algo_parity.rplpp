@@ -1,0 +1,28 @@
+// Reversible parity check: XOR all elements to detect odd/even parity
+// a = [1, 0, 1, 1, 0, 1] -> parity = 0 (even number of 1s)
+// a = [1, 0, 1, 1, 0, 0] -> parity = 1 (odd number of 1s)
+
+class Parity
+    method check(int[] a, int n, int parity)
+        for i in (0..n-1) do
+            parity ^= a[i]
+        end
+
+class Program
+    int[] a
+    int parity
+    method main()
+        new int[6] a
+        a[0] += 1
+        a[1] += 0
+        a[2] += 1
+        a[3] += 1
+        a[4] += 0
+        a[5] += 1
+        local Parity p = nil
+        new Parity p
+        local int n = 6
+        call p::check(a, n, parity)
+        delocal int n = 6
+        delete Parity p
+        delocal Parity p = nil

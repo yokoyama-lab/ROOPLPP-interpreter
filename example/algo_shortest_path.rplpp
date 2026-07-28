@@ -1,0 +1,59 @@
+// Reversible Bellman-Ford shortest path (simpler than Dijkstra for ROOPL++)
+// Graph as adjacency matrix with weights (0 = no edge)
+// 4 nodes, source = 0
+// Edges: 0->1(4), 0->2(1), 1->3(1), 2->1(2), 2->3(5)
+// Shortest: 0->2->1->3 = 1+2+1 = 4
+
+class ShortestPath
+    method solve(int[] adj, int n, int src, int[] dist, int[] oldDist)
+        local int inf = 999
+        for i in (0..n-1) do
+            dist[i] += inf
+        end
+        dist[src] -= inf
+
+        // Relax edges n-1 times
+        for iter in (1..n-1) do
+            for u in (0..n-1) do
+                for v in (0..n-1) do
+                    local int eidx = u * n + v
+                    if adj[eidx] > 0 then
+                        local int newDist = dist[u] + adj[eidx]
+                        local int hidx = iter * n * n + u * n + v
+                        oldDist[hidx] += dist[v]
+                        if newDist < dist[v] then
+                            dist[v] -= dist[v]
+                            dist[v] += newDist
+                        fi dist[v] < oldDist[hidx]
+                        delocal int hidx = iter * n * n + u * n + v
+                        delocal int newDist = dist[u] + adj[eidx]
+                    fi adj[eidx] > 0
+                    delocal int eidx = u * n + v
+                end
+            end
+        end
+        delocal int inf = 999
+
+class Program
+    int[] adj
+    int[] dist
+    int[] oldDist
+    method main()
+        new int[16] adj
+        new int[4] dist
+        new int[64] oldDist
+        // Edge weights
+        adj[1] += 4
+        adj[2] += 1
+        adj[7] += 1
+        adj[9] += 2
+        adj[11] += 5
+        local ShortestPath sp = nil
+        new ShortestPath sp
+        local int n = 4
+        local int src = 0
+        call sp::solve(adj, n, src, dist, oldDist)
+        delocal int src = 0
+        delocal int n = 4
+        delete ShortestPath sp
+        delocal ShortestPath sp = nil

@@ -1,0 +1,29 @@
+// Reversible dot product of two arrays
+// a = [1, 2, 3], b = [4, 5, 6] -> result = 1*4 + 2*5 + 3*6 = 32
+
+class DotProduct
+    method dot(int[] a, int[] b, int n, int result)
+        for i in (0..n-1) do
+            result += a[i] * b[i]
+        end
+
+class Program
+    int[] a
+    int[] b
+    int result
+    method main()
+        new int[3] a
+        new int[3] b
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        b[0] += 4
+        b[1] += 5
+        b[2] += 6
+        local DotProduct d = nil
+        new DotProduct d
+        local int n = 3
+        call d::dot(a, b, n, result)
+        delocal int n = 3
+        delete DotProduct d
+        delocal DotProduct d = nil

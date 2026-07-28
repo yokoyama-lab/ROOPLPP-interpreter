@@ -1,0 +1,63 @@
+// Reversible Longest Common Subsequence length via DP
+// a = [1, 3, 2, 4, 1], b = [3, 1, 2, 1, 4]
+// LCS length = 3 (e.g., [3, 2, 4] or [1, 2, 1])
+// Full DP table stored for reversibility
+
+class LCS
+    method lcs(int[] a, int m, int[] b, int n, int[] dp)
+        local int cols = n + 1
+        for i in (1..m) do
+            for j in (1..n) do
+                local int i1 = i - 1
+                local int j1 = j - 1
+                local int idx = i * cols + j
+                local int upIdx = i1 * cols + j
+                local int leftIdx = i * cols + j1
+                local int diagIdx = i1 * cols + j1
+                if a[i1] = b[j1] then
+                    dp[idx] += dp[diagIdx] + 1
+                else
+                    // max(dp[upIdx], dp[leftIdx])
+                    if dp[upIdx] >= dp[leftIdx] then
+                        dp[idx] += dp[upIdx]
+                    else
+                        dp[idx] += dp[leftIdx]
+                    fi dp[idx] = dp[upIdx]
+                fi a[i1] = b[j1]
+                delocal int diagIdx = i1 * cols + j1
+                delocal int leftIdx = i * cols + j1
+                delocal int upIdx = i1 * cols + j
+                delocal int idx = i * cols + j
+                delocal int j1 = j - 1
+                delocal int i1 = i - 1
+            end
+        end
+        delocal int cols = n + 1
+
+class Program
+    int[] a
+    int[] b
+    int[] dp
+    method main()
+        new int[5] a
+        new int[5] b
+        new int[36] dp
+        a[0] += 1
+        a[1] += 3
+        a[2] += 2
+        a[3] += 4
+        a[4] += 1
+        b[0] += 3
+        b[1] += 1
+        b[2] += 2
+        b[3] += 1
+        b[4] += 4
+        local LCS l = nil
+        new LCS l
+        local int m = 5
+        local int n = 5
+        call l::lcs(a, m, b, n, dp)
+        delocal int n = 5
+        delocal int m = 5
+        delete LCS l
+        delocal LCS l = nil

@@ -1,0 +1,32 @@
+// Reversible binomial coefficient C(n, k) using multiplicative formula
+// C(n, k) = n! / (k! * (n-k)!) = product_{i=1}^{k} (n-k+i) / i
+// C(10, 3) = 120
+
+class Binomial
+    method choose(int n, int k, int result)
+        result ^= 1
+        for i in (1..k) do
+            local int numer = n - k + i
+            local int tmp = result
+            result -= tmp
+            result += tmp * numer
+            delocal int tmp = result / numer
+            local int tmp2 = result
+            result -= tmp2
+            result += tmp2 / i
+            delocal int tmp2 = result * i
+            delocal int numer = n - k + i
+        end
+
+class Program
+    int result
+    method main()
+        local Binomial b = nil
+        new Binomial b
+        local int n = 10
+        local int k = 3
+        call b::choose(n, k, result)
+        delocal int k = 3
+        delocal int n = 10
+        delete Binomial b
+        delocal Binomial b = nil

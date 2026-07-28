@@ -1,0 +1,62 @@
+// Reversible tournament to find minimum
+// Simulates a knockout tournament using pairwise comparisons
+// Records which element won each match for reversibility
+// a = [7, 3, 9, 1, 5, 8, 2, 6] -> winner = 1 (minimum)
+
+class Tournament
+    // One round: compare adjacent pairs, winners go to 'out'
+    // 'choice' records which of each pair won (0=left, 1=right)
+    method round(int[] inp, int n, int[] out, int[] choice)
+        local int half = n / 2
+        for i in (0..half-1) do
+            local int l = i * 2
+            local int r = i * 2 + 1
+            if inp[l] <= inp[r] then
+                out[i] += inp[l]
+                choice[i] ^= 0
+            else
+                out[i] += inp[r]
+                choice[i] ^= 1
+            fi choice[i] = 0
+            delocal int r = i * 2 + 1
+            delocal int l = i * 2
+        end
+        delocal int half = n / 2
+
+class Program
+    int[] a
+    int[] r1
+    int[] c1
+    int[] r2
+    int[] c2
+    int[] r3
+    int[] c3
+    method main()
+        new int[8] a
+        new int[4] r1
+        new int[4] c1
+        new int[2] r2
+        new int[2] c2
+        new int[1] r3
+        new int[1] c3
+        a[0] += 7
+        a[1] += 3
+        a[2] += 9
+        a[3] += 1
+        a[4] += 5
+        a[5] += 8
+        a[6] += 2
+        a[7] += 6
+        local Tournament t = nil
+        new Tournament t
+        local int n8 = 8
+        local int n4 = 4
+        local int n2 = 2
+        call t::round(a, n8, r1, c1)
+        call t::round(r1, n4, r2, c2)
+        call t::round(r2, n2, r3, c3)
+        delocal int n2 = 2
+        delocal int n4 = 4
+        delocal int n8 = 8
+        delete Tournament t
+        delocal Tournament t = nil

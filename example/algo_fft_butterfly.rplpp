@@ -1,0 +1,43 @@
+// Reversible integer butterfly operations (FFT-like)
+// Performs the butterfly pattern: for each pair (a,b) with twiddle w:
+//   a' = a + w*b, b' = a - w*b
+// Uses twiddle factors [1, w, w^2, ...] precomputed
+// 4-point DFT with twiddle [1, -1]
+
+class FFTButterfly
+    method butterfly(int[] re, int i, int j, int tw)
+        local int prod = re[j] * tw
+        local int sum = re[i] + prod
+        local int diff = re[i] - prod
+        re[i] -= re[i]
+        re[j] -= re[j]
+        re[i] += sum
+        re[j] += diff
+        delocal int diff = re[j]
+        delocal int sum = re[i]
+        delocal int prod = prod
+
+    // 4-point DFT using radix-2 decimation in time
+    method dft4(int[] x)
+        // Stage 1: butterflies with stride 1
+        // (x[0], x[2]) with tw=1, (x[1], x[3]) with tw=1
+        call butterfly(x, 0, 2, 1)
+        call butterfly(x, 1, 3, 1)
+        // Stage 2: butterflies with stride 2
+        // (x[0], x[1]) with tw=1, (x[2], x[3]) with tw=-1
+        call butterfly(x, 0, 1, 1)
+        call butterfly(x, 2, 3, -1)
+
+class Program
+    int[] x
+    method main()
+        new int[4] x
+        x[0] += 1
+        x[1] += 2
+        x[2] += 3
+        x[3] += 4
+        local FFTButterfly fft = nil
+        new FFTButterfly fft
+        call fft::dft4(x)
+        delete FFTButterfly fft
+        delocal FFTButterfly fft = nil

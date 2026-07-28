@@ -1,0 +1,48 @@
+// Reversible coin change: minimum coins to make amount
+// coins = [1, 5, 10, 25], amount = 63
+// dp[i] = min coins to make amount i
+// dp[63] = 6 (25+25+10+1+1+1)
+
+class CoinChange
+    method solve(int[] coins, int nc, int amount, int[] dp)
+        // Initialize dp with large value (amount+1 as infinity)
+        local int inf = amount + 1
+        for i in (1..amount) do
+            dp[i] += inf
+        end
+        // DP: for each amount, try each coin
+        for i in (1..amount) do
+            for j in (0..nc-1) do
+                if coins[j] <= i then
+                    local int prev = dp[i - coins[j]] + 1
+                    local int oldDp = dp[i]
+                    if prev < dp[i] then
+                        dp[i] -= dp[i]
+                        dp[i] += prev
+                    fi dp[i] < oldDp
+                    delocal int oldDp = oldDp
+                    delocal int prev = dp[i - coins[j]] + 1
+                fi coins[j] <= i
+            end
+        end
+        delocal int inf = amount + 1
+
+class Program
+    int[] coins
+    int[] dp
+    method main()
+        new int[4] coins
+        new int[64] dp
+        coins[0] += 1
+        coins[1] += 5
+        coins[2] += 10
+        coins[3] += 25
+        local CoinChange cc = nil
+        new CoinChange cc
+        local int nc = 4
+        local int amount = 63
+        call cc::solve(coins, nc, amount, dp)
+        delocal int amount = 63
+        delocal int nc = 4
+        delete CoinChange cc
+        delocal CoinChange cc = nil

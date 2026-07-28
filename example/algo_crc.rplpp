@@ -1,0 +1,43 @@
+// Reversible CRC-like checksum using XOR (inherently reversible)
+// Processes data byte-by-byte with a polynomial-based XOR operation
+// Uses a lookup table approach with simple polynomial
+// data = [0x48, 0x65, 0x6C, 0x6C, 0x6F] ("Hello" in ASCII)
+// Computes 8-bit CRC
+
+class CRC
+    method compute(int[] data, int n, int crc)
+        for i in (0..n-1) do
+            crc ^= data[i]
+            // 8 rounds of bit-level polynomial division
+            for bit in (0..7) do
+                local int msb = crc / 128
+                // Shift left by 1
+                local int doubled = (crc - msb * 128) * 2
+                crc -= crc
+                crc += doubled
+                delocal int doubled = crc
+                // XOR with polynomial if MSB was 1
+                if msb = 1 then
+                    crc ^= 29
+                fi msb = 1
+                delocal int msb = msb
+            end
+        end
+
+class Program
+    int[] data
+    int crc
+    method main()
+        new int[5] data
+        data[0] += 72
+        data[1] += 101
+        data[2] += 108
+        data[3] += 108
+        data[4] += 111
+        local CRC c = nil
+        new CRC c
+        local int n = 5
+        call c::compute(data, n, crc)
+        delocal int n = 5
+        delete CRC c
+        delocal CRC c = nil

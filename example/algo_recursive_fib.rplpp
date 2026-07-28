@@ -1,0 +1,29 @@
+// Reversible recursive Fibonacci using the pair method
+// Maintains (F(n+1), F(n)) pair for reversibility
+// n is restored after recursive call for reversibility
+// n=8 -> x1 = F(9) = 34, x2 = F(10) = 55
+
+class RecFib
+    method fib(int n, int x1, int x2)
+        if n = 0 then
+            x1 ^= 1
+            x2 ^= 1
+        else
+            n -= 1
+            call fib(n, x1, x2)
+            n += 1
+            x1 += x2
+            x1 <=> x2
+        fi x1 = x2
+
+class Program
+    int x1
+    int x2
+    method main()
+        local RecFib f = nil
+        new RecFib f
+        local int n = 8
+        call f::fib(n, x1, x2)
+        delocal int n = 8
+        delete RecFib f
+        delocal RecFib f = nil

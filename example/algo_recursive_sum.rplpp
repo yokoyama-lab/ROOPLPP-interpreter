@@ -1,0 +1,39 @@
+// Reversible recursive array sum (divide and conquer)
+// Demonstrates recursive call/uncall pattern
+// a = [1, 2, 3, 4, 5, 6, 7, 8] -> result = 36
+
+class RecSum
+    method sum(int[] a, int lo, int hi, int result)
+        if lo = hi then
+            result += a[lo]
+        else
+            local int mid = (lo + hi) / 2
+            call sum(a, lo, mid, result)
+            local int mid1 = mid + 1
+            call sum(a, mid1, hi, result)
+            delocal int mid1 = mid + 1
+            delocal int mid = (lo + hi) / 2
+        fi lo = hi
+
+class Program
+    int[] a
+    int result
+    method main()
+        new int[8] a
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        a[5] += 6
+        a[6] += 7
+        a[7] += 8
+        local RecSum s = nil
+        new RecSum s
+        local int lo = 0
+        local int hi = 7
+        call s::sum(a, lo, hi, result)
+        delocal int hi = 7
+        delocal int lo = 0
+        delete RecSum s
+        delocal RecSum s = nil

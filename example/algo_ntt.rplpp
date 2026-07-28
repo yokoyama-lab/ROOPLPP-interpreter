@@ -1,0 +1,55 @@
+// Reversible Number-Theoretic Transform (NTT) mod p
+// p=17, w=4 (4th root of unity: 4^4 ≡ 1 mod 17)
+// Precomputes twiddle factors, then applies DFT
+// x = [1, 2, 3, 4] -> NTT modular spectrum
+
+class NTT
+    // Precompute w^k mod p for k=0..n^2-1
+    method precompute(int[] tw, int n2, int w, int p)
+        tw[0] += 1
+        for k in (1..n2-1) do
+            local int tmp = tw[k-1]
+            tw[k] += (tmp * w) % p
+            delocal int tmp = tw[k-1]
+        end
+
+    // DFT: out[k] = sum_{j} x[j] * tw[j*k] mod p
+    method transform(int[] x, int n, int[] tw, int p, int[] out)
+        for k in (0..n-1) do
+            for j in (0..n-1) do
+                local int tidx = (j * k) % (n * n)
+                out[k] += x[j] * tw[tidx]
+                delocal int tidx = (j * k) % (n * n)
+            end
+            local int r = out[k] % p
+            out[k] -= out[k]
+            out[k] += r
+            delocal int r = out[k]
+        end
+
+class Program
+    int[] x
+    int[] tw
+    int[] out
+    method main()
+        new int[4] x
+        new int[16] tw
+        new int[4] out
+        x[0] += 1
+        x[1] += 2
+        x[2] += 3
+        x[3] += 4
+        local NTT ntt = nil
+        new NTT ntt
+        local int n = 4
+        local int w = 4
+        local int p = 17
+        local int n2 = 16
+        call ntt::precompute(tw, n2, w, p)
+        call ntt::transform(x, n, tw, p, out)
+        delocal int n2 = 16
+        delocal int p = 17
+        delocal int w = 4
+        delocal int n = 4
+        delete NTT ntt
+        delocal NTT ntt = nil

@@ -1,0 +1,28 @@
+// Reversible array right shift by 1 (cyclic)
+// Uses adjacent swaps, naturally reversible
+// a = [1, 2, 3, 4, 5] -> a = [5, 1, 2, 3, 4]
+
+class ArrayShift
+    method shiftRight(int[] a, int n)
+        for i in (1..n-1) do
+            local int j = n - i
+            a[j-1] <=> a[j]
+            delocal int j = n - i
+        end
+
+class Program
+    int[] a
+    method main()
+        new int[5] a
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        local ArrayShift s = nil
+        new ArrayShift s
+        local int n = 5
+        call s::shiftRight(a, n)
+        delocal int n = 5
+        delete ArrayShift s
+        delocal ArrayShift s = nil

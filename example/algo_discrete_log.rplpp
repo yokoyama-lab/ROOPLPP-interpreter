@@ -1,0 +1,31 @@
+// Reversible discrete logarithm via trial
+// Find x such that g^x ≡ h (mod p)
+// g=2, h=8, p=13 -> x=3 (2^3=8)
+// Records all powers for reversibility
+
+class DiscreteLog
+    method solve(int g, int h, int p, int result, int[] powers)
+        powers[0] += 1
+        from result = 0 loop
+            local int next = (powers[result] * g) % p
+            result += 1
+            powers[result] += next
+            delocal int next = powers[result]
+        until powers[result] = h
+
+class Program
+    int result
+    int[] powers
+    method main()
+        new int[4] powers
+        local DiscreteLog dl = nil
+        new DiscreteLog dl
+        local int g = 2
+        local int h = 8
+        local int p = 13
+        call dl::solve(g, h, p, result, powers)
+        delocal int p = 13
+        delocal int h = 8
+        delocal int g = 2
+        delete DiscreteLog dl
+        delocal DiscreteLog dl = nil

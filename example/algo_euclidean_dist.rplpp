@@ -1,0 +1,32 @@
+// Reversible squared Euclidean distance: dist² = sum((a[i]-b[i])²)
+// a = [1, 2, 3], b = [4, 6, 3] -> dist² = 9+16+0 = 25
+
+class EucDist
+    method distSq(int[] a, int[] b, int n, int result, int[] diffs)
+        for i in (0..n-1) do
+            diffs[i] += a[i] - b[i]
+            result += diffs[i] * diffs[i]
+        end
+
+class Program
+    int[] a
+    int[] b
+    int result
+    int[] diffs
+    method main()
+        new int[3] a
+        new int[3] b
+        new int[3] diffs
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        b[0] += 4
+        b[1] += 6
+        b[2] += 3
+        local EucDist e = nil
+        new EucDist e
+        local int n = 3
+        call e::distSq(a, b, n, result, diffs)
+        delocal int n = 3
+        delete EucDist e
+        delocal EucDist e = nil

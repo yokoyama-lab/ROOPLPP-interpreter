@@ -1,0 +1,42 @@
+// Reversible subset sum: count subsets that sum to target
+// a = [3, 1, 4, 2, 5], target = 7
+// Subsets: {3,4}, {1,4,2}, {3,4}, {2,5}, {1,2,4}... count all
+
+class SubsetSum
+    method solve(int[] a, int n, int idx, int remaining, int count)
+        if idx = n then
+            if remaining = 0 then
+                count += 1
+            fi remaining = 0
+        else
+            // Don't take a[idx]
+            local int nextIdx = idx + 1
+            call solve(a, n, nextIdx, remaining, count)
+            // Take a[idx]
+            remaining -= a[idx]
+            call solve(a, n, nextIdx, remaining, count)
+            remaining += a[idx]
+            delocal int nextIdx = idx + 1
+        fi idx = n
+
+class Program
+    int[] a
+    int count
+    method main()
+        new int[5] a
+        a[0] += 3
+        a[1] += 1
+        a[2] += 4
+        a[3] += 2
+        a[4] += 5
+        local SubsetSum ss = nil
+        new SubsetSum ss
+        local int n = 5
+        local int idx = 0
+        local int target = 7
+        call ss::solve(a, n, idx, target, count)
+        delocal int target = 7
+        delocal int idx = 0
+        delocal int n = 5
+        delete SubsetSum ss
+        delocal SubsetSum ss = nil

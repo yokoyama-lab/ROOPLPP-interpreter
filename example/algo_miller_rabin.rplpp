@@ -1,0 +1,77 @@
+// Reversible Miller-Rabin witness test
+// n=561 (Carmichael number), a=2, s=4, d=35 -> isWitness=1
+
+class MillerRabin
+    method modpow(int base, int exp, int n, int result, int[] hist)
+        result ^= 1
+        if exp >= 1 then
+            for i in (1..exp) do
+                hist[i-1] += result
+                local int tmp = result
+                result -= tmp
+                result += (tmp * base) % n
+                delocal int tmp = hist[i-1]
+            end
+        fi exp >= 1
+
+    method witness(int a, int n, int s, int d, int isWitness,
+                   int[] hist, int[] sqHist)
+        local int x = 0
+        call modpow(a, d, n, x, hist)
+        // Use y for squaring, keep x unchanged for uncall
+        local int y = x
+        local int x0 = x
+        if x0 = 1 then
+            isWitness ^= 0
+        else
+            local int x1 = x
+            if x1 = n - 1 then
+                isWitness ^= 0
+            else
+                local int found = 0
+                for r in (1..s-1) do
+                    sqHist[r-1] += y
+                    local int tmp = y
+                    y -= tmp
+                    y += (tmp * tmp) % n
+                    delocal int tmp = sqHist[r-1]
+                    if y = n - 1 then
+                        if found = 0 then
+                            found ^= 1
+                        fi found = 1
+                    fi y = n - 1
+                end
+                if found = 0 then
+                    isWitness ^= 1
+                fi found = 0
+                delocal int found = found
+            fi x1 = n - 1
+            delocal int x1 = x1
+        fi x0 = 1
+        delocal int x0 = x0
+        delocal int y = y
+        uncall modpow(a, d, n, x, hist)
+        delocal int x = 0
+
+class Program
+    int isWitness
+    int[] sqHist
+    method main()
+        new int[3] sqHist
+        local MillerRabin mr = nil
+        new MillerRabin mr
+        local int a = 2
+        local int n = 561
+        local int s = 4
+        local int d = 35
+        local int[] hist = nil
+        new int[35] hist
+        call mr::witness(a, n, s, d, isWitness, hist, sqHist)
+        delete int[35] hist
+        delocal int[] hist = nil
+        delocal int d = 35
+        delocal int s = 4
+        delocal int n = 561
+        delocal int a = 2
+        delete MillerRabin mr
+        delocal MillerRabin mr = nil

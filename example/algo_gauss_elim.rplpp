@@ -1,0 +1,66 @@
+// Reversible Gaussian elimination for upper triangular form
+// Works on integer matrices (no division - just row operations)
+// Records all multipliers for reversibility
+// Operates on augmented matrix [A|b] for system Ax=b
+// 3x4 augmented matrix (3 equations, 3 unknowns + RHS)
+// 2x+y-z=8, -3x-y+2z=-11, -2x+y+2z=-3
+// After elimination: upper triangular form
+
+class GaussElim
+    method eliminate(int[] mat, int rows, int cols, int[] mults)
+        local int h = 0
+        for piv in (0..rows-2) do
+            for row in (piv+1..rows-1) do
+                // Eliminate mat[row][piv] using mat[piv][piv]
+                local int pivVal = mat[piv * cols + piv]
+                local int rowVal = mat[row * cols + piv]
+                mults[h] += rowVal
+                mults[h + 1] += pivVal
+                // row = row * pivVal - piv_row * rowVal
+                for col in (0..cols-1) do
+                    local int idx = row * cols + col
+                    local int pidx = piv * cols + col
+                    local int oldVal = mat[idx]
+                    mat[idx] -= oldVal
+                    mat[idx] += oldVal * pivVal - mat[pidx] * rowVal
+                    delocal int oldVal = oldVal
+                    delocal int pidx = piv * cols + col
+                    delocal int idx = row * cols + col
+                end
+                h += 2
+                delocal int rowVal = mults[h - 2]
+                delocal int pivVal = mults[h - 1]
+            end
+        end
+        delocal int h = rows * (rows - 1)
+
+class Program
+    int[] mat
+    int[] mults
+    method main()
+        new int[12] mat
+        new int[6] mults
+        // Row 0: 2x + y - z = 8
+        mat[0] += 2
+        mat[1] += 1
+        mat[2] -= 1
+        mat[3] += 8
+        // Row 1: -3x - y + 2z = -11
+        mat[4] -= 3
+        mat[5] -= 1
+        mat[6] += 2
+        mat[7] -= 11
+        // Row 2: -2x + y + 2z = -3
+        mat[8] -= 2
+        mat[9] += 1
+        mat[10] += 2
+        mat[11] -= 3
+        local GaussElim g = nil
+        new GaussElim g
+        local int rows = 3
+        local int cols = 4
+        call g::eliminate(mat, rows, cols, mults)
+        delocal int cols = 4
+        delocal int rows = 3
+        delete GaussElim g
+        delocal GaussElim g = nil

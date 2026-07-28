@@ -1,0 +1,37 @@
+// Reversible palindrome check
+// Counts mismatches and records diffs for reversibility
+// a = [1, 2, 3, 2, 1] -> mismatch = 0 (palindrome)
+// a = [1, 2, 3, 4, 5] -> mismatch = 2 (not palindrome)
+
+class Palindrome
+    method check(int[] a, int n, int mismatch, int[] diffs)
+        local int half = n / 2
+        for i in (0..half-1) do
+            local int j = n - 1 - i
+            diffs[i] += a[i] - a[j]
+            if diffs[i] != 0 then
+                mismatch += 1
+            fi diffs[i] != 0
+            delocal int j = n - 1 - i
+        end
+        delocal int half = n / 2
+
+class Program
+    int[] a
+    int mismatch
+    int[] diffs
+    method main()
+        new int[5] a
+        new int[2] diffs
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 2
+        a[4] += 1
+        local Palindrome p = nil
+        new Palindrome p
+        local int n = 5
+        call p::check(a, n, mismatch, diffs)
+        delocal int n = 5
+        delete Palindrome p
+        delocal Palindrome p = nil

@@ -1,0 +1,68 @@
+// Reversible matrix power: computes A^k for a 2x2 matrix
+// Uses iterative matrix multiplication
+// A = [[1,1],[1,0]], k=6 -> A^6 = [[13,8],[8,5]] (Fibonacci matrix!)
+
+class MatPow
+    // C += A * B for 2x2 matrices (stored as flat arrays)
+    method matmul(int[] a, int[] b, int[] c)
+        c[0] += a[0] * b[0] + a[1] * b[2]
+        c[1] += a[0] * b[1] + a[1] * b[3]
+        c[2] += a[2] * b[0] + a[3] * b[2]
+        c[3] += a[2] * b[1] + a[3] * b[3]
+
+    // Copy src to dst (dst must be zero)
+    method matcopy(int[] src, int[] dst)
+        dst[0] += src[0]
+        dst[1] += src[1]
+        dst[2] += src[2]
+        dst[3] += src[3]
+
+    // Zero a matrix
+    method matzero(int[] m)
+        m[0] -= m[0]
+        m[1] -= m[1]
+        m[2] -= m[2]
+        m[3] -= m[3]
+
+    method power(int[] a, int k, int[] result, int[] tmp, int[] hist)
+        // result = I (identity)
+        result[0] += 1
+        result[3] += 1
+        // result = A^k by repeated multiplication
+        for i in (1..k) do
+            // Save old result in hist
+            hist[(i-1) * 4 + 0] += result[0]
+            hist[(i-1) * 4 + 1] += result[1]
+            hist[(i-1) * 4 + 2] += result[2]
+            hist[(i-1) * 4 + 3] += result[3]
+            // tmp = result * a
+            call matmul(result, a, tmp)
+            // result = tmp
+            call matzero(result)
+            call matcopy(tmp, result)
+            call matzero(tmp)
+        end
+
+class Program
+    int[] a
+    int[] result
+    int[] hist
+    method main()
+        new int[4] a
+        new int[4] result
+        new int[24] hist
+        a[0] += 1
+        a[1] += 1
+        a[2] += 1
+        a[3] += 0
+        local MatPow mp = nil
+        new MatPow mp
+        local int k = 6
+        local int[] tmp = nil
+        new int[4] tmp
+        call mp::power(a, k, result, tmp, hist)
+        delete int[4] tmp
+        delocal int[] tmp = nil
+        delocal int k = 6
+        delete MatPow mp
+        delocal MatPow mp = nil

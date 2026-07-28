@@ -1,0 +1,39 @@
+// Reversible insertion sort
+// For each element i, performs up to i comparison-and-swap passes leftward
+// Records each swap decision in hist for reversibility
+// a = [4, 2, 5, 1, 3] -> a = [1, 2, 3, 4, 5]
+
+class InsertionSort
+    method sort(int[] a, int n, int[] hist)
+        local int h = 0
+        for i in (1..n-1) do
+            for j in (0..i-1) do
+                local int k = i - j
+                if a[k-1] > a[k] then
+                    hist[h] ^= 1
+                    a[k-1] <=> a[k]
+                fi hist[h] = 1
+                delocal int k = i - j
+                h += 1
+            end
+        end
+        delocal int h = n * (n - 1) / 2
+
+class Program
+    int[] a
+    int[] hist
+    method main()
+        new int[5] a
+        new int[10] hist
+        a[0] += 4
+        a[1] += 2
+        a[2] += 5
+        a[3] += 1
+        a[4] += 3
+        local InsertionSort s = nil
+        new InsertionSort s
+        local int n = 5
+        call s::sort(a, n, hist)
+        delocal int n = 5
+        delete InsertionSort s
+        delocal InsertionSort s = nil

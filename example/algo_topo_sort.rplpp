@@ -1,0 +1,77 @@
+// Reversible topological sort via Kahn's algorithm
+// Graph as adjacency matrix, records processing order for reversibility
+// 5 nodes, edges: 0->1, 0->2, 1->3, 2->3, 3->4
+// Valid topo order: [0, 1, 2, 3, 4] or [0, 2, 1, 3, 4]
+
+class TopoSort
+    method sort(int[] adj, int n, int[] indeg, int[] order, int[] queue)
+        // adj[i*n+j] = 1 if edge i->j
+        // Compute initial in-degrees
+        for j in (0..n-1) do
+            for i in (0..n-1) do
+                local int idx = i * n + j
+                indeg[j] += adj[idx]
+                delocal int idx = i * n + j
+            end
+        end
+        // Initialize queue with nodes having in-degree 0
+        local int front = 0
+        local int back = 0
+        for i in (0..n-1) do
+            if indeg[i] = 0 then
+                queue[back] += i
+                back += 1
+            fi indeg[i] = 0
+        end
+        // Process queue
+        local int count = 0
+        from count = 0 loop
+            local int node = queue[front]
+            order[count] += node
+            front += 1
+            count += 1
+            // Decrease in-degree of neighbors
+            for j in (0..n-1) do
+                local int eidx = node * n + j
+                if adj[eidx] = 1 then
+                    indeg[j] -= 1
+                    if indeg[j] = 0 then
+                        queue[back] += j
+                        back += 1
+                    fi indeg[j] = 0
+                fi adj[eidx] = 1
+                delocal int eidx = node * n + j
+            end
+            delocal int node = order[count - 1]
+        until count = n
+        delocal int count = n
+        delocal int back = n
+        delocal int front = n
+
+class Program
+    int[] adj
+    int[] indeg
+    int[] order
+    int[] queue
+    method main()
+        new int[25] adj
+        new int[5] indeg
+        new int[5] order
+        new int[5] queue
+        // Edge 0->1
+        adj[1] += 1
+        // Edge 0->2
+        adj[2] += 1
+        // Edge 1->3
+        adj[8] += 1
+        // Edge 2->3
+        adj[13] += 1
+        // Edge 3->4
+        adj[19] += 1
+        local TopoSort t = nil
+        new TopoSort t
+        local int n = 5
+        call t::sort(adj, n, indeg, order, queue)
+        delocal int n = 5
+        delete TopoSort t
+        delocal TopoSort t = nil

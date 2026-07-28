@@ -1,0 +1,26 @@
+// Reversible maximum of two values
+// Uses a flag to record which branch was taken (for reversibility)
+// x=3, y=7 -> result=7, flag records whether swap happened
+
+class MaxVal
+    method max(int x, int y, int result, int flag)
+        if x > y then
+            flag ^= 1
+            result += x
+        else
+            result += y
+        fi flag = 1
+
+class Program
+    int x
+    int y
+    int result
+    int flag
+    method main()
+        x ^= 3
+        y ^= 7
+        local MaxVal m = nil
+        new MaxVal m
+        call m::max(x, y, result, flag)
+        delete MaxVal m
+        delocal MaxVal m = nil

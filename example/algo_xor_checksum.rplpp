@@ -1,0 +1,27 @@
+// Reversible XOR checksum
+// XOR is self-inverse, making this naturally reversible
+// data = [10, 20, 30, 40, 50] -> checksum = 10^20^30^40^50 = 26
+
+class XORChecksum
+    method compute(int[] data, int n, int checksum)
+        for i in (0..n-1) do
+            checksum ^= data[i]
+        end
+
+class Program
+    int[] data
+    int checksum
+    method main()
+        new int[5] data
+        data[0] += 10
+        data[1] += 20
+        data[2] += 30
+        data[3] += 40
+        data[4] += 50
+        local XORChecksum x = nil
+        new XORChecksum x
+        local int n = 5
+        call x::compute(data, n, checksum)
+        delocal int n = 5
+        delete XORChecksum x
+        delocal XORChecksum x = nil

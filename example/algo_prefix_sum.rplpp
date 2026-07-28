@@ -1,0 +1,29 @@
+// Reversible prefix sum (cumulative sum)
+// a = [1, 2, 3, 4, 5] -> prefix = [1, 3, 6, 10, 15]
+// The original array is preserved; prefix array stores results
+
+class PrefixSum
+    method compute(int[] a, int[] prefix, int n)
+        prefix[0] += a[0]
+        for i in (1..n-1) do
+            prefix[i] += prefix[i-1] + a[i]
+        end
+
+class Program
+    int[] a
+    int[] prefix
+    method main()
+        new int[5] a
+        new int[5] prefix
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        local PrefixSum p = nil
+        new PrefixSum p
+        local int n = 5
+        call p::compute(a, prefix, n)
+        delocal int n = 5
+        delete PrefixSum p
+        delocal PrefixSum p = nil

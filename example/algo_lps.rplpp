@@ -1,0 +1,61 @@
+// Reversible Longest Palindromic Subsequence via DP
+// dp[i*n+j] = LPS length for subsequence a[i..j]
+// a = [1, 2, 3, 2, 1] -> LPS = 5 (entire array is palindrome)
+// a = [1, 3, 5, 3, 1, 4] -> LPS = 5 ([1,3,5,3,1])
+
+class LPS
+    method solve(int[] a, int n, int[] dp)
+        // Base: single elements have LPS = 1
+        for i in (0..n-1) do
+            local int idx = i * n + i
+            dp[idx] += 1
+            delocal int idx = i * n + i
+        end
+        // Fill for increasing lengths
+        for len in (2..n) do
+            for i in (0..n-len) do
+                local int j = i + len - 1
+                local int idx = i * n + j
+                if a[i] = a[j] then
+                    if len = 2 then
+                        dp[idx] += 2
+                    else
+                        local int inner = (i + 1) * n + (j - 1)
+                        dp[idx] += dp[inner] + 2
+                        delocal int inner = (i + 1) * n + (j - 1)
+                    fi len = 2
+                else
+                    local int left = i * n + (j - 1)
+                    local int down = (i + 1) * n + j
+                    if dp[left] >= dp[down] then
+                        dp[idx] += dp[left]
+                    else
+                        dp[idx] += dp[down]
+                    fi dp[idx] = dp[left]
+                    delocal int down = (i + 1) * n + j
+                    delocal int left = i * n + (j - 1)
+                fi a[i] = a[j]
+                delocal int idx = i * n + j
+                delocal int j = i + len - 1
+            end
+        end
+
+class Program
+    int[] a
+    int[] dp
+    method main()
+        new int[6] a
+        new int[36] dp
+        a[0] += 1
+        a[1] += 3
+        a[2] += 5
+        a[3] += 3
+        a[4] += 1
+        a[5] += 4
+        local LPS l = nil
+        new LPS l
+        local int n = 6
+        call l::solve(a, n, dp)
+        delocal int n = 6
+        delete LPS l
+        delocal LPS l = nil

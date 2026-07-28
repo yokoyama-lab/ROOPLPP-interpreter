@@ -1,0 +1,30 @@
+// Reversible integer square root via Newton's method
+// x_{k+1} = (x_k + n/x_k) / 2
+// Stores iteration history for reversibility
+// n=144 -> root=12
+
+class NewtonSqrt
+    method isqrt(int n, int root, int[] hist, int steps)
+        root += n
+        from steps = 0 loop
+            hist[steps] += root
+            local int next = (root + n / root) / 2
+            root -= root
+            root += next
+            delocal int next = root
+            steps += 1
+        until root * root <= n && (root + 1) * (root + 1) > n
+
+class Program
+    int root
+    int[] hist
+    int steps
+    method main()
+        new int[5] hist
+        local NewtonSqrt ns = nil
+        new NewtonSqrt ns
+        local int n = 144
+        call ns::isqrt(n, root, hist, steps)
+        delocal int n = 144
+        delete NewtonSqrt ns
+        delocal NewtonSqrt ns = nil

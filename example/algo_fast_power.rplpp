@@ -1,0 +1,59 @@
+// Reversible fast exponentiation via repeated squaring
+// base^exp using O(log exp) multiplications
+// Records intermediate results for reversibility
+// base=3, exp=13 -> 3^13 = 1594323
+
+class FastPow
+    method power(int base, int exp, int result, int[] bits, int nbits,
+                 int[] sqHist, int[] mulHist)
+        // Decompose exp into bits (LSB first)
+        local int e = exp
+        from nbits = 0 loop
+            bits[nbits] += e % 2
+            e -= bits[nbits]
+            local int half = e / 2
+            e -= half
+            delocal int half = e
+            nbits += 1
+        until e = 0
+        delocal int e = 0
+        // Compute base^exp using bits
+        result ^= 1
+        local int b = base
+        for i in (0..nbits-1) do
+            if bits[i] = 1 then
+                mulHist[i] += result
+                local int tmp = result
+                result -= tmp
+                result += tmp * b
+                delocal int tmp = mulHist[i]
+            fi bits[i] = 1
+            if i < nbits - 1 then
+                sqHist[i] += b
+                local int tmp2 = b
+                b -= tmp2
+                b += tmp2 * tmp2
+                delocal int tmp2 = sqHist[i]
+            fi i < nbits - 1
+        end
+        delocal int b = b
+
+class Program
+    int result
+    int[] bits
+    int nbits
+    int[] sqHist
+    int[] mulHist
+    method main()
+        new int[4] bits
+        new int[4] sqHist
+        new int[4] mulHist
+        local FastPow fp = nil
+        new FastPow fp
+        local int base = 3
+        local int exp = 13
+        call fp::power(base, exp, result, bits, nbits, sqHist, mulHist)
+        delocal int exp = 13
+        delocal int base = 3
+        delete FastPow fp
+        delocal FastPow fp = nil

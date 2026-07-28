@@ -1,0 +1,54 @@
+// Reversible 4-peg Tower of Hanoi (Frame-Stewart algorithm)
+// Minimum moves for n discs with 4 pegs: split into top k and bottom n-k
+// Move top k using 4 pegs, move bottom n-k using 3 pegs, move top k back
+// Records minimum move counts for reversibility
+// n=4 -> 9 moves (vs 15 for 3 pegs)
+
+class Hanoi4
+    // 3-peg moves: 2^n - 1
+    method moves3(int n, int result)
+        result ^= 1
+        for i in (1..n) do
+            local int tmp = result
+            result -= tmp
+            result += tmp * 2
+            delocal int tmp = result / 2
+        end
+        result -= 1
+
+    // 4-peg minimum moves via Frame-Stewart
+    // f(n) = min over k=1..n-1 of (2*f(k) + 2^(n-k) - 1)
+    method solve(int n, int[] dp)
+        dp[0] += 0
+        dp[1] += 1
+        for i in (2..n) do
+            dp[i] += 999
+            for k in (1..i-1) do
+                local int nk = i - k
+                local int m3 = 0
+                call moves3(nk, m3)
+                local int candidate = 2 * dp[k] + m3
+                local int oldDp = dp[i]
+                if candidate < dp[i] then
+                    dp[i] -= dp[i]
+                    dp[i] += candidate
+                fi dp[i] < oldDp
+                delocal int oldDp = oldDp
+                delocal int candidate = 2 * dp[k] + m3
+                uncall moves3(nk, m3)
+                delocal int m3 = 0
+                delocal int nk = i - k
+            end
+        end
+
+class Program
+    int[] dp
+    method main()
+        new int[10] dp
+        local Hanoi4 h = nil
+        new Hanoi4 h
+        local int n = 9
+        call h::solve(n, dp)
+        delocal int n = 9
+        delete Hanoi4 h
+        delocal Hanoi4 h = nil

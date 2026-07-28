@@ -1,0 +1,22 @@
+// Reversible Fibonacci sequence generation into array
+// Computes first n Fibonacci numbers: F(0)=0, F(1)=1, F(2)=1, ...
+// n=10 -> fib = [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+
+class FibArray
+    method generate(int[] fib, int n)
+        fib[1] += 1
+        for i in (2..n-1) do
+            fib[i] += fib[i-1] + fib[i-2]
+        end
+
+class Program
+    int[] fib
+    method main()
+        new int[10] fib
+        local FibArray f = nil
+        new FibArray f
+        local int n = 10
+        call f::generate(fib, n)
+        delocal int n = 10
+        delete FibArray f
+        delocal FibArray f = nil

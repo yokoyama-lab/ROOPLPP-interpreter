@@ -1,0 +1,38 @@
+// Reversible Collatz sequence generator
+// Records the trajectory and parity bits for reversibility
+// n=6: 6 -> 3 -> 10 -> 5 -> 16 -> 8 -> 4 -> 2 -> 1 (8 steps)
+
+class Collatz
+    method run(int n, int[] traj, int[] parity, int steps)
+        traj[0] += n
+        from steps = 0 loop
+            if n % 2 = 0 then
+                parity[steps] ^= 0
+                local int half = n / 2
+                n -= half
+                delocal int half = n
+            else
+                parity[steps] ^= 1
+                local int triple = n * 3 + 1
+                n -= n
+                n += triple
+                delocal int triple = n
+            fi parity[steps] = 0
+            steps += 1
+            traj[steps] += n
+        until n = 1
+
+class Program
+    int[] traj
+    int[] parity
+    int steps
+    method main()
+        new int[9] traj
+        new int[8] parity
+        local Collatz c = nil
+        new Collatz c
+        local int n = 6
+        call c::run(n, traj, parity, steps)
+        delocal int n = 1
+        delete Collatz c
+        delocal Collatz c = nil

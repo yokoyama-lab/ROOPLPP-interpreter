@@ -1,0 +1,59 @@
+// Reversible N-Queens solution counter
+// n=5 -> 10 solutions
+
+class NQueens
+    method isSafe(int[] queens, int row, int col, int safe, int conflicts)
+        if row >= 1 then
+            for i in (0..row-1) do
+                if queens[i] = col then
+                    conflicts += 1
+                fi queens[i] = col
+                local int diff = row - i
+                if queens[i] = col - diff then
+                    conflicts += 1
+                fi queens[i] = col - diff
+                if queens[i] = col + diff then
+                    conflicts += 1
+                fi queens[i] = col + diff
+                delocal int diff = row - i
+            end
+        fi row >= 1
+        if conflicts = 0 then
+            safe ^= 1
+        fi safe = 1
+
+    method solve(int[] queens, int row, int n, int count)
+        if row = n then
+            count += 1
+        else
+            for col in (0..n-1) do
+                local int safe = 0
+                local int conf = 0
+                call isSafe(queens, row, col, safe, conf)
+                if safe = 1 then
+                    queens[row] += col
+                    local int nextRow = row + 1
+                    call solve(queens, nextRow, n, count)
+                    delocal int nextRow = row + 1
+                    queens[row] -= col
+                fi safe = 1
+                uncall isSafe(queens, row, col, safe, conf)
+                delocal int conf = 0
+                delocal int safe = 0
+            end
+        fi row = n
+
+class Program
+    int[] queens
+    int count
+    method main()
+        new int[5] queens
+        local NQueens nq = nil
+        new NQueens nq
+        local int n = 5
+        local int row = 0
+        call nq::solve(queens, row, n, count)
+        delocal int row = 0
+        delocal int n = 5
+        delete NQueens nq
+        delocal NQueens nq = nil

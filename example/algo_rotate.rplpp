@@ -1,0 +1,43 @@
+// Reversible array left rotation by k positions
+// Uses the reverse-reverse-reverse algorithm (all swaps, naturally reversible)
+// a = [1, 2, 3, 4, 5], k=2 -> a = [3, 4, 5, 1, 2]
+
+class Rotate
+    method reverse(int[] a, int lo, int hi)
+        local int half = (hi - lo) / 2
+        for i in (0..half) do
+            local int j = hi - i
+            local int p = lo + i
+            a[p] <=> a[j]
+            delocal int p = lo + i
+            delocal int j = hi - i
+        end
+        delocal int half = (hi - lo) / 2
+
+    method rotateLeft(int[] a, int n, int k)
+        local int k1 = k - 1
+        local int n1 = n - 1
+        call reverse(a, 0, k1)
+        call reverse(a, k, n1)
+        call reverse(a, 0, n1)
+        delocal int n1 = n - 1
+        delocal int k1 = k - 1
+
+class Program
+    int[] a
+    method main()
+        new int[5] a
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        local Rotate r = nil
+        new Rotate r
+        local int n = 5
+        local int k = 2
+        call r::rotateLeft(a, n, k)
+        delocal int k = 2
+        delocal int n = 5
+        delete Rotate r
+        delocal Rotate r = nil

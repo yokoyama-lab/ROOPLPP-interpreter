@@ -1,0 +1,69 @@
+// Reversible encoding using a fixed prefix-free code table
+// Symbols: 0->00, 1->01, 2->10, 3->110, 4->111
+// Input: [1, 3, 0, 4, 2] -> bits: [0,1,1,1,0,0,0,0,1,1,1,0], nbits=12
+
+class PrefixCode
+    // Code lengths and codes (stored as int arrays for simplicity)
+    // symbol i has length codelen[i] and codeword code[i] (as integer)
+    method encode(int[] data, int n, int[] codelen, int[] codeword,
+                  int[] bits, int nbits)
+        for di in (0..n-1) do
+            local int sym = data[di]
+            local int len = codelen[sym]
+            local int word = codeword[sym]
+            // Output bits of codeword (MSB first)
+            for bi in (0..len-1) do
+                local int shift = len - 1 - bi
+                local int pow2 = 1
+                if shift >= 1 then
+                    for si in (1..shift) do
+                        local int tmp = pow2
+                        pow2 -= tmp
+                        pow2 += tmp * 2
+                        delocal int tmp = pow2 / 2
+                    end
+                fi shift >= 1
+                bits[nbits] += (word / pow2) % 2
+                nbits += 1
+                delocal int pow2 = pow2
+                delocal int shift = len - 1 - bi
+            end
+            delocal int word = codeword[sym]
+            delocal int len = codelen[sym]
+            delocal int sym = data[di]
+        end
+
+class Program
+    int[] data
+    int[] codelen
+    int[] codeword
+    int[] bits
+    int nbits
+    method main()
+        new int[5] data
+        new int[5] codelen
+        new int[5] codeword
+        new int[12] bits
+        // Symbol codes: 0->00(0), 1->01(1), 2->10(2), 3->110(6), 4->111(7)
+        codelen[0] += 2
+        codelen[1] += 2
+        codelen[2] += 2
+        codelen[3] += 3
+        codelen[4] += 3
+        codeword[0] += 0
+        codeword[1] += 1
+        codeword[2] += 2
+        codeword[3] += 6
+        codeword[4] += 7
+        data[0] += 1
+        data[1] += 3
+        data[2] += 0
+        data[3] += 4
+        data[4] += 2
+        local PrefixCode pc = nil
+        new PrefixCode pc
+        local int n = 5
+        call pc::encode(data, n, codelen, codeword, bits, nbits)
+        delocal int n = 5
+        delete PrefixCode pc
+        delocal PrefixCode pc = nil
