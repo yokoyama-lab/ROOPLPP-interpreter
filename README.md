@@ -204,6 +204,17 @@ dune exec test/eval_test.exe   # 個別スイートを実行
 | `pretty_test` | ソースへの整形（文字列エスケープ・式の括弧付け） |
 | `env_store_test` | 環境とストア |
 | `eval_prog_test` | ソース文字列からの parse → `eval_prog`（字句・構文解析を含むエンドツーエンド） |
+| `diagnostics_test` | 診断メッセージの整形・行推定・修正ヒント・ゼロクリア検査 |
+| `error_test` | エラー経路（可逆性の表明が正しく落ちること：ループ・条件分岐の表明，`delocal` の一致，`delete` 前のゼロクリア，値引数の不変性ほか） |
+| `example_test` | `example/*.rplpp` 全件の回帰（パース／`invert(invert p)=p`／`parse(pretty p)=p`／実行）＋代表例の値 |
+| `cli_test` | `rplpp` コマンド（フラグ・終了コード・ゼロクリア検査の出力・エラーの体裁） |
+
+カバレッジは bisect_ppx で測れる（`opam install bisect_ppx` が必要）。
+
+```
+dune test --force --instrument-with bisect_ppx   # lib/dune に (instrumentation (backend bisect_ppx)) を追加して実行
+bisect-ppx-report summary --per-file
+```
 
 ## オンラインインタプリタ
 
