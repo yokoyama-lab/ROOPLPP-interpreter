@@ -35,6 +35,7 @@ bin/                実行ファイル rplpp（main.ml）
 test/               OUnit2 テストスイート
 example/            サンプルプログラム（*.rplpp）
 library/            標準ライブラリ（Library.rplpp）
+coq/                可逆性の機械検証（Rocq, roopl.v）
 web/                オンラインインタプリタ（PHP + TypeScript）
 ```
 
@@ -215,6 +216,28 @@ dune exec test/eval_test.exe   # 個別スイートを実行
 dune test --force --instrument-with bisect_ppx   # lib/dune に (instrumentation (backend bisect_ppx)) を追加して実行
 bisect-ppx-report summary --per-file
 ```
+
+## 可逆性の機械検証（Rocq）
+
+`coq/roopl.v` に，ROOPL++ の**文のコア**の操作的意味論と可逆性の機械検証がある
+（Rocq 9.1.1，単一ファイル 674 行，**公理ゼロ**）。
+
+| 定理 | 主張 |
+|---|---|
+| `invert_invert` | `invert (invert s) = s` |
+| `exec_invert` | `exec s a b → exec (invert s) b a` |
+| `exec_iff` | `exec s a b ↔ exec (invert s) b a` |
+| `exec_det` | 前方決定性 |
+| **`exec_inj`** | **可逆性**：`exec s a1 b → exec s a2 b → a1 == a2` |
+| `exec_round_trip` | 実行してから逆を実行すると元に戻る |
+
+```
+cd coq && make && make check
+```
+
+対象は skip・可逆代入・swap・並び・条件分岐・ループ・局所ブロック・オブジェクトブロック・
+引数なしメソッドの call/uncall。**フィールドを持つオブジェクト，配列，継承，動的ディスパッチ，
+引数つきメソッドは対象外**（詳細と対応関係は `coq/README.md`）。
 
 ## オンラインインタプリタ
 
