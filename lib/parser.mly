@@ -2,7 +2,10 @@
 open Syntax
 open Util
 
-let parse_error s = print_endline s
+(* 構文エラーの詳細は bin/main.ml が Util.Parse_error を捕まえて
+   diagnostics.ml で整形する。ocamlyacc 既定の "syntax error" は
+   その前に出てしまうので、ここでは何も表示しない。 *)
+let parse_error _ = ()
 
 let rec anyId2obj = function
   | VarArray(x, None)   -> Var x

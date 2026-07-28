@@ -57,11 +57,64 @@ dune clean          # 生成物（_build/）を削除
 dune exec rplpp -- example/fib.rplpp            # 順方向に実行
 dune exec rplpp -- -inverse example/fib.rplpp   # 逆プログラムを表示
 dune exec rplpp -- -library example/fib.rplpp   # 標準ライブラリを読み込んで実行
+dune exec rplpp -- -no-zero-check example/fib.rplpp  # ゼロクリア検査の出力を抑止
 ```
 
 ビルド済みバイナリは `_build/default/bin/main.exe` にある。
 
 `-inverse` の出力は再度パースできる正しい ROOPL++ ソースになっている（逆プログラムをそのまま実行・再反転できる）。
+
+### 実行後のゼロクリア検査
+
+実行が終わると、`main` を持つクラスの変数のうち **0 / nil に戻っていないもの**を一覧する
+（PyJanus の `Warning: non-zero values remain ...` に相当）。可逆プログラムは終了時に
+すべてがゼロへ戻るのが「クリーン」で、残っているものは意図した出力かガーベジ（未回収の情報）
+のどちらかである。`delete` されずに残ったオブジェクトや配列は中身まで展開して表示する。
+
+```
+$ dune exec rplpp -- example/algo_zagier.rplpp
+x = 1
+y = 9
+z = 1
+ROOPL++ zero-clear check: 3 of 3 value(s) are NOT zero-cleared:
+  x = 1
+  y = 9
+  z = 1
+  note: ...
+```
+
+出力を機械的に比較したいときは `-no-zero-check` で抑止できる。
+
+### エラー出力
+
+構文エラー・実行時エラーは、原因・場所・そのときの変数の値・修正のヒントを添えた
+構造化テキストで表示し、**終了コード 1** で終わる（人が読むためと、LLM に修正させるための
+両方を意図している）。
+
+```
+ROOPL++ execution error
+  message: Array index a[4] is out of bounds
+  file: example/foo.rplpp
+  line: 11 (best-effort match on the statement text)
+
+Source:
+    10 |         for i in (0..4) do
+  > 11 |             total += a[i]
+    12 |         end
+
+Trace (outermost first):
+  1: total += a[i]
+  2: a[i]
+
+Values on entry to this statement:
+  total = 6; a = <int[4]> { [1] = 1; [2] = 2; [3] = 3 }; i = 4
+
+Fix hints:
+  - `new int[n] xs` allocates xs[0] .. xs[n-1] only; ...
+```
+
+行番号は「pretty 表示した文とソース行の照合」による推定なので厳密ではない（AST が位置情報を
+持たないため）。整形は `lib/diagnostics.ml`、テストは `test/diagnostics_test.ml`。
 
 ## 言語の概要
 
