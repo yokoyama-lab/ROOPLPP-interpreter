@@ -1,0 +1,67 @@
+// Reversible selection sort with a linear-size log, ported from PyJanus
+// example/selection_sort.ja.
+//
+// Sorting is not injective on the array alone, so the permutation has to be
+// recorded: ftab[j] holds (position of the selected minimum) - j, which is
+// exactly the factorial-number-system digit of the sorting permutation.
+//
+// The index search itself is clean.  A "dirty" scan writes its decisions into
+// a scratch array, the answer is copied out, and the scan is undone by
+// `uncall` (Bennett's trick), so the scratch array is all zeros again and can
+// be deleted -- ROOPL++ requires arrays to be zero-cleared before `delete`.
+//
+// a = [50, 20, 40, 60, 10, 30] -> a = [10, 20, 30, 40, 50, 60]
+
+class SelectionSort
+    // p := index of the minimum of a[j..n-1]; gb logs each update of p
+    method argMinDirty(int[] a, int j, int n, int p, int[] gb, int gc)
+        p += j
+        for i in (j+1..n-1) do
+            if a[i] < a[p] then
+                gb[gc] += p + 1
+                p -= gb[gc] - 1
+                p += i
+            fi gb[gc] != 0
+            gc += 1
+        end
+
+    method argMin(int[] a, int j, int n, int p)
+        local int[] gb = nil
+        new int[n] gb
+        local int q = 0
+        local int gc = 0
+        call argMinDirty(a, j, n, q, gb, gc)
+        p += q
+        uncall argMinDirty(a, j, n, q, gb, gc)
+        delocal int gc = 0
+        delocal int q = 0
+        delete int[n] gb
+        delocal int[] gb = nil
+
+    method sort(int[] a, int n, int[] ftab)
+        for j in (0..n-2) do
+            local int p = 0
+            call argMin(a, j, n, p)
+            a[j] <=> a[p]
+            ftab[j] += p - j
+            delocal int p = ftab[j] + j
+        end
+
+class Program
+    int[] a
+    int[] ftab
+    method main()
+        new int[6] a
+        new int[6] ftab
+        a[0] += 50
+        a[1] += 20
+        a[2] += 40
+        a[3] += 60
+        a[4] += 10
+        a[5] += 30
+
+        local SelectionSort s = nil
+        new SelectionSort s
+        call s::sort(a, 6, ftab)
+        delete SelectionSort s
+        delocal SelectionSort s = nil

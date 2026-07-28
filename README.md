@@ -116,10 +116,19 @@ class Program
 コメントは `//` 以降行末まで。
 
 `call`/`uncall` の引数は変数で渡す（可逆呼出しの規約により，呼出し後に元へ戻せる必要があるため）。
+配列要素（`a[i]`）は値渡しになるため，呼出し先で書き換えるものは「配列＋添字」を渡す。
+
+`&&` `||` は**短絡評価しない**（両辺を必ず評価する）。`i < n && a[i] = 0` のような
+「添字ガード」は書けないので，範囲外にならない添字へクランプするか，番兵の要素を
+余分に確保する（`example/algo_dijkstra.rplpp`，`example/BinaryHeap.rplpp` を参照）。
 
 ## サンプルと標準ライブラリ
 
-- `example/*.rplpp` — データ構造（`LinkedList` `BinaryTree` `DoublyLinkedList` など）と可逆アルゴリズム（`algo_*`）。
+- `example/*.rplpp` — データ構造（`LinkedList` `BinaryTree` `DoublyLinkedList`
+  `DynamicArray` `BinaryHeap` `TreeSort` など）と可逆アルゴリズム（`algo_*`）。
+- 一部は姉妹プロジェクト **PyJanus**（Janus インタプリタ）のサンプルからの移植で，
+  可逆計算の定石（Bennett の compute-copy-uncompute，決定ビットのログ化，
+  対合・全単射の直接表現）を例示する。ファイル冒頭のコメントに出典を書いている。
 - `library/Library.rplpp` — `-library` で読み込む標準ライブラリ。
 
 ## テスト

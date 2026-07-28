@@ -1,0 +1,42 @@
+// Cantor pairing, a bijection N x N -> N, and its inverse.
+// Ported from PyJanus example/cantor_pair.ja (which left the unpairing as
+// an exercise; here it is written as a reversible triangular-root search).
+//
+//   pair(x, y)   = (x+y)(x+y+1)/2 + y
+//   unpair(z)    = the unique (x, y) with pair(x, y) = z
+//
+// pair(3, 5) = 8*9/2 + 5 = 41, and unpair(41) = (3, 5).
+// The search variable w in unpair is delocalised against x + y, so the
+// method leaves no garbage and `uncall` cleanly restores the state.
+
+class Cantor
+    method pair(int x, int y, int z)
+        z += (x + y) * (x + y + 1) / 2 + y
+
+    method unpair(int z, int x, int y)
+        local int w = 0
+        from w = 0 loop
+            w += 1
+        until (w + 1) * (w + 2) / 2 > z
+        y += z - w * (w + 1) / 2
+        x += w - y
+        delocal int w = x + y
+
+class Program
+    int x
+    int y
+    int z
+    int x2
+    int y2
+    method main()
+        local Cantor c = nil
+        new Cantor c
+
+        x += 3
+        y += 5
+        call c::pair(x, y, z)
+
+        call c::unpair(z, x2, y2)
+
+        delete Cantor c
+        delocal Cantor c = nil

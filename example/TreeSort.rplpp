@@ -1,0 +1,101 @@
+// Reversible tree sort, inspired by PyJanus example/tree_sort.ja and written
+// with ROOPL++ objects instead of the array encoding Janus is limited to.
+//
+// Every element is inserted into a binary search tree, then an in-order walk
+// copies the values out in sorted order.  Both phases are reversible: the
+// insertion path is determined by the value being inserted (so the tree can
+// be dismantled again by `uncall`), and the traversal only reads the tree
+// while writing each output cell exactly once.
+//
+// The garbage of tree sort is the tree itself -- which is also its result in
+// the classical setting.  Uncalling `sort` rebuilds nothing and destroys
+// nothing: it empties `out` and takes the tree apart again.
+//
+// a = [5,3,8,1,4,7,9] -> out = [1,3,4,5,7,8,9]
+
+class TreeNode
+    TreeNode left
+    TreeNode right
+    int value
+
+    method setValue(int newValue)
+        value ^= newValue
+
+    method insertNode(TreeNode node, int nodeValue)
+        if nodeValue < value then
+            if left = nil && node != nil then
+                left <=> node
+            fi left != nil && node = nil
+
+            if left != nil then
+                call left::insertNode(node, nodeValue)
+            fi left != nil
+        else
+            if right = nil && node != nil then
+                right <=> node
+            fi right != nil && node = nil
+
+            if right != nil then
+                call right::insertNode(node, nodeValue)
+            fi right != nil
+        fi nodeValue < value
+
+    // in-order walk; pos is the number of values written so far
+    method inorder(int[] out, int pos)
+        if left != nil then
+            call left::inorder(out, pos)
+        fi left != nil
+
+        out[pos] ^= value
+        pos += 1
+
+        if right != nil then
+            call right::inorder(out, pos)
+        fi right != nil
+
+class BinarySearchTree
+    TreeNode root
+
+    method insert(int v)
+        local TreeNode node = nil
+        new TreeNode node
+        call node::setValue(v)
+        call insertNode(node, v)
+        delocal TreeNode node = nil
+
+    method insertNode(TreeNode node, int value)
+        if root = nil && node != nil then
+            root <=> node
+        fi root != nil && node = nil
+
+        if root != nil then
+            call root::insertNode(node, value)
+        fi root != nil
+
+    method toArray(int[] out, int n)
+        local int pos = 0
+        if root != nil then
+            call root::inorder(out, pos)
+        fi root != nil
+        delocal int pos = n
+
+class Program
+    BinarySearchTree tree
+    int[] a
+    int[] out
+    method main()
+        new int[7] a
+        new int[7] out
+        a[0] += 5
+        a[1] += 3
+        a[2] += 8
+        a[3] += 1
+        a[4] += 4
+        a[5] += 7
+        a[6] += 9
+
+        new BinarySearchTree tree
+        for i in (0..6) do
+            call tree::insert(a[i])
+        end
+        call tree::toArray(out, 7)

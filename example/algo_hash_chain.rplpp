@@ -1,0 +1,39 @@
+// Reversible iteration of a non-injective map, ported from PyJanus
+// example/hash_chain.ja.
+//
+// The map f(v) = (v*v + 1) % 16 is not injective, so iterating it destroys
+// information.  Each step banks only a preimage selector (a value < 4) in
+// the trace array tr, which is far cheaper than saving the input itself:
+// the entry value is recovered from the image plus that selector.
+//
+// x = 5 -> 10 -> 5 -> 10 -> 5, so four steps return to 5 while tr records
+// the branch taken at each step.
+
+class HashChain
+    method step(int x, int[] tr, int i)
+        tr[i] += x / 4
+        local int m = x % 8
+        x -= 4 * tr[i] + m % 4
+        x += 1 + (m = 1 || m = 7) + 4 * (m = 2 || m = 6) + 9 * (m = 3 || m = 5)
+        delocal int m = (x = 1) * 4 * (tr[i] % 2)
+                      + (x = 2) * (1 + 6 * (tr[i] % 2))
+                      + (x = 5) * (2 + 4 * (tr[i] % 2))
+                      + (x = 10) * (3 + 2 * (tr[i] % 2))
+
+    method chain(int x, int[] tr, int steps)
+        for i in (0..steps-1) do
+            call step(x, tr, i)
+        end
+
+class Program
+    int x
+    int[] tr
+    method main()
+        new int[4] tr
+        x += 5
+
+        local HashChain h = nil
+        new HashChain h
+        call h::chain(x, tr, 4)
+        delete HashChain h
+        delocal HashChain h = nil

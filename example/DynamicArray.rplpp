@@ -1,0 +1,91 @@
+// Reversible dynamic array, ported from PyJanus example/dynamic_array.ja
+// (Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms",
+// arXiv:1605.08448, Section 5.2, Theorem 5.5) and reshaped as an object:
+// the backing store, the length, the capacity and the resize log all become
+// fields of a ROOPL++ class.
+//
+// The capacity doubles when the array is full and halves when it becomes
+// sparse.  Whether a resize happened cannot be recovered from the final
+// (length, capacity) pair alone, so one bit per operation is logged in
+// dbit -- the constant overhead promised by Theorem 5.5.
+//
+// ROOPL++ has no *= or /=, so doubling and halving of the capacity are
+// written with a local and a compensating delocal assertion.
+//
+// add 10,20,30,40,50 then remove twice:
+//   data = [10,20,30,0,...], length = 3, capacity = 8, x1 = 50, x2 = 40
+
+class DynamicArray
+    int[] data
+    int length
+    int capacity
+    int[] dbit      // one resize bit per operation
+    int nops        // number of operations performed so far
+
+    method constructor(int size)
+        new int[size] data
+        new int[size] dbit
+        capacity += 1
+
+    // append e (e is copied in, the caller keeps its value)
+    method add(int e)
+        if length = capacity then
+            local int t = capacity
+            capacity += t
+            delocal int t = capacity / 2
+            dbit[nops] += 1
+        fi dbit[nops] = 1
+        data[length] ^= e
+        length += 1
+        nops += 1
+
+    // extract the last element into e (e must be 0 on entry)
+    method removeLast(int e)
+        length -= 1
+        e ^= data[length]
+        data[length] ^= e
+        if length = capacity / 4 && capacity > 1 then
+            local int t = capacity / 2
+            capacity -= t
+            delocal int t = capacity
+            dbit[nops] += 1
+        fi dbit[nops] = 1
+        nops += 1
+
+    // reversible read: q must be 0 on entry
+    method query(int i, int q)
+        q ^= data[i]
+
+    // reversible copy of the whole state, so it shows up in the final store
+    method snapshot(int[] out, int len, int cap)
+        len ^= length
+        cap ^= capacity
+        for i in (0..length-1) do
+            out[i] ^= data[i]
+        end
+
+class Program
+    DynamicArray da
+    int[] snap
+    int len
+    int cap
+    int q
+    int x1
+    int x2
+    method main()
+        new int[16] snap
+        new DynamicArray da
+        call da::constructor(16)
+
+        local int e = 0
+        for k in (1..5) do
+            e += 10 * k
+            call da::add(e)
+            e -= 10 * k
+        end
+        delocal int e = 0
+
+        call da::query(2, q)          // q = 30
+        call da::removeLast(x1)       // x1 = 50
+        call da::removeLast(x2)       // x2 = 40
+        call da::snapshot(snap, len, cap)

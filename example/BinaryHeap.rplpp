@@ -1,0 +1,162 @@
+// Reversible binary min-heap, ported from PyJanus example/binary_heap.ja
+// (Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms",
+// arXiv:1605.08448, Theorems 6.7/6.8; originally S. V. Nohr, "Reversible
+// Graph Algorithms", BSc thesis, Copenhagen University, 2015) and reshaped
+// as an object: the backing array and the heap size are fields, while each
+// operation is handed its own log array, since the sift path length is not
+// recoverable from the resulting heap.
+//
+// extract-min parks an "infinity" sentinel at the root, swaps it to the end
+// and sifts down; insert grows the heap and sifts up.  The comparisons that
+// steer the sift are what would normally be erased, so the visited indices
+// are written to the log.
+//
+// ROOPL++ evaluates && and || strictly, so a child index is computed even
+// when the guard `left <= heapsize` is false.  The backing array therefore
+// has slack up to 2*capacity+1; the padding cells are never used, they only
+// keep the (irrelevant) read inside the array.
+//
+// heap {1,2,3,7,4,8,9}: three extractions yield 1, 2, 3.
+
+class BinaryHeap
+    int[] A         // 1-based; A[0] and the tail are padding
+    int heapsize
+
+    method parent(int i, int p)
+        p += i / 2
+
+    method left(int i, int l)
+        l += 2 * i
+
+    method right(int i, int r)
+        r += 2 * i + 1
+
+    // sift up: give position i the value key, logging the path
+    method decreaseKey(int i, int key, int[] garbage, int gc)
+        local int tmp = i
+        garbage[gc] += A[i] - key
+        A[i] -= garbage[gc]
+
+        local int loopcond = 1
+        from loopcond = 1 && gc = 0 do
+            gc += 1
+            local int p = 0
+            call parent(tmp, p)
+            garbage[gc] += tmp
+
+            if tmp <= 1 || A[p] <= A[tmp] then
+                loopcond -= 1
+            else
+                A[tmp] <=> A[p]
+                tmp -= garbage[gc]
+                tmp += p
+            fi loopcond = 0
+
+            uncall parent(garbage[gc], p)
+            delocal int p = 0
+        until loopcond = 0
+        delocal int loopcond = 0
+        delocal int tmp = garbage[gc]
+
+    method insert(int key, int[] garbage)
+        heapsize += 1
+        local int gc = 0
+        call decreaseKey(heapsize, key, garbage, gc)
+        delocal int gc = 0
+
+    // sift down from i, logging the child that was descended into
+    method minHeapify(int i, int[] garbage, int gc)
+        local int l = 0
+        local int r = 0
+        local int min = 0
+        call left(i, l)
+        call right(i, r)
+
+        if l <= heapsize && A[l] < A[i] then
+            min += l
+            if r <= heapsize && A[r] < A[min] then
+                min -= l
+                min += r
+            fi r <= heapsize && A[r] < A[l]
+        else
+            min += i
+            if r <= heapsize && A[r] < A[min] then
+                min -= i
+                min += r
+            fi r <= heapsize && A[r] < A[i]
+        fi l <= heapsize && A[l] < A[i]
+
+        garbage[gc] += min
+        gc += 1
+
+        if min != i then
+            A[i] <=> A[min]
+            call minHeapify(min, garbage, gc)
+
+            if l = garbage[gc-1] then
+                min -= l
+            else
+                min -= r
+            fi l = garbage[gc-1]
+        fi min = 0
+
+        gc -= 1
+
+        if i = garbage[gc] then
+            min -= i
+        fi i = garbage[gc]
+
+        uncall right(i, r)
+        uncall left(i, l)
+        delocal int min = 0
+        delocal int r = 0
+        delocal int l = 0
+
+    method extractMin(int min, int[] garbage)
+        min += A[1]
+        A[1] -= min
+        A[1] += 1000000         // "infinity" sentinel
+        A[1] <=> A[heapsize]
+        heapsize -= 1
+        local int gc = 0
+        call minHeapify(1, garbage, gc)
+        delocal int gc = 0
+
+    // reversible copy of the remaining heap, so it shows up in the final store
+    method snapshot(int[] out, int size)
+        size ^= heapsize
+        for i in (1..heapsize) do
+            out[i] ^= A[i]
+        end
+
+class Program
+    BinaryHeap heap
+    int[] g1
+    int[] g2
+    int[] g3
+    int min1
+    int min2
+    int min3
+    int[] rest
+    int size
+    method main()
+        new BinaryHeap heap
+        new int[16] heap.A      // indices 1..7 in use, the rest is padding
+        new int[8] g1
+        new int[8] g2
+        new int[8] g3
+        new int[8] rest
+
+        heap.heapsize += 7
+        heap.A[1] += 1
+        heap.A[2] += 2
+        heap.A[3] += 3
+        heap.A[4] += 7
+        heap.A[5] += 4
+        heap.A[6] += 8
+        heap.A[7] += 9
+
+        call heap::extractMin(min1, g1)
+        call heap::extractMin(min2, g2)
+        call heap::extractMin(min3, g3)
+        call heap::snapshot(rest, size)

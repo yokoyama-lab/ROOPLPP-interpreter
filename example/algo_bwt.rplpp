@@ -1,0 +1,121 @@
+// Burrows-Wheeler transform without a sentinel, ported from PyJanus
+// example/bwt_plain.ja.
+//
+// The BWT is a bijection between a string s and the pair (last column L,
+// index of the original rotation), so it can be computed *destructively*:
+// the input is consumed and the program still inverts.  Rotations are
+// compared with a stable tie-break (equal rotations are ordered by starting
+// position), which keeps the map injective even for periodic input like the
+// "ababab" used here.
+//
+// After the last column has been built, clearS walks the LF mapping n times
+// and subtracts the characters back out of s, so s ends up all zeros -- the
+// information now lives entirely in (L, primary).
+//
+// s = [1,2,1,2,1,2] -> L = [2,2,2,1,1,1], primary = 0, s consumed.
+
+class BWT
+    // p := 1 + position of the first difference between rotations j and i,
+    // d := the sign of that difference (both 0 if the rotations are equal)
+    method firstdiff(int[] s, int n, int j, int i, int p, int d)
+        for k in (0..n-1) do
+            if p = 0 && s[(j+k) % n] != s[(i+k) % n] then
+                d += s[(j+k) % n] - s[(i+k) % n]
+                p += k + 1
+            fi p = k + 1
+        end
+
+    // c += 1 iff rotation j precedes rotation i
+    method cmprot(int[] s, int n, int j, int i, int c)
+        local int p = 0
+        local int d = 0
+        call firstdiff(s, n, j, i, p, d)
+        if d < 0 then
+            c += 1
+        else
+            if d = 0 && j < i then
+                c += 1
+            fi d = 0 && j < i
+        fi d < 0
+        uncall firstdiff(s, n, j, i, p, d)
+        delocal int d = 0
+        delocal int p = 0
+
+    // r := rank of rotation i among all rotations
+    method rankof(int[] s, int n, int i, int r)
+        for j in (0..n-1) do
+            local int c = 0
+            call cmprot(s, n, j, i, c)
+            r += c
+            uncall cmprot(s, n, j, i, c)
+            delocal int c = 0
+        end
+
+    // r := rank of L[q] in the last column (LF mapping)
+    method lfrank(int[] L, int n, int q, int r)
+        for t in (0..n-1) do
+            if L[t] < L[q] || (L[t] = L[q] && t < q) then
+                r += 1
+            fi L[t] < L[q] || (L[t] = L[q] && t < q)
+        end
+
+    // t := the position whose LF rank is q (inverse of lfrank)
+    method flrank(int[] L, int n, int q, int t)
+        for u in (0..n-1) do
+            local int r = 0
+            call lfrank(L, n, u, r)
+            if r = q then
+                t += u
+            fi r = q
+            uncall lfrank(L, n, u, r)
+            delocal int r = 0
+        end
+
+    // consume s by walking the LF mapping backwards from the primary index
+    method clearS(int[] s, int n, int[] L, int primary)
+        local int q = primary
+        local int k = n
+        from k = n loop
+            k -= 1
+            s[k] -= L[q]
+            local int r = 0
+            call lfrank(L, n, q, r)
+            q <=> r
+            uncall flrank(L, n, q, r)
+            delocal int r = 0
+        until k = 0
+        delocal int k = 0
+        delocal int q = primary
+
+    method transform(int[] s, int n, int[] L, int primary)
+        for i in (0..n-1) do
+            local int r = 0
+            call rankof(s, n, i, r)
+            L[r] += s[(i + n - 1) % n]
+            if i = 0 then
+                primary += r
+            fi i = 0
+            uncall rankof(s, n, i, r)
+            delocal int r = 0
+        end
+        call clearS(s, n, L, primary)
+
+class Program
+    int[] s
+    int[] L
+    int primary
+    method main()
+        new int[6] s
+        new int[6] L
+        s[0] += 1
+        s[1] += 2
+        s[2] += 1
+        s[3] += 2
+        s[4] += 1
+        s[5] += 2
+
+        local BWT b = nil
+        new BWT b
+        call b::transform(s, 6, L, primary)
+        delete BWT b
+        delocal BWT b = nil

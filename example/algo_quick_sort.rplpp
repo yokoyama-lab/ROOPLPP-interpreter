@@ -1,0 +1,123 @@
+// Reversible quicksort with optimal garbage, ported from PyJanus
+// example/quick_sort.ja (CLRS 3rd ed., p. 171).
+//
+// The trick is the companion array ord, which carries the original position
+// of every element.  Partitioning rotates equal-length runs of a and ord
+// together, so the exit assertion of the comparison branch can be stated on
+// ord (a genuine permutation) instead of on a, whose values may repeat.
+// After the two recursive calls the pivot index q is un-computed by
+// re-deriving it as the position of the maximum of ord[p..r], so quicksort
+// finishes with no garbage beyond ord itself.
+//
+// PyJanus uses a stack for the fold inside `max`; ROOPL++ has no stack type,
+// so the log is a locally allocated array that `uncall` empties again before
+// it is deleted.
+//
+// a = [2,8,7,1,3,5,6,4] -> a = [1,2,3,4,5,6,7,8], ord = the inverse
+// permutation that maps the sorted array back to the input.
+
+class QuickSort
+    // m := index of the maximum of ord[p..r]; gb logs the superseded
+    // candidates, bl the decision bits
+    method maxSub(int[] ord, int p, int r, int m,
+                  int[] gb, int gc, int[] bl, int bc)
+        m += p
+        for i in (p..r) do
+            if ord[i] >= ord[m] then
+                gb[gc] += m
+                m -= gb[gc]
+                m += i
+                gc += 1
+                bl[bc] += 1
+            fi bl[bc] = 1
+            bc += 1
+        end
+
+    // clean version: q ^= argmax (Bennett compute-copy-uncompute)
+    method maxIndex(int[] ord, int p, int r, int q, int n)
+        local int[] gb = nil
+        new int[n] gb
+        local int[] bl = nil
+        new int[n] bl
+        local int m = 0
+        local int gc = 0
+        local int bc = 0
+        call maxSub(ord, p, r, m, gb, gc, bl, bc)
+        q ^= m
+        uncall maxSub(ord, p, r, m, gb, gc, bl, bc)
+        delocal int bc = 0
+        delocal int gc = 0
+        delocal int m = 0
+        delete int[n] bl
+        delocal int[] bl = nil
+        delete int[n] gb
+        delocal int[] gb = nil
+
+    // Lomuto partition around a[r], done as rotations so that it is stable.
+    // ROOPL++ evaluates && strictly, so ord[i] is written ord[i * (i >= p)]:
+    // the index is only meaningful when i >= p, and the clamp keeps the
+    // (then irrelevant) access inside the array when i is still p-1.
+    method partition(int[] a, int p, int r, int i, int[] ord)
+        i ^= p - 1
+        local int j = p
+        from j = p loop
+            if a[j] <= a[r] then
+                i += 1
+                local int k = i
+                from k = i loop
+                    a[k] <=> a[j]
+                    ord[k] <=> ord[j]
+                    k += 1
+                until k = j
+                delocal int k = j
+            fi i >= p && (i = j || ord[i * (i >= p)] > ord[j])
+            j += 1
+        until j = r
+        delocal int j = r
+
+        // move the pivot into place
+        local int k = i + 1
+        from k = i + 1 loop
+            a[k] <=> a[r]
+            ord[k] <=> ord[r]
+            k += 1
+        until k = r
+        delocal int k = r
+        i += 1
+
+    method sort(int[] a, int p, int r, int[] ord, int n)
+        if p < r then
+            local int q = 0
+            call partition(a, p, r, q, ord)
+            q -= 1
+            call sort(a, p, q, ord, n)
+            q += 2
+            call sort(a, q, r, ord, n)
+            q -= 1
+            call maxIndex(ord, p, r, q, n)      // q is zeroed again
+            delocal int q = 0
+        fi p < r
+
+class Program
+    int[] a
+    int[] ord
+    method main()
+        new int[8] a
+        new int[8] ord
+        a[0] += 2
+        a[1] += 8
+        a[2] += 7
+        a[3] += 1
+        a[4] += 3
+        a[5] += 5
+        a[6] += 6
+        a[7] += 4
+        for i in (0..7) do
+            ord[i] += i
+        end
+
+        local QuickSort qs = nil
+        new QuickSort qs
+        call qs::sort(a, 0, 7, ord, 8)
+        delete QuickSort qs
+        delocal QuickSort qs = nil

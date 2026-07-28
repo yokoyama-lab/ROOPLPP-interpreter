@@ -1,0 +1,72 @@
+// Reversible breadth-first search, ported from PyJanus example/bfs.ja
+// (Nunez de Villavicencio, Demaine et al., "Energy-Efficient Algorithms",
+// arXiv:1605.08448, Section 6.2).
+//
+// Ordinary BFS spends energy on the visited test, the queue churn and the
+// final clean-up.  Here nothing is destroyed: the graph is an adjacency
+// matrix adj[u*vn+v], the FIFO queue is an array (which doubles as the visit
+// order), and every edge examination logs one decision bit -- "was v
+// discovered here?" -- which is exactly what makes the visited test
+// reversible.
+//
+// Undirected edges 0-1 0-2 1-3 2-3 3-4 4-5, source 0:
+//   dist = [0,1,1,2,3,4], queue (visit order) = [0,1,2,3,4,5]
+
+class BFS
+    method search(int[] adj, int vn, int src, int[] dist, int[] visited,
+                  int[] queue, int head, int tail, int[] blog, int bp)
+        // enqueue the source
+        visited[src] += 1
+        queue[tail] ^= src
+        tail += 1
+
+        from head = 0 loop
+            local int u = queue[head]
+            for j in (0..vn-1) do
+                if adj[u * vn + j] = 1 && visited[j] = 0 then
+                    visited[j] += 1
+                    dist[j] ^= dist[u] + 1
+                    queue[tail] ^= j
+                    tail += 1
+                    blog[bp] += 1
+                fi blog[bp] = 1
+                bp += 1
+            end
+            delocal int u = queue[head]
+            head += 1
+        until head = tail
+
+class Program
+    int[] adj
+    int[] dist
+    int[] visited
+    int[] queue
+    int head
+    int tail
+    int[] blog
+    int bp
+    method main()
+        new int[36] adj
+        new int[6] dist
+        new int[6] visited
+        new int[6] queue
+        new int[36] blog
+
+        adj[1] += 1     // 0 - 1
+        adj[6] += 1
+        adj[2] += 1     // 0 - 2
+        adj[12] += 1
+        adj[9] += 1     // 1 - 3
+        adj[19] += 1
+        adj[15] += 1    // 2 - 3
+        adj[20] += 1
+        adj[22] += 1    // 3 - 4
+        adj[27] += 1
+        adj[29] += 1    // 4 - 5
+        adj[34] += 1
+
+        local BFS b = nil
+        new BFS b
+        call b::search(adj, 6, 0, dist, visited, queue, head, tail, blog, bp)
+        delete BFS b
+        delocal BFS b = nil
