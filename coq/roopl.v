@@ -130,6 +130,7 @@ Inductive exp :=
 | Cst (z : Z)
 | Var (x : id)                (**r integer variable *)
 | Fld (x : id) (f : field)    (**r x.f *)
+| Idx (x : id) (e : exp)      (**r x[e]: an array is an object with a dynamic index *)
 | Bop (o : binop) (e1 e2 : exp).
 
 Definition bval (b : bool) : Z := if b then 1 else 0.
@@ -156,6 +157,7 @@ Fixpoint eval (e : exp) (a : state) : Z :=
   | Cst z => z
   | Var x => vs a x
   | Fld x f => rdf a x f
+  | Idx x e => rdf a x (Z.to_nat (eval e a))
   | Bop o e1 e2 => eval_binop o (eval e1 a) (eval e2 a)
   end.
 
@@ -166,6 +168,7 @@ Fixpoint fv (e : exp) : list id :=
   | Cst _ => []
   | Var x => [x]
   | Fld _ _ => []
+  | Idx _ e => fv e
   | Bop _ e1 e2 => fv e1 ++ fv e2
   end.
 
@@ -183,6 +186,7 @@ Proof.
   induction e; intros a b H; simpl; auto.
   - apply H.
   - now apply rdf_steq.
+  - rewrite (IHe a b H); now apply rdf_steq.
   - now rewrite (IHe1 a b H), (IHe2 a b H).
 Qed.
 
@@ -193,6 +197,7 @@ Proof.
   induction e; intros a w v H; simpl in *; auto.
   - unfold setv; simpl. destruct (Nat.eqb w x) eqn:E; auto.
     apply Nat.eqb_eq in E; subst; exfalso; apply H; now left.
+  - now rewrite IHe.
   - rewrite IHe1, IHe2; auto.
     + intro; apply H; apply in_or_app; now right.
     + intro; apply H; apply in_or_app; now left.
@@ -234,7 +239,9 @@ Inductive stm :=
 | Sskip
 | Sassign (x : id) (o : modop) (e : exp)             (**r x op= e *)
 | Sfassign (x : id) (f : field) (o : modop) (e : exp)(**r x.f op= e *)
+| Saassign (x : id) (ei : exp) (o : modop) (e : exp)  (**r x[ei] op= e *)
 | Sswap (x y : id)                                    (**r int x <=> y *)
+| Saswap (x : id) (e1 : exp) (y : id) (e2 : exp)      (**r x[e1] <=> y[e2] *)
 | Soswap (x y : id)                                   (**r object x <=> y *)
 | Scopy (x y : id)                                    (**r copy C x y *)
 | Suncopy (x y : id)                                  (**r uncopy C x y *)
@@ -251,7 +258,9 @@ Fixpoint invert (s : stm) : stm :=
   | Sskip => Sskip
   | Sassign x o e => Sassign x (minv o) e
   | Sfassign x f o e => Sfassign x f (minv o) e
+  | Saassign x ei o e => Saassign x ei (minv o) e
   | Sswap x y => Sswap x y
+  | Saswap x e1 y e2 => Saswap x e1 y e2
   | Soswap x y => Soswap x y
   | Scopy x y => Suncopy x y
   | Suncopy x y => Scopy x y
@@ -278,6 +287,7 @@ Fixpoint rename_exp (r : id -> id) (e : exp) : exp :=
   | Cst z => Cst z
   | Var x => Var (r x)
   | Fld x f => Fld (r x) f
+  | Idx x e => Idx (r x) (rename_exp r e)
   | Bop o e1 e2 => Bop o (rename_exp r e1) (rename_exp r e2)
   end.
 
@@ -286,7 +296,9 @@ Fixpoint rename (r : id -> id) (s : stm) : stm :=
   | Sskip => Sskip
   | Sassign x o e => Sassign (r x) o (rename_exp r e)
   | Sfassign x f o e => Sfassign (r x) f o (rename_exp r e)
+  | Saassign x ei o e => Saassign (r x) (rename_exp r ei) o (rename_exp r e)
   | Sswap x y => Sswap (r x) (r y)
+  | Saswap x e1 y e2 => Saswap (r x) (rename_exp r e1) (r y) (rename_exp r e2)
   | Soswap x y => Soswap (r x) (r y)
   | Scopy x y => Scopy (r x) (r y)
   | Suncopy x y => Suncopy (r x) (r y)
@@ -383,6 +395,41 @@ Proof.
     apply Nat.eqb_eq in E; subst; lia.
 Qed.
 
+(** Swapping two heap cells is an involution (the cells may coincide). *)
+Lemma aswap_invol : forall a b l1 i1 l2 i2,
+  (l1 < hn a)%nat -> (l2 < hn a)%nat ->
+  b == setf (setf a l1 i1 (hp a l2 i2)) l2 i2 (hp a l1 i1) ->
+  a == setf (setf b l1 i1 (hp b l2 i2)) l2 i2 (hp b l1 i1).
+Proof.
+  intros a b l1 i1 l2 i2 H1 H2 Hb.
+  assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
+  assert (Hcell : forall l f, (l < hn a)%nat ->
+    hp b l f = if (Nat.eqb l2 l && Nat.eqb i2 f)%bool then hp a l1 i1
+               else if (Nat.eqb l1 l && Nat.eqb i1 f)%bool then hp a l2 i2
+               else hp a l f).
+  { intros l f Hl. rewrite (steq_hp b _ l f Hb) by (rewrite Hhn; assumption).
+    simpl. reflexivity. }
+  split; [ | split; [ | split ] ].
+  - intro y; simpl; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
+  - intro y; simpl; symmetry; rewrite (steq_os b _ y Hb); reflexivity.
+  - simpl; symmetry; assumption.
+  - intros l f Hl; simpl.
+    assert (Hb2 : hp b l2 i2 = hp a l1 i1).
+    { rewrite (Hcell l2 i2 H2); now rewrite Nat.eqb_refl, Nat.eqb_refl. }
+    destruct (Nat.eqb l2 l && Nat.eqb i2 f)%bool eqn:E2.
+    + apply andb_true_iff in E2 as [A B]; apply Nat.eqb_eq in A;
+        apply Nat.eqb_eq in B; subst l f.
+      rewrite (Hcell l1 i1 H1).
+      destruct (Nat.eqb l2 l1 && Nat.eqb i2 i1)%bool eqn:E12.
+      * apply andb_true_iff in E12 as [A B]; apply Nat.eqb_eq in A;
+          apply Nat.eqb_eq in B; subst. reflexivity.
+      * rewrite Nat.eqb_refl, Nat.eqb_refl; reflexivity.
+    + destruct (Nat.eqb l1 l && Nat.eqb i1 f)%bool eqn:E1.
+      * apply andb_true_iff in E1 as [A B]; apply Nat.eqb_eq in A;
+          apply Nat.eqb_eq in B; subst l f. now rewrite Hb2.
+      * rewrite (Hcell l f Hl), E2, E1. reflexivity.
+Qed.
+
 (* ------------------------------------------------------------------ *)
 (** * Big-step operational semantics                                   *)
 (* ------------------------------------------------------------------ *)
@@ -404,9 +451,24 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     b == setf a l f (mapp o (hp a l f) (eval e a)) ->
     eval e b = eval e a ->
     exec G (Sfassign x f o e) a b
+| E_aassign : forall x ei o e a b l,
+    os a x = Some l -> (l < hn a)%nat ->
+    b == setf a l (Z.to_nat (eval ei a))
+              (mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)) ->
+    eval ei b = eval ei a ->
+    eval e b = eval e a ->
+    exec G (Saassign x ei o e) a b
 | E_swap : forall x y a b,
     b == setv (setv a x (vs a y)) y (vs a x) ->
     exec G (Sswap x y) a b
+| E_aswap : forall x e1 y e2 a b l1 l2,
+    os a x = Some l1 -> (l1 < hn a)%nat ->
+    os a y = Some l2 -> (l2 < hn a)%nat ->
+    b == setf (setf a l1 (Z.to_nat (eval e1 a)) (hp a l2 (Z.to_nat (eval e2 a))))
+              l2 (Z.to_nat (eval e2 a)) (hp a l1 (Z.to_nat (eval e1 a))) ->
+    eval e1 b = eval e1 a ->
+    eval e2 b = eval e2 a ->
+    exec G (Saswap x e1 y e2) a b
 | E_oswap : forall x y a b,
     b == seto (seto a x (os a y)) y (os a x) ->
     exec G (Soswap x y) a b
@@ -491,12 +553,45 @@ Proof.
         with (b := b) (c := setf a l f (mapp o (hp a l f) (eval e a)));
         [ assumption | apply setf_steq; assumption | assumption ].
     + rewrite <- (eval_steq e b b' Hb'), <- (eval_steq e a a' Ha); assumption.
+  - (* array assign *)
+    intros x ei o e a b l Hl Hlt Hb Hei He a' b' Ha Hb'.
+    eapply E_aassign with (l := l).
+    + rewrite <- (steq_os a a' x Ha); assumption.
+    + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (eval_steq ei a a' Ha), <- (eval_steq e a a' Ha),
+              <- (steq_hp a a' l (Z.to_nat (eval ei a)) Ha Hlt).
+      eapply steq_rewrite
+        with (b := b)
+             (c := setf a l (Z.to_nat (eval ei a))
+                        (mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)));
+        [ assumption | apply setf_steq; assumption | assumption ].
+    + rewrite <- (eval_steq ei b b' Hb'), <- (eval_steq ei a a' Ha); assumption.
+    + rewrite <- (eval_steq e b b' Hb'), <- (eval_steq e a a' Ha); assumption.
   - (* int swap *)
     intros x y a b Hb a' b' Ha Hb'.
     apply E_swap.
     rewrite <- (steq_vs a a' x Ha), <- (steq_vs a a' y Ha).
     eapply steq_rewrite with (b := b) (c := setv (setv a x (vs a y)) y (vs a x));
       [ assumption | apply setv_steq; apply setv_steq; assumption | assumption ].
+  - (* array swap *)
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2 a' b' Ha Hb'.
+    eapply E_aswap with (l1 := l1) (l2 := l2).
+    + rewrite <- (steq_os a a' x Ha); assumption.
+    + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (steq_os a a' y Ha); assumption.
+    + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (eval_steq e1 a a' Ha), <- (eval_steq e2 a a' Ha),
+              <- (steq_hp a a' l1 (Z.to_nat (eval e1 a)) Ha Hx1),
+              <- (steq_hp a a' l2 (Z.to_nat (eval e2 a)) Ha Hy1).
+      eapply steq_rewrite
+        with (b := b)
+             (c := setf (setf a l1 (Z.to_nat (eval e1 a))
+                              (hp a l2 (Z.to_nat (eval e2 a))))
+                        l2 (Z.to_nat (eval e2 a))
+                        (hp a l1 (Z.to_nat (eval e1 a))));
+        [ assumption | apply setf_steq; apply setf_steq; assumption | assumption ].
+    + rewrite <- (eval_steq e1 b b' Hb'), <- (eval_steq e1 a a' Ha); assumption.
+    + rewrite <- (eval_steq e2 b b' Hb'), <- (eval_steq e2 a a' Ha); assumption.
   - (* object swap *)
     intros x y a b Hb a' b' Ha Hb'.
     apply E_oswap.
@@ -638,6 +733,30 @@ Proof.
            apply Nat.eqb_eq in E1; apply Nat.eqb_eq in E2; subst; reflexivity.
         -- symmetry. rewrite (steq_hp b _ l' f' Hb) by (rewrite Hhn; assumption).
            simpl. now rewrite E.
+  - (* array assign *)
+    intros x ei o e a b l Hl Hlt Hb Hei He.
+    assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
+    assert (Hidx : Z.to_nat (eval ei b) = Z.to_nat (eval ei a)) by (now rewrite Hei).
+    assert (Hf : hp b l (Z.to_nat (eval ei a))
+                 = mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)).
+    { rewrite (steq_hp b _ l (Z.to_nat (eval ei a)) Hb) by (rewrite Hhn; assumption).
+      simpl. now rewrite Nat.eqb_refl, Nat.eqb_refl. }
+    eapply E_aassign with (l := l).
+    + rewrite (steq_os b _ x Hb); simpl; assumption.
+    + rewrite Hhn; assumption.
+    + rewrite Hidx, Hf, He, mapp_minv.
+      split; [ | split; [ | split ] ]; simpl.
+      * intro y; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
+      * intro y; symmetry; rewrite (steq_os b _ y Hb); reflexivity.
+      * symmetry; assumption.
+      * intros l' f' Hl';
+          destruct (Nat.eqb l l' && Nat.eqb (Z.to_nat (eval ei a)) f')%bool eqn:E.
+        -- apply andb_true_iff in E as [E1 E2]; apply Nat.eqb_eq in E1;
+             apply Nat.eqb_eq in E2; subst; reflexivity.
+        -- symmetry. rewrite (steq_hp b _ l' f' Hb) by (rewrite Hhn; assumption).
+           simpl. now rewrite E.
+    + now rewrite Hei.
+    + now rewrite He.
   - (* int swap *)
     intros x y a b Hb. apply E_swap.
     assert (Hbx : vs b x = if Nat.eqb y x then vs a x else vs a y).
@@ -658,6 +777,17 @@ Proof.
     + symmetry; rewrite (steq_hn b _ Hb); reflexivity.
     + intros l f Hl; symmetry. rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
       rewrite (steq_hn b _ Hb); simpl; assumption.
+  - (* array swap *)
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2.
+    assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
+    eapply E_aswap with (l1 := l1) (l2 := l2).
+    + rewrite (steq_os b _ x Hb); simpl; assumption.
+    + rewrite Hhn; assumption.
+    + rewrite (steq_os b _ y Hb); simpl; assumption.
+    + rewrite Hhn; assumption.
+    + rewrite He1, He2. apply aswap_invol; assumption.
+    + now rewrite He1.
+    + now rewrite He2.
   - (* object swap *)
     intros x y a b Hb. apply E_oswap.
     assert (Hbx : os b x = if Nat.eqb y x then os a x else os a y).
@@ -808,8 +938,14 @@ Proof.
   - (* field assign *)
     intros x f o e a b l Hl Hlt Hb He b' H; inversion H; subst.
     assert (l0 = l) by congruence; subst l0; eauto.
+  - (* array assign *)
+    intros x ei o e a b l Hl Hlt Hb Hei He b' H; inversion H; subst.
+    assert (l0 = l) by congruence; subst l0; eauto.
   - (* int swap *)
     intros x y a b Hb b' H; inversion H; subst; eauto.
+  - (* array swap *)
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2 b' H; inversion H; subst.
+    assert (l0 = l1) by congruence; assert (l3 = l2) by congruence; subst; eauto.
   - (* object swap *)
     intros x y a b Hb b' H; inversion H; subst; eauto.
   - (* copy *)
@@ -973,6 +1109,39 @@ Proof.
     + intro f; simpl; destruct f; reflexivity.
     + apply steq_refl.
   - split; [ reflexivity | split; reflexivity ].
+Qed.
+
+(** An array is an object with a dynamic index.  Inside a block:
+      ar[0] += 5 ; ar[0] <=> ar[1] ; X += ar[1] ; ar[1] -= 5
+    leaves X = 5 and the cells zero-cleared, so `destruct` may pop them. *)
+Definition arrprog : stm :=
+  Sobj O (Sseq (Saassign O (Cst 0) MAdd (Cst 5))
+          (Sseq (Saswap O (Cst 0) O (Cst 1))
+           (Sseq (Sassign X MAdd (Idx O (Cst 1)))
+                 (Saassign O (Cst 1) MSub (Cst 5))))).
+
+Example ex_array :
+  exists b, exec empty_env arrprog zero b /\ vs b X = 5 /\ hn b = 0%nat.
+Proof.
+  eexists. split.
+  - eapply E_obj.
+    + reflexivity.
+    + eapply E_seq.
+      * eapply E_aassign with (l := 0%nat);
+          [ reflexivity | simpl; lia | apply steq_refl | reflexivity | reflexivity ].
+      * eapply E_seq.
+        -- eapply E_aswap with (l1 := 0%nat) (l2 := 0%nat);
+             [ reflexivity | simpl; lia | reflexivity | simpl; lia
+             | apply steq_refl | reflexivity | reflexivity ].
+        -- eapply E_seq.
+           ++ apply E_assign; [ simpl; tauto | apply steq_refl ].
+           ++ eapply E_aassign with (l := 0%nat);
+                [ reflexivity | simpl; lia | apply steq_refl | reflexivity | reflexivity ].
+    + reflexivity.
+    + reflexivity.
+    + intro f; simpl; destruct f as [ | [ | f ] ]; reflexivity.
+    + apply steq_refl.
+  - split; reflexivity.
 Qed.
 
 (** copy C x y then uncopy C x y restores the state. *)
