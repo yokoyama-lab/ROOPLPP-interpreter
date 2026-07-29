@@ -69,8 +69,11 @@ Fixpoint erase (m : mstm) : stm :=
     対の添字だと induction/inversion が構成子の形を割り出せないため。 *)
 Inductive step : mstm -> state -> mstm -> state -> Prop :=
 (* 原子的な文 *)
-| S_skip : forall a,
-    step (Mpre Sskip) a (Mpost Sskip) a
+(* 状態を作る他の規則と同じく、結果は点ごとに等しい状態であればよい
+   （大ステップの E_skip と同じ形。厳密な等号にすると、状態が関数なので
+   「点ごとには等しいが = では等しくない」状態を受け取れなくなる）。 *)
+| S_skip : forall a b,
+    a == b -> step (Mpre Sskip) a (Mpost Sskip) b
 | S_assign : forall x o e a b,
     ~ In x (fv e) ->
     b == setv a x (mapp o (vs a x) (eval e a)) ->
@@ -318,6 +321,8 @@ Proof.
              destruct (IH mm aa HS) as [ Em Ea ]; subst;
              split; [ reflexivity | assumption ]
          end).
+  (* skip は結果を == で関係づけるので、両方の入口が同じ結果に等しい *)
+  all: split; [ reflexivity | eauto using steq_trans, steq_sym ].
 Qed.
 
 (* ------------------------------------------------------------------ *)
@@ -351,7 +356,8 @@ Theorem step_eq : forall m a m' a',
   exists a2', step m a2 m' a2' /\ a' == a2'.
 Proof.
   intros m a m' a' H; induction H; intros a2 Ha.
-  - exists a2; split; [ apply S_skip | assumption ].
+  - exists a2; split; [ apply S_skip, steq_refl | ].
+    eauto using steq_trans, steq_sym.
   - exists (setv a2 x (mapp o (vs a2 x) (eval e a2))); split.
     + apply S_assign; [ assumption | apply steq_refl ].
     + eapply steq_trans; [ eassumption | ].
@@ -475,7 +481,7 @@ Proof.
   intro G; apply exec_loopx_min.
   - (* skip *)
     intros a b Hab _. exists a; split.
-    + apply steps_one, S_skip.
+    + apply steps_one, S_skip, steq_refl.
     + now apply steq_sym.
   - (* assign *)
     intros x o e a b Hn Hb _.
@@ -725,7 +731,7 @@ Proof.
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
       destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst.
-      apply E_skip, steq_refl.
+      apply E_skip; assumption.
     + (* assign *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
@@ -847,17 +853,17 @@ Example ex_small_loop :
 Proof.
   eexists. split.
   - eapply steps_step; [ apply S_lp_in; simpl; discriminate | ].
-    eapply steps_step; [ apply S_lp_1; apply S_skip | ].
+    eapply steps_step; [ apply S_lp_1; apply S_skip, steq_refl | ].
     eapply steps_step; [ apply S_lp_more; reflexivity | ].
     eapply steps_step;
       [ apply S_lp_2; apply S_assign; [ simpl; tauto | apply steq_refl ] | ].
     eapply steps_step; [ apply S_lp_back; reflexivity | ].
-    eapply steps_step; [ apply S_lp_1; apply S_skip | ].
+    eapply steps_step; [ apply S_lp_1; apply S_skip, steq_refl | ].
     eapply steps_step; [ apply S_lp_more; reflexivity | ].
     eapply steps_step;
       [ apply S_lp_2; apply S_assign; [ simpl; tauto | apply steq_refl ] | ].
     eapply steps_step; [ apply S_lp_back; reflexivity | ].
-    eapply steps_step; [ apply S_lp_1; apply S_skip | ].
+    eapply steps_step; [ apply S_lp_1; apply S_skip, steq_refl | ].
     eapply steps_step; [ apply S_lp_exit; simpl; discriminate | ].
     apply steps_refl.
   - reflexivity.
