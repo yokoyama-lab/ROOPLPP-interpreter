@@ -342,6 +342,224 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------ *)
+(** * 状態の点ごとの等しさに関する合同性                                *)
+(* ------------------------------------------------------------------ *)
+
+(** 1 ステップは状態の [==] を尊重する（大ステップ側の exec_loopx_eq に対応）。 *)
+Theorem step_eq : forall m a m' a',
+  step m a m' a' -> forall a2, a == a2 ->
+  exists a2', step m a2 m' a2' /\ a' == a2'.
+Proof.
+  intros m a m' a' H; induction H; intros a2 Ha.
+  - exists a2; split; [ apply S_skip | assumption ].
+  - exists (setv a2 x (mapp o (vs a2 x) (eval e a2))); split.
+    + apply S_assign; [ assumption | apply steq_refl ].
+    + eapply steq_trans; [ eassumption | ].
+      rewrite (steq_vs a a2 x Ha), (eval_steq e a a2 Ha); now apply setv_steq.
+  - exists (setv (setv a2 x (vs a2 y)) y (vs a2 x)); split.
+    + apply S_swap; apply steq_refl.
+    + eapply steq_trans; [ eassumption | ].
+      rewrite (steq_vs a a2 x Ha), (steq_vs a a2 y Ha).
+      apply setv_steq; now apply setv_steq.
+  - exists a2; split; [ apply S_seq_in | assumption ].
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_seq_l | assumption ].
+  - exists a2; split; [ apply S_seq_mid | assumption ].
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_seq_r | assumption ].
+  - exists a2; split; [ apply S_seq_out | assumption ].
+  - exists a2; split; [ | assumption ].
+    apply S_if_in_t; rewrite <- (eval_steq e1 a a2 Ha); assumption.
+  - exists a2; split; [ | assumption ].
+    apply S_if_in_f; rewrite <- (eval_steq e1 a a2 Ha); assumption.
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_if_t | assumption ].
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_if_f | assumption ].
+  - exists a2; split; [ | assumption ].
+    apply S_if_out_t; rewrite <- (eval_steq e2 a a2 Ha); assumption.
+  - exists a2; split; [ | assumption ].
+    apply S_if_out_f; rewrite <- (eval_steq e2 a a2 Ha); assumption.
+  - exists a2; split; [ | assumption ].
+    apply S_lp_in; rewrite <- (eval_steq e1 a a2 Ha); assumption.
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_lp_1 | assumption ].
+  - exists a2; split; [ | assumption ].
+    apply S_lp_exit; rewrite <- (eval_steq e2 a a2 Ha); assumption.
+  - exists a2; split; [ | assumption ].
+    apply S_lp_more; rewrite <- (eval_steq e2 a a2 Ha); assumption.
+  - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_lp_2 | assumption ].
+  - exists a2; split; [ | assumption ].
+    apply S_lp_back; rewrite <- (eval_steq e1 a a2 Ha); assumption.
+Qed.
+
+Theorem steps_eq : forall m a m' a',
+  steps m a m' a' -> forall a2, a == a2 ->
+  exists a2', steps m a2 m' a2' /\ a' == a2'.
+Proof.
+  intros m a m' a' H; induction H; intros u Hu.
+  - exists u; split; [ apply steps_refl | assumption ].
+  - destruct (step_eq _ _ _ _ H u Hu) as [ x2 [ Hs He ] ].
+    destruct (IHsteps x2 He) as [ y2 [ Hss Hee ] ].
+    exists y2; split; [ eapply steps_step; eassumption | assumption ].
+Qed.
+
+(** 文脈の中での多ステップ *)
+Lemma steps_seql : forall m a m' a' s2,
+  steps m a m' a' -> steps (Mseql m s2) a (Mseql m' s2) a'.
+Proof.
+  intros m a m' a' s2 H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_seq_l; eassumption | assumption ].
+Qed.
+
+Lemma steps_seqr : forall s1 m a m' a',
+  steps m a m' a' -> steps (Mseqr s1 m) a (Mseqr s1 m') a'.
+Proof.
+  intros s1 m a m' a' H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_seq_r; eassumption | assumption ].
+Qed.
+
+Lemma steps_ift : forall e1 m a m' a' s2 e2,
+  steps m a m' a' -> steps (Mift e1 m s2 e2) a (Mift e1 m' s2 e2) a'.
+Proof.
+  intros e1 m a m' a' s2 e2 H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_if_t; eassumption | assumption ].
+Qed.
+
+Lemma steps_iff : forall e1 s1 m a m' a' e2,
+  steps m a m' a' -> steps (Miff e1 s1 m e2) a (Miff e1 s1 m' e2) a'.
+Proof.
+  intros e1 s1 m a m' a' e2 H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_if_f; eassumption | assumption ].
+Qed.
+
+Lemma steps_lp1 : forall e1 m a m' a' s2 e2,
+  steps m a m' a' -> steps (Mlp1 e1 m s2 e2) a (Mlp1 e1 m' s2 e2) a'.
+Proof.
+  intros e1 m a m' a' s2 e2 H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_lp_1; eassumption | assumption ].
+Qed.
+
+Lemma steps_lp2 : forall e1 s1 m a m' a' e2,
+  steps m a m' a' -> steps (Mlp2 e1 s1 m e2) a (Mlp2 e1 s1 m' e2) a'.
+Proof.
+  intros e1 s1 m a m' a' e2 H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_lp_2; eassumption | assumption ].
+Qed.
+
+(* ------------------------------------------------------------------ *)
+(** * 大ステップ意味論との対応                                          *)
+(* ------------------------------------------------------------------ *)
+
+(** 小ステップ側が規則を持つ断片（制御構造の核）。 *)
+Inductive core : stm -> Prop :=
+| C_skip : core Sskip
+| C_assign : forall x o e, core (Sassign x o e)
+| C_swap : forall x y, core (Sswap x y)
+| C_seq : forall s1 s2, core s1 -> core s2 -> core (Sseq s1 s2)
+| C_if : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sif e1 s1 s2 e2)
+| C_loop : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sloop e1 s1 s2 e2).
+
+Ltac not_core := intros; match goal with [ H : core _ |- _ ] => inversion H end.
+
+(** 大ステップで [a] から [b] へ行けるなら、小ステップでも [• s] から [s •] へ
+    有限回で到達する（終状態は点ごとに等しい）。 *)
+Theorem exec_steps : forall G,
+  (forall s a b, exec G s a b -> core s ->
+     exists b', steps (Mpre s) a (Mpost s) b' /\ b == b')
+  /\ (forall e1 s1 s2 e2 a b, loopx G e1 s1 s2 e2 a b -> core s1 -> core s2 ->
+     exists b', steps (Mlp1 e1 (Mpost s1) s2 e2) a
+                      (Mpost (Sloop e1 s1 s2 e2)) b' /\ b == b').
+Proof.
+  intro G; apply exec_loopx_min.
+  - (* skip *)
+    intros a b Hab _. exists a; split.
+    + apply steps_one, S_skip.
+    + now apply steq_sym.
+  - (* assign *)
+    intros x o e a b Hn Hb _.
+    exists (setv a x (mapp o (vs a x) (eval e a))); split.
+    + apply steps_one, S_assign; [ assumption | apply steq_refl ].
+    + assumption.
+  - (* field assign *) not_core.
+  - (* array assign *) not_core.
+  - (* swap *)
+    intros x y a b Hb _.
+    exists (setv (setv a x (vs a y)) y (vs a x)); split.
+    + apply steps_one, S_swap, steq_refl.
+    + assumption.
+  - (* array swap *) not_core.
+  - (* object swap *) not_core.
+  - (* copy *) not_core.
+  - (* uncopy *) not_core.
+  - (* seq *)
+    intros s1 s2 a b c H1 IH1 H2 IH2 Hc; inversion Hc; subst.
+    destruct (IH1 ltac:(assumption)) as [ b' [ Hs1 Hb ] ].
+    destruct (IH2 ltac:(assumption)) as [ c' [ Hs2 Hc' ] ].
+    destruct (steps_eq _ _ _ _ Hs2 b' Hb) as [ c'' [ Hs2' Hc'' ] ].
+    exists c''; split.
+    + eapply steps_step; [ apply S_seq_in | ].
+      eapply steps_trans; [ apply steps_seql; eassumption | ].
+      eapply steps_step; [ apply S_seq_mid | ].
+      eapply steps_trans; [ apply steps_seqr; eassumption | ].
+      apply steps_one, S_seq_out.
+    + eauto using steq_trans.
+  - (* if true *)
+    intros e1 s1 s2 e2 a b H1 H2 IH H3 Hc; inversion Hc; subst.
+    destruct (IH ltac:(assumption)) as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ now apply S_if_in_t | ].
+    eapply steps_trans; [ apply steps_ift; eassumption | ].
+    apply steps_one, S_if_out_t.
+    rewrite <- (eval_steq e2 b b' Hb); assumption.
+  - (* if false *)
+    intros e1 s1 s2 e2 a b H1 H2 IH H3 Hc; inversion Hc; subst.
+    destruct (IH ltac:(assumption)) as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ now apply S_if_in_f | ].
+    eapply steps_trans; [ apply steps_iff; eassumption | ].
+    apply steps_one, S_if_out_f.
+    rewrite <- (eval_steq e2 b b' Hb); assumption.
+  - (* loop *)
+    intros e1 s1 s2 e2 a b c H1 H2 IH1 H3 IH2 Hc; inversion Hc; subst.
+    destruct (IH1 ltac:(assumption)) as [ b' [ Hs1 Hb ] ].
+    destruct (IH2 ltac:(assumption) ltac:(assumption)) as [ c' [ Hs2 Hc' ] ].
+    destruct (steps_eq _ _ _ _ Hs2 b' Hb) as [ c'' [ Hs2' Hc'' ] ].
+    exists c''; split.
+    + eapply steps_step; [ now apply S_lp_in | ].
+      eapply steps_trans; [ apply steps_lp1; eassumption | eassumption ].
+    + eauto using steq_trans.
+  - (* local *) not_core.
+  - (* show *) not_core.
+  - (* object block *) not_core.
+  - (* call *) not_core.
+  - (* uncall *) not_core.
+  - (* object call *) not_core.
+  - (* object uncall *) not_core.
+  - (* loop tail: done *)
+    intros e1 s1 s2 e2 a b H1 Hab _ _.
+    exists a; split.
+    + apply steps_one, S_lp_exit; assumption.
+    + now apply steq_sym.
+  - (* loop tail: step *)
+    intros e1 s1 s2 e2 a b c d H1 H2 IH1 H3 H4 IH2 H5 IH3 Hs1 Hs2.
+    destruct (IH1 ltac:(assumption)) as [ b' [ Hb Hbe ] ].
+    destruct (IH2 ltac:(assumption)) as [ c' [ Hcst Hce ] ].
+    destruct (steps_eq _ _ _ _ Hcst b' Hbe) as [ c'' [ Hcst' Hce' ] ].
+    assert (Hcc : c == c'') by eauto using steq_trans.
+    destruct (IH3 ltac:(assumption) ltac:(assumption)) as [ d' [ Hd Hde ] ].
+    destruct (steps_eq _ _ _ _ Hd c'' Hcc) as [ d'' [ Hd' Hde' ] ].
+    exists d''; split.
+    + eapply steps_step; [ now apply S_lp_more | ].
+      eapply steps_trans; [ apply steps_lp2; eassumption | ].
+      eapply steps_step.
+      * apply S_lp_back. rewrite <- (eval_steq e1 b b' Hbe); assumption.
+      * eapply steps_trans; [ apply steps_lp1; eassumption | eassumption ].
+    + eauto using steq_trans.
+Qed.
+
+(* ------------------------------------------------------------------ *)
 (** * 空虚でないことの確認                                              *)
 (* ------------------------------------------------------------------ *)
 
@@ -399,6 +617,19 @@ Qed.
 (** * 公理の確認                                                        *)
 (* ------------------------------------------------------------------ *)
 
+(** 系：大ステップの可逆性が小ステップ側の到達可能性に移る。
+    同じプログラムを違う初期状態から走らせて同じ終状態に至ったなら、
+    初期状態は（点ごとに）同じだったことになる。 *)
+Corollary steps_inj_from_exec : forall G s a1 a2 b1 b2,
+  core s ->
+  exec G s a1 b1 -> exec G s a2 b2 -> b1 == b2 -> a1 == a2.
+Proof.
+  intros G s a1 a2 b1 b2 Hc H1 H2 Hb.
+  eapply exec_inj; [ eassumption | ].
+  eapply exec_eq; [ eassumption | apply steq_refl | now apply steq_sym ].
+Qed.
+
 Print Assumptions step_det.
 Print Assumptions step_inj.
 Print Assumptions step_preserves_program.
+Print Assumptions exec_steps.
