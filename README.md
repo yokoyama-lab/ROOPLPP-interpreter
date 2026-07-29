@@ -245,6 +245,11 @@ bisect-ppx-report summary --per-file
 | `exec_round_trip` | 実行してから逆を実行すると元に戻る |
 | **`wt_invert`** | 反転で型付けが保存される（Haulund 2017 の定理） |
 
+**小ステップ意味論**（`coq/roopl_small.v`）もある。制御トークンを文に埋め込む方式で、
+`step_det`（前方決定性）と **`step_inj`（後方決定性＝小ステップの可逆性）** を証明。
+後者の証明では、ループの入口表明と条件分岐の出口表明が「どこから来たか」を一意に
+決めており、**二重ガードという言語設計がそのまま可逆性の証明になっている**。
+
 ```
 cd coq && make && make check     # 証明のビルドと再検査
 cd coq && make extract           # 検証済みインタプリタを OCaml へ抽出
