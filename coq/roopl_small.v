@@ -24,7 +24,7 @@
   同じ形の規則を足す作業になる（README 参照）。
 *)
 
-Require Import ZArith List Bool Arith Lia.
+Require Import ZArith List Bool Arith Lia Wf_nat.
 Require Import ROOPL.roopl.
 Import ListNotations.
 Open Scope Z_scope.
@@ -560,6 +560,256 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------ *)
+(** * 逆方向：多ステップから大ステップを組み立てる                      *)
+(* ------------------------------------------------------------------ *)
+
+(** ステップ数を添字にした多ステップ。分解補題で「残りは短い」と言うために要る。
+    帰納型ではなく再帰定義にしてあるので、分解は [destruct] だけで済む。 *)
+Fixpoint stepsn (n : nat) (m : mstm) (a : state) (m' : mstm) (a' : state) : Prop :=
+  (* roopl.v の例で Definition O : id が O を隠すので 0%nat と書く *)
+  match n with
+  | 0%nat => m = m' /\ a = a'
+  | S k => exists m2 a2, step m a m2 a2 /\ stepsn k m2 a2 m' a'
+  end.
+
+Lemma stepsn_steps : forall n m a m' a', stepsn n m a m' a' -> steps m a m' a'.
+Proof.
+  induction n as [ | k IH ]; intros m a m' a' H.
+  - destruct H as [ -> -> ]; apply steps_refl.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ].
+    eapply steps_step; [ eassumption | now apply IH ].
+Qed.
+
+Lemma steps_stepsn : forall m a m' a',
+  steps m a m' a' -> exists n, stepsn n m a m' a'.
+Proof.
+  intros m a m' a' H; induction H.
+  - exists 0%nat; split; reflexivity.
+  - destruct IHsteps as [ n Hn ]; exists (S n), m2, a2; split; assumption.
+Qed.
+
+(** 実行し終えた形からは動けないので、そこから始まる列は空である。 *)
+Lemma post_stuck : forall n s a m' a',
+  stepsn n (Mpost s) a m' a' -> m' = Mpost s /\ a' = a.
+Proof.
+  intros n s a m' a' H; destruct n as [ | k ].
+  - destruct H as [ -> -> ]; auto.
+  - destruct H as [ m2 [ a2 [ HS _ ] ] ].
+    exfalso; eapply no_step_from_post; eassumption.
+Qed.
+
+(** 列全体でもプログラムは変わらない。 *)
+Lemma stepsn_program : forall n m a m' a',
+  stepsn n m a m' a' -> erase m = erase m'.
+Proof.
+  intros; eapply steps_preserve_program, stepsn_steps; eassumption.
+Qed.
+
+(* --- 文脈ごとの分解補題 --- *)
+
+Lemma seql_split : forall n m a s1 s2 c,
+  stepsn n (Mseql m s2) a (Mpost (Sseq s1 s2)) c ->
+  exists n1 b n2, stepsn n1 m a (Mpost s1) b
+               /\ stepsn n2 (Mseqr s1 (Mpre s2)) b (Mpost (Sseq s1 s2)) c
+               /\ (n1 < n)%nat /\ (n2 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros m a s1 s2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + (* 内側のステップ *)
+      destruct (IH _ _ _ _ _ HR) as [ q1 [ bb [ q2 [ P1 [ P2 [ L1 L2 ] ] ] ] ] ].
+      exists (S q1), bb, q2; repeat split; try assumption; try lia.
+      exists m', a2; split; assumption.
+    + (* 並びの真ん中へ *)
+      assert (Hp := stepsn_program _ _ _ _ _ HR); simpl in Hp;
+        injection Hp as Hp1; subst.
+      exists 0%nat, a2, k; repeat split; try reflexivity; try assumption; try lia.
+Qed.
+
+Lemma seqr_split : forall n s1 m b s2 c,
+  stepsn n (Mseqr s1 m) b (Mpost (Sseq s1 s2)) c ->
+  exists n2, stepsn n2 m b (Mpost s2) c /\ (n2 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros s1 m b s2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ HR) as [ q2 [ P2 L2 ] ].
+      exists (S q2); split; try lia. exists m', a2; split; assumption.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ].
+      injection Em as Hs2; subst.
+      exists 0%nat; split; try lia; split; reflexivity.
+Qed.
+
+Lemma ift_split : forall n e1 m a s1 s2 e2 c,
+  stepsn n (Mift e1 m s2 e2) a (Mpost (Sif e1 s1 s2 e2)) c ->
+  exists n1, stepsn n1 m a (Mpost s1) c /\ eval e2 c <> 0 /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros e1 m a s1 s2 e2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ HR) as [ q1 [ P1 [ Pe L1 ] ] ].
+      exists (S q1); repeat split; try assumption; try lia.
+      exists m', a2; split; assumption.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ].
+      injection Em as Hs1; subst.
+      exists 0%nat; repeat split; try reflexivity; try assumption; try lia.
+Qed.
+
+Lemma iff_split : forall n e1 s1 m a s2 e2 c,
+  stepsn n (Miff e1 s1 m e2) a (Mpost (Sif e1 s1 s2 e2)) c ->
+  exists n1, stepsn n1 m a (Mpost s2) c /\ eval e2 c = 0 /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros e1 s1 m a s2 e2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ HR) as [ q1 [ P1 [ Pe L1 ] ] ].
+      exists (S q1); repeat split; try assumption; try lia.
+      exists m', a2; split; assumption.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ].
+      injection Em as Hs2; subst.
+      exists 0%nat; repeat split; try reflexivity; try assumption; try lia.
+Qed.
+
+Lemma lp1_split : forall n e1 m a s1 s2 e2 c,
+  stepsn n (Mlp1 e1 m s2 e2) a (Mpost (Sloop e1 s1 s2 e2)) c ->
+  exists n1 b n2, stepsn n1 m a (Mpost s1) b
+               /\ stepsn n2 (Mlp1 e1 (Mpost s1) s2 e2) b (Mpost (Sloop e1 s1 s2 e2)) c
+               /\ (n1 < n)%nat /\ (n2 <= n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros e1 m a s1 s2 e2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct (H) as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ HR) as [ q1 [ bb [ q2 [ P1 [ P2 [ L1 L2 ] ] ] ] ] ].
+      exists (S q1), bb, q2; repeat split; try assumption; try lia.
+      exists m', a2; split; assumption.
+    + (* 出口：この時点で m = Mpost s1。s1 の同定は post_stuck から *)
+      destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ]; inversion Em; subst.
+      exists 0%nat, a2, (S k); repeat split; try reflexivity; try assumption; try lia.
+    + (* 周回継続：s1 の同定は erase から *)
+      assert (Hp := stepsn_program _ _ _ _ _ HR); simpl in Hp; inversion Hp; subst.
+      exists 0%nat, a2, (S k); repeat split; try reflexivity; try assumption; try lia.
+Qed.
+
+Lemma lp2_split : forall n e1 s1 m b s2 e2 c,
+  stepsn n (Mlp2 e1 s1 m e2) b (Mpost (Sloop e1 s1 s2 e2)) c ->
+  exists n1 d n2, stepsn n1 m b (Mpost s2) d
+               /\ eval e1 d = 0
+               /\ stepsn n2 (Mlp1 e1 (Mpre s1) s2 e2) d (Mpost (Sloop e1 s1 s2 e2)) c
+               /\ (n1 < n)%nat /\ (n2 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros e1 s1 m b s2 e2 c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ HR)
+        as [ q1 [ dd [ q2 [ P1 [ Pe [ P2 [ L1 L2 ] ] ] ] ] ] ].
+      exists (S q1), dd, q2; repeat split; try assumption; try lia.
+      exists m', a2; split; assumption.
+    + (* S_lp_back: s1 の同定は erase から *)
+      assert (Hp := stepsn_program _ _ _ _ _ HR); simpl in Hp; inversion Hp; subst.
+      exists 0%nat, a2, k; repeat split; try reflexivity; try assumption; try lia.
+Qed.
+
+(* --- 本体：多ステップから大ステップを組み立てる --- *)
+
+Lemma steps_exec_aux : forall G n,
+  (forall s a b, stepsn n (Mpre s) a (Mpost s) b -> core s -> exec G s a b)
+  /\ (forall e1 s1 s2 e2 b c,
+        stepsn n (Mlp1 e1 (Mpost s1) s2 e2) b (Mpost (Sloop e1 s1 s2 e2)) c ->
+        core s1 -> core s2 -> loopx G e1 s1 s2 e2 b c).
+Proof.
+  intro G.
+  induction n as [ n IH ] using (well_founded_induction lt_wf); split.
+  - (* 文 *)
+    intros s a b H Hc; destruct Hc.
+    + (* skip *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst.
+      apply E_skip, steq_refl.
+    + (* assign *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst.
+      apply E_assign; assumption.
+    + (* swap *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst.
+      apply E_swap; assumption.
+    + (* seq *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (seql_split _ _ _ _ _ _ HR)
+        as [ q1 [ bb [ q2 [ P1 [ P2 [ L1 L2 ] ] ] ] ] ].
+      destruct (seqr_split _ _ _ _ _ _ P2) as [ q3 [ P3 L3 ] ].
+      eapply E_seq.
+      * apply (proj1 (IH q1 ltac:(lia))); eassumption.
+      * apply (proj1 (IH q3 ltac:(lia))); eassumption.
+    + (* if *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      * (* then 枝 *)
+        destruct (ift_split _ _ _ _ _ _ _ _ HR) as [ q1 [ P1 [ Pe L1 ] ] ].
+        apply E_if_t; [ assumption | | assumption ].
+        apply (proj1 (IH q1 ltac:(lia))); eassumption.
+      * (* else 枝 *)
+        destruct (iff_split _ _ _ _ _ _ _ _ HR) as [ q1 [ P1 [ Pe L1 ] ] ].
+        apply E_if_f; [ assumption | | assumption ].
+        apply (proj1 (IH q1 ltac:(lia))); eassumption.
+    + (* loop *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (lp1_split _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ bb [ q2 [ P1 [ P2 [ L1 L2 ] ] ] ] ] ].
+      eapply E_loop; [ assumption | | ].
+      * apply (proj1 (IH q1 ltac:(lia))); eassumption.
+      * apply (proj2 (IH q2 ltac:(lia))); eassumption.
+  - (* ループの残り *)
+    intros e1 s1 s2 e2 b c H Hs1 Hs2.
+    destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+    destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + (* 内側のステップは Mpost からは起こらない *)
+      exfalso; eapply no_step_from_post; eassumption.
+    + (* 出口 *)
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Ec ]; subst.
+      apply L_done; [ assumption | apply steq_refl ].
+    + (* 周回継続 *)
+      destruct (lp2_split _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ dd [ q2 [ P1 [ Pe [ P2 [ L1 L2 ] ] ] ] ] ] ].
+      destruct (lp1_split _ _ _ _ _ _ _ _ P2)
+        as [ q3 [ ee [ q4 [ Q1 [ Q2 [ M1 M2 ] ] ] ] ] ].
+      (* 先に exec を解いて中間状態のメタ変数を決めてから表明を出す *)
+      eapply L_step.
+      * assumption.
+      * apply (proj1 (IH q1 ltac:(lia))); eassumption.
+      * eassumption.
+      * apply (proj1 (IH q3 ltac:(lia))); eassumption.
+      * apply (proj2 (IH q4 ltac:(lia))); eassumption.
+Qed.
+
+(** **小ステップから大ステップへ**。[exec_steps] と合わせて、核の断片では
+    二つの意味論が同じ関係を定めていることになる。 *)
+Theorem steps_exec : forall G s a b,
+  core s -> steps (Mpre s) a (Mpost s) b -> exec G s a b.
+Proof.
+  intros G s a b Hc H.
+  destruct (steps_stepsn _ _ _ _ H) as [ n Hn ].
+  eapply (proj1 (steps_exec_aux G n)); eassumption.
+Qed.
+
+(** 二つの意味論の同値（終状態は点ごとの等しさまで）。 *)
+Theorem exec_iff_steps : forall G s a b,
+  core s ->
+  (exec G s a b <-> exists b', steps (Mpre s) a (Mpost s) b' /\ b == b').
+Proof.
+  intros G s a b Hc; split; intro H.
+  - now apply (proj1 (exec_steps G)).
+  - destruct H as [ b' [ Hs Hb ] ].
+    eapply exec_eq; [ eapply steps_exec; eassumption | apply steq_refl | ].
+    now apply steq_sym.
+Qed.
+
+(* ------------------------------------------------------------------ *)
 (** * 空虚でないことの確認                                              *)
 (* ------------------------------------------------------------------ *)
 
@@ -633,3 +883,5 @@ Print Assumptions step_det.
 Print Assumptions step_inj.
 Print Assumptions step_preserves_program.
 Print Assumptions exec_steps.
+Print Assumptions steps_exec.
+Print Assumptions exec_iff_steps.
