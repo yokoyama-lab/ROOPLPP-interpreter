@@ -81,6 +81,35 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
 | S_swap : forall x y a b,
     b == setv (setv a x (vs a y)) y (vs a x) ->
     step (Mpre (Sswap x y)) a (Mpost (Sswap x y)) b
+| S_show : forall e a b,
+    a == b -> step (Mpre (Sshow e)) a (Mpost (Sshow e)) b
+| S_fassign : forall x f o e a b l,
+    os a x = Some l -> (l < hn a)%nat ->
+    b == setf a l f (mapp o (hp a l f) (eval e a)) ->
+    eval e b = eval e a ->
+    step (Mpre (Sfassign x f o e)) a (Mpost (Sfassign x f o e)) b
+| S_aassign : forall x ei o e a b l,
+    os a x = Some l -> (l < hn a)%nat ->
+    b == setf a l (Z.to_nat (eval ei a))
+              (mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)) ->
+    eval ei b = eval ei a -> eval e b = eval e a ->
+    step (Mpre (Saassign x ei o e)) a (Mpost (Saassign x ei o e)) b
+| S_aswap : forall x e1 y e2 a b l1 l2,
+    os a x = Some l1 -> (l1 < hn a)%nat ->
+    os a y = Some l2 -> (l2 < hn a)%nat ->
+    b == setf (setf a l1 (Z.to_nat (eval e1 a)) (hp a l2 (Z.to_nat (eval e2 a))))
+              l2 (Z.to_nat (eval e2 a)) (hp a l1 (Z.to_nat (eval e1 a))) ->
+    eval e1 b = eval e1 a -> eval e2 b = eval e2 a ->
+    step (Mpre (Saswap x e1 y e2)) a (Mpost (Saswap x e1 y e2)) b
+| S_oswap : forall x y a b,
+    b == seto (seto a x (os a y)) y (os a x) ->
+    step (Mpre (Soswap x y)) a (Mpost (Soswap x y)) b
+| S_copy : forall x y a b,
+    x <> y -> os a y = None -> b == seto a y (os a x) ->
+    step (Mpre (Scopy x y)) a (Mpost (Scopy x y)) b
+| S_uncopy : forall x y a b,
+    x <> y -> os a x = os a y -> b == seto a y None ->
+    step (Mpre (Suncopy x y)) a (Mpost (Suncopy x y)) b
 
 (* 並び *)
 | S_seq_in : forall s1 s2 a,
@@ -164,6 +193,56 @@ Proof. intros s a m' a' H; inversion H. Qed.
 Lemma no_step_to_pre : forall m a s a', ~ step m a (Mpre s) a'.
 Proof. intros m a s a' H; inversion H. Qed.
 
+(** 原子文（文脈へ入らない文）。 *)
+Inductive atomic : stm -> Prop :=
+| A_skip : atomic Sskip
+| A_assign : forall x o e, atomic (Sassign x o e)
+| A_swap : forall x y, atomic (Sswap x y)
+| A_show : forall e, atomic (Sshow e)
+| A_fassign : forall x f o e, atomic (Sfassign x f o e)
+| A_aassign : forall x ei o e, atomic (Saassign x ei o e)
+| A_aswap : forall x e1 y e2, atomic (Saswap x e1 y e2)
+| A_oswap : forall x y, atomic (Soswap x y)
+| A_copy : forall x y, atomic (Scopy x y)
+| A_uncopy : forall x y, atomic (Suncopy x y).
+
+(** 内容のないメソッド環境（原子文の意味は環境に依らない）。 *)
+Definition dummy_env : menv := MEnv (fun _ => None) (fun _ => None).
+
+(** [• s] から [s •] への一歩は、原子文の大ステップ一歩そのもの
+    （並び・分岐・ループは文脈へ入るので、この形にはならない）。 *)
+Lemma atom_exec : forall G s a b,
+  step (Mpre s) a (Mpost s) b -> exec G s a b.
+Proof.
+  intros G s a b H; inversion H; subst.
+  - apply E_skip; assumption.
+  - apply E_assign; assumption.
+  - apply E_swap; assumption.
+  - apply E_show; assumption.
+  - eapply E_fassign; eassumption.
+  - eapply E_aassign; eassumption.
+  - eapply E_aswap; eassumption.
+  - apply E_oswap; assumption.
+  - apply E_copy; assumption.
+  - apply E_uncopy; assumption.
+Qed.
+
+(** その逆。原子文の大ステップ一歩は小ステップ一歩でもある。 *)
+Lemma exec_atom : forall G s a b,
+  atomic s -> exec G s a b -> step (Mpre s) a (Mpost s) b.
+Proof.
+  intros G s a b Hat H; inversion Hat; subst; inversion H; subst;
+    econstructor; eassumption.
+Qed.
+
+(** したがって原子文の局所可逆性は、大ステップの可逆性 [exec_inj] から出る。 *)
+Lemma atom_inj : forall s a1 a2 b,
+  step (Mpre s) a1 (Mpost s) b -> step (Mpre s) a2 (Mpost s) b -> a1 == a2.
+Proof.
+  intros s a1 a2 b H1 H2.
+  eapply exec_inj with (G := dummy_env); eapply atom_exec; eassumption.
+Qed.
+
 Ltac impossible_step :=
   match goal with
   | [ H : step (Mpost _) _ _ _ |- _ ] => exfalso; eapply no_step_from_post; eassumption
@@ -178,8 +257,8 @@ Ltac impossible_step :=
 Theorem step_det : forall m a m1 a1 m2 a2,
   step m a m1 a1 -> step m a m2 a2 -> m1 = m2 /\ a1 == a2.
 Proof.
-  intros m a m1 a1 m2 a2 H1; revert m2 a2.
-  induction H1; intros m2 a2 H2; inversion H2; subst;
+  intros m a m1 a1 mz az H1; revert mz az.
+  induction H1; intros mz az Hz; inversion Hz; subst;
     try impossible_step;
     try congruence;
     try (split; [ reflexivity | eauto using steq_trans, steq_sym ]);
@@ -189,6 +268,19 @@ Proof.
              destruct (IH mm' aa' HS) as [ Em Ea ]; subst;
              split; [ reflexivity | assumption ]
          end).
+  (* 残るのは新しい原子文のケース：まず位置を os から同定し、
+     結果が同じ状態に == であることから合流させる *)
+  all: lazymatch goal with
+       | [ |- _ = _ /\ steq _ _ ] => split; [ reflexivity | ]
+       | _ => idtac
+       end.
+  all: repeat match goal with
+       | [ HA : os ?aa ?xx = Some ?l1, HB : os ?aa ?xx = Some ?l2 |- _ ] =>
+           tryif constr_eq l1 l2 then fail else
+             (assert (l1 = l2) by congruence; subst)
+       end.
+  all: solve [ eauto using steq_trans, steq_sym
+             | eapply steq_trans; [ eassumption | apply steq_sym; eassumption ] ].
 Qed.
 
 (* ------------------------------------------------------------------ *)
@@ -308,8 +400,8 @@ Qed.
 Theorem step_inj : forall m1 a1 m2 a2 m a,
   step m1 a1 m a -> step m2 a2 m a -> m1 = m2 /\ a1 == a2.
 Proof.
-  intros m1 a1 m2 a2 m a H1; revert m2 a2.
-  induction H1; intros m2 a2 H2; inversion H2; subst;
+  intros m1 a1 mz az m a H1; revert mz az.
+  induction H1; intros mz az Hz; inversion Hz; subst;
     try impossible_step;
     try congruence;
     try (split; [ reflexivity | apply steq_refl ]);
@@ -321,6 +413,26 @@ Proof.
              destruct (IH mm aa HS) as [ Em Ea ]; subst;
              split; [ reflexivity | assumption ]
          end).
+  (* 残るのは原子文のケース。前提から小ステップの一歩を組み立て直し、
+     大ステップの可逆性を通す atom_inj に渡す *)
+  all: lazymatch goal with
+       | [ |- _ = _ /\ steq _ _ ] => split; [ reflexivity | ]
+       | _ => idtac
+       end.
+  all: try solve [ eauto using steq_trans, steq_sym ].
+  (* 文の形を先に固定しないと、たとえば配列代入の目標に S_fassign が
+     当たってしまう（動的添字を静的フィールドとして読んでしまう）ので、
+     atom_inj には文を明示して渡す *)
+  all: try solve
+       [ eapply (atom_inj (Sfassign _ _ _ _)); (eapply S_fassign; eassumption)
+       | eapply (atom_inj (Saassign _ _ _ _)); (eapply S_aassign; eassumption)
+       | eapply (atom_inj (Saswap _ _ _ _));  (eapply S_aswap; eassumption)
+       | eapply (atom_inj (Soswap _ _));      (eapply S_oswap; eassumption)
+       | eapply (atom_inj (Scopy _ _));       (eapply S_copy; eassumption)
+       | eapply (atom_inj (Suncopy _ _));     (eapply S_uncopy; eassumption) ].
+  (* 配列の入れ替えは os の前提が 2 つあり、eassumption だと x と y の
+     対応づけを取り違えるので、文を具体的に与えて曖昧さを消す *)
+  all: eapply (atom_inj (Saswap x e1 y e2)); (eapply S_aswap; eassumption).
   (* skip は結果を == で関係づけるので、両方の入口が同じ結果に等しい *)
   all: split; [ reflexivity | eauto using steq_trans, steq_sym ].
 Qed.
@@ -367,6 +479,46 @@ Proof.
     + eapply steq_trans; [ eassumption | ].
       rewrite (steq_vs a a2 x Ha), (steq_vs a a2 y Ha).
       apply setv_steq; now apply setv_steq.
+  (* 原子文は「小ステップ一歩 = 大ステップ一歩」なので、状態の合同性は
+     大ステップ側の exec_eq をそのまま通せばよい *)
+  - (* show *)
+    assert (Hx : exec dummy_env (Sshow e) a b) by (apply E_show; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* field assign *)
+    assert (Hx : exec dummy_env (Sfassign x f o e) a b)
+      by (eapply E_fassign; eassumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* array assign *)
+    assert (Hx : exec dummy_env (Saassign x ei o e) a b)
+      by (eapply E_aassign; eassumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* array swap *)
+    assert (Hx : exec dummy_env (Saswap x e1 y e2) a b)
+      by (eapply E_aswap; eassumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* object swap *)
+    assert (Hx : exec dummy_env (Soswap x y) a b) by (apply E_oswap; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* copy *)
+    assert (Hx : exec dummy_env (Scopy x y) a b) by (apply E_copy; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* uncopy *)
+    assert (Hx : exec dummy_env (Suncopy x y) a b) by (apply E_uncopy; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
   - exists a2; split; [ apply S_seq_in | assumption ].
   - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
     exists a2'; split; [ now apply S_seq_l | assumption ].
@@ -463,6 +615,13 @@ Inductive core : stm -> Prop :=
 | C_skip : core Sskip
 | C_assign : forall x o e, core (Sassign x o e)
 | C_swap : forall x y, core (Sswap x y)
+| C_show : forall e, core (Sshow e)
+| C_fassign : forall x f o e, core (Sfassign x f o e)
+| C_aassign : forall x ei o e, core (Saassign x ei o e)
+| C_aswap : forall x e1 y e2, core (Saswap x e1 y e2)
+| C_oswap : forall x y, core (Soswap x y)
+| C_copy : forall x y, core (Scopy x y)
+| C_uncopy : forall x y, core (Suncopy x y)
 | C_seq : forall s1 s2, core s1 -> core s2 -> core (Sseq s1 s2)
 | C_if : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sif e1 s1 s2 e2)
 | C_loop : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sloop e1 s1 s2 e2).
@@ -488,17 +647,41 @@ Proof.
     exists (setv a x (mapp o (vs a x) (eval e a))); split.
     + apply steps_one, S_assign; [ assumption | apply steq_refl ].
     + assumption.
-  - (* field assign *) not_core.
-  - (* array assign *) not_core.
+  - (* field assign *)
+    intros x f o e a b l H1 H2 H3 H4 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Sfassign x f o e);
+      [ constructor | eapply E_fassign; eassumption ].
+  - (* array assign *)
+    intros x ei o e a b l H1 H2 H3 H4 H5 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Saassign x ei o e);
+      [ constructor | eapply E_aassign; eassumption ].
   - (* swap *)
     intros x y a b Hb _.
     exists (setv (setv a x (vs a y)) y (vs a x)); split.
     + apply steps_one, S_swap, steq_refl.
     + assumption.
-  - (* array swap *) not_core.
-  - (* object swap *) not_core.
-  - (* copy *) not_core.
-  - (* uncopy *) not_core.
+  - (* array swap *)
+    intros x e1 y e2 a b l1 l2 H1 H2 H3 H4 H5 H6 H7 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Saswap x e1 y e2);
+      [ constructor | eapply E_aswap; eassumption ].
+  - (* object swap *)
+    intros x y a b H1 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Soswap x y);
+      [ constructor | eapply E_oswap; eassumption ].
+  - (* copy *)
+    intros x y a b H1 H2 H3 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Scopy x y);
+      [ constructor | eapply E_copy; eassumption ].
+  - (* uncopy *)
+    intros x y a b H1 H2 H3 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Suncopy x y);
+      [ constructor | eapply E_uncopy; eassumption ].
   - (* seq *)
     intros s1 s2 a b c H1 IH1 H2 IH2 Hc; inversion Hc; subst.
     destruct (IH1 ltac:(assumption)) as [ b' [ Hs1 Hb ] ].
@@ -537,7 +720,11 @@ Proof.
       eapply steps_trans; [ apply steps_lp1; eassumption | eassumption ].
     + eauto using steq_trans.
   - (* local *) not_core.
-  - (* show *) not_core.
+  - (* show *)
+    intros e a b H1 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Sshow e);
+      [ constructor | eapply E_show; eassumption ].
   - (* object block *) not_core.
   - (* call *) not_core.
   - (* uncall *) not_core.
@@ -742,6 +929,41 @@ Proof.
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
       destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst.
       apply E_swap; assumption.
+    + (* show：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* field assign：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* array assign：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* array swap：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* object swap：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* copy：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* uncopy：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
     + (* seq *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
@@ -865,6 +1087,24 @@ Proof.
     eapply steps_step; [ apply S_lp_back; reflexivity | ].
     eapply steps_step; [ apply S_lp_1; apply S_skip, steq_refl | ].
     eapply steps_step; [ apply S_lp_exit; simpl; discriminate | ].
+    apply steps_refl.
+  - reflexivity.
+Qed.
+
+(** 原子文も動く: v0 += 3 ; show(v0) *)
+Example ex_small_atomic :
+  exists b, steps (Mpre (Sseq (Sassign X MAdd (Cst 3)) (Sshow (Var X))))
+                  zero0
+                  (Mpost (Sseq (Sassign X MAdd (Cst 3)) (Sshow (Var X)))) b
+            /\ vs b X = 3.
+Proof.
+  eexists. split.
+  - eapply steps_step; [ apply S_seq_in | ].
+    eapply steps_step;
+      [ apply S_seq_l; apply S_assign; [ simpl; tauto | apply steq_refl ] | ].
+    eapply steps_step; [ apply S_seq_mid | ].
+    eapply steps_step; [ apply S_seq_r; apply S_show; apply steq_refl | ].
+    eapply steps_step; [ apply S_seq_out | ].
     apply steps_refl.
   - reflexivity.
 Qed.
