@@ -220,7 +220,7 @@ bisect-ppx-report summary --per-file
 ## 可逆性の機械検証（Rocq）
 
 `coq/roopl.v` に，ROOPL++ の操作的意味論と可逆性の機械検証がある
-（Rocq 9.1.1，単一ファイル 1212 行，**公理ゼロ**）。
+（Rocq 9.1.1，単一ファイル 1318 行，**公理ゼロ**）。
 
 | 定理 | 主張 |
 |---|---|
@@ -230,6 +230,7 @@ bisect-ppx-report summary --per-file
 | `exec_det` | 前方決定性 |
 | **`exec_inj`** | **可逆性**：`exec s a1 b → exec s a2 b → a1 == a2` |
 | `exec_round_trip` | 実行してから逆を実行すると元に戻る |
+| **`wt_invert`** | 反転で型付けが保存される（Haulund 2017 の定理） |
 
 ```
 cd coq && make && make check
@@ -241,7 +242,7 @@ cd coq && make && make check
 （確保・ゼロクリア検査・解放つきの実ヒープ）**・**引数つきメソッドの call/uncall（参照渡し）**。
 `construct`/`destruct` はブロック構造なのでヒープをスタックとして扱え，確保位置が決定的関数に
 なることが可逆性の要になっている。**継承・動的ディスパッチ，値渡し引数，配列長の範囲検査，
-`new`/`delete`，型システムは対象外**（詳細と対応関係は `coq/README.md`）。
+`new`/`delete` は対象外**（詳細と対応関係は `coq/README.md`）。
 
 ## オンラインインタプリタ
 

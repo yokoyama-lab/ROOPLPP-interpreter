@@ -1,7 +1,7 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。単一ファイル `roopl.v`（1212 行，外部ライブラリ依存なし）。
+機械検証したもの。単一ファイル `roopl.v`（1318 行，外部ライブラリ依存なし）。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
 「文の反転で well-typedness が保存される」ことなども証明されているが，**証明支援系による
@@ -27,13 +27,19 @@ Rocq 9.1.1 で確認。
 | `exec_det` | 前方決定性 |
 | **`exec_inj`** | `exec s a1 b → exec s a2 b → a1 == a2` — **可逆性**：最終状態が初期状態を一意に定める（プログラムは状態上の単射部分関数を表す） |
 | `exec_round_trip` | 実行してから逆を実行すると元に戻る |
+| **`wt_invert`** | `wt E S s → wt E S (invert s)` — **反転で型付けが保存される**（Haulund 2017 の定理） |
 
 補助定理として `exec_loopx_eq`（実行は状態の点ごとの等しさを保つ），`loopx_exit`（ループ末尾は
 出口表明を満たす）を経由する。`exec_invert` / `exec_det` はいずれも `exec` と補助関係 `loopx`
 に対する**相互帰納法**（`Combined Scheme`）で証明している。
 
-**公理はゼロ**。6 定理すべてについて `Print Assumptions` が `Closed under the global context`
+**公理はゼロ**。7 定理すべてについて `Print Assumptions` が `Closed under the global context`
 を返す（ビルド時に表示される）。
+
+型システムは整数・オブジェクト・配列の 3 種（クラス名は区別しない）。`construct` は
+オブジェクトと配列のどちらのセル列も確保できる。`wt_invert` は「反転は型を一切変えない
+（更新演算子を逆にし，条件分岐とループの 2 つのガードを入れ替え，並びを逆順にし，
+call を uncall にするだけ）」ことの帰結。
 
 ## 状態のモデル
 
@@ -102,7 +108,8 @@ Record state := St {
 - **継承・サブタイプ・動的ディスパッチ**
 - **値渡し引数**（`call q(3)` のような式引数と，その不変性条件）
 - **`new` / `delete`**（ブロック構造でない確保・解放。ヒープをスタックとして扱えなくなる）
-- 型システム（Haulund 2017 の「反転で型が保存される」の機械化）
+- 型の健全性（well-typed なら実行が詰まらない）。可逆言語では表明の失敗で
+  実行が止まりうるので，progress は成り立たない形になる
 
 ## 空虚でないことの確認
 
@@ -114,6 +121,8 @@ Record state := St {
 - `ex_local` — 局所ブロックが `X = 3` を残し局所変数を消す
 - **`ex_object`** — `construct O ... destruct O` の中でフィールドに書き，読み戻し，消す。
   ブロック中はヒープが伸び，`destruct` で戻る
+- **`ex_wt_array` / `ex_wt_array_inverse`** — 配列プログラムが型付けでき，
+  その逆プログラムも `wt_invert` で型付けできる
 - **`ex_array`** — ブロック内で `ar[0] += 5; ar[0] <=> ar[1]; X += ar[1]; ar[1] -= 5`
   を実行し，`X = 5` を残してセルをゼロクリアして解放する
 - **`ex_copy_uncopy`** — 参照の複製と取り消しが元に戻る

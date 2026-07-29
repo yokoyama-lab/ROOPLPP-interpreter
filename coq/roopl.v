@@ -1025,6 +1025,90 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------ *)
+(** * A static type system, and its preservation under inversion       *)
+(* ------------------------------------------------------------------ *)
+
+(** ROOPL++ is statically typed and the thesis proves that well-typedness is
+    preserved by statement inversion (Haulund 2017, ROOPL).  Here is that
+    theorem, mechanized for this core.  Classes are not distinguished (an
+    object type carries no class name), which is the only place the type
+    system below is coarser than the language's. *)
+
+Inductive ty := Tint | Tobj | Tarr.
+
+Definition tenv := id -> ty.
+
+Definition ty_eq (t1 t2 : ty) : bool :=
+  match t1, t2 with
+  | Tint, Tint | Tobj, Tobj | Tarr, Tarr => true
+  | _, _ => false
+  end.
+
+Inductive wt_exp (E : tenv) : exp -> Prop :=
+| WTe_cst : forall z, wt_exp E (Cst z)
+| WTe_var : forall x, E x = Tint -> wt_exp E (Var x)
+| WTe_fld : forall x f, E x = Tobj -> wt_exp E (Fld x f)
+| WTe_idx : forall x e, E x = Tarr -> wt_exp E e -> wt_exp E (Idx x e)
+| WTe_bop : forall o e1 e2, wt_exp E e1 -> wt_exp E e2 -> wt_exp E (Bop o e1 e2).
+
+(** Method signatures: the types of the formal parameters. *)
+Definition sigenv := mid -> list ty.
+
+Inductive wt (E : tenv) (S : sigenv) : stm -> Prop :=
+| WT_skip : wt E S Sskip
+| WT_assign : forall x o e,
+    E x = Tint -> ~ In x (fv e) -> wt_exp E e -> wt E S (Sassign x o e)
+| WT_fassign : forall x f o e,
+    E x = Tobj -> wt_exp E e -> wt E S (Sfassign x f o e)
+| WT_aassign : forall x ei o e,
+    E x = Tarr -> wt_exp E ei -> wt_exp E e -> wt E S (Saassign x ei o e)
+| WT_swap : forall x y,
+    E x = Tint -> E y = Tint -> wt E S (Sswap x y)
+| WT_aswap : forall x e1 y e2,
+    E x = Tarr -> E y = Tarr -> wt_exp E e1 -> wt_exp E e2 ->
+    wt E S (Saswap x e1 y e2)
+| WT_oswap : forall x y,
+    E x = Tobj -> E y = Tobj -> wt E S (Soswap x y)
+| WT_copy : forall x y,
+    E x = Tobj -> E y = Tobj -> x <> y -> wt E S (Scopy x y)
+| WT_uncopy : forall x y,
+    E x = Tobj -> E y = Tobj -> x <> y -> wt E S (Suncopy x y)
+| WT_seq : forall s1 s2, wt E S s1 -> wt E S s2 -> wt E S (Sseq s1 s2)
+| WT_if : forall e1 s1 s2 e2,
+    wt_exp E e1 -> wt E S s1 -> wt E S s2 -> wt_exp E e2 ->
+    wt E S (Sif e1 s1 s2 e2)
+| WT_loop : forall e1 s1 s2 e2,
+    wt_exp E e1 -> wt E S s1 -> wt E S s2 -> wt_exp E e2 ->
+    wt E S (Sloop e1 s1 s2 e2)
+| WT_local : forall x e1 s e2,
+    E x = Tint -> ~ In x (fv e1) -> ~ In x (fv e2) ->
+    wt_exp E e1 -> wt_exp E e2 -> wt E S s ->
+    wt E S (Slocal x e1 s e2)
+(* construct allocates a cell block: an object or a (fixed-size) array *)
+| WT_obj : forall x s, E x = Tobj \/ E x = Tarr -> wt E S s -> wt E S (Sobj x s)
+| WT_call : forall m args,
+    map E args = S m -> wt E S (Scall m args)
+| WT_uncall : forall m args,
+    map E args = S m -> wt E S (Suncall m args).
+
+(** **Well-typedness is preserved by inversion** (Haulund 2017, ROOPL,
+    Theorem "type preservation under inversion").  Inversion never changes a
+    type: it only swaps an update operator for its inverse, exchanges the two
+    guards of a conditional or loop, reverses a sequence, and turns call into
+    uncall. *)
+Theorem wt_invert : forall E S s, wt E S s -> wt E S (invert s).
+Proof.
+  intros E S s H; induction H; simpl;
+    solve [ constructor; assumption
+          | econstructor; eassumption
+          | now constructor
+          | now apply WT_obj ].
+Qed.
+
+Corollary wt_invert_invert : forall E S s, wt E S s -> wt E S (invert (invert s)).
+Proof. intros E S s H; rewrite invert_invert; assumption. Qed.
+
+(* ------------------------------------------------------------------ *)
 (** * Sanity checks: the semantics is not vacuous                      *)
 (* ------------------------------------------------------------------ *)
 
@@ -1144,6 +1228,27 @@ Proof.
   - split; reflexivity.
 Qed.
 
+(** The array program is well typed, and so is its inverse (wt_invert). *)
+Definition tenv0 : tenv := fun x => if Nat.eqb x O then Tarr else Tint.
+Definition sig0 : sigenv := fun _ => [].
+
+Example ex_wt_array : wt tenv0 sig0 arrprog.
+Proof.
+  unfold arrprog.
+  apply WT_obj; [ right; unfold tenv0, O; reflexivity | ].
+  apply WT_seq.
+  - apply WT_aassign; [ reflexivity | constructor | constructor ].
+  - apply WT_seq.
+    + apply WT_aswap; [ reflexivity | reflexivity | constructor | constructor ].
+    + apply WT_seq.
+      * apply WT_assign; [ reflexivity | simpl; tauto | ].
+        apply WTe_idx; [ reflexivity | constructor ].
+      * apply WT_aassign; [ reflexivity | constructor | constructor ].
+Qed.
+
+Example ex_wt_array_inverse : wt tenv0 sig0 (invert arrprog).
+Proof. apply wt_invert, ex_wt_array. Qed.
+
 (** copy C x y then uncopy C x y restores the state. *)
 Example ex_copy_uncopy :
   exists b c, exec empty_env (Sobj O (Sseq (Scopy O Y) (Suncopy O Y))) zero b
@@ -1210,3 +1315,4 @@ Print Assumptions exec_iff.
 Print Assumptions exec_det.
 Print Assumptions exec_inj.
 Print Assumptions exec_round_trip.
+Print Assumptions wt_invert.
