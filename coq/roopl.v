@@ -1215,6 +1215,196 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------ *)
+(** * An executable interpreter, proved sound against the semantics    *)
+(* ------------------------------------------------------------------ *)
+
+(** [exec] is a relation, so it cannot be run.  [run] is an executable
+    interpreter -- extracted to OCaml by coq/extract.v -- and [run_sound]
+    says every state it produces is one the semantics allows.  Reversibility
+    then transfers to it: whatever [run] computes is backed by an [exec]
+    derivation, hence injective, and its inverse runs backwards.
+
+    Fuel bounds the recursion so the definition is total.  [None] means
+    either "out of fuel" or "this program has no derivation", which for a
+    reversible language is the normal way to reject a program.
+
+    Object blocks, field/array updates and dynamic dispatch return [None]:
+    the destruct rule quantifies over *all* fields, which is not decidable
+    in this model.  Giving each object a cell count would make it decidable
+    -- see coq/README.md. *)
+
+Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) {struct fuel}
+  : option state :=
+  match fuel with
+  | O => None
+  | S k =>
+    match s with
+    | Sskip => Some a
+    | Sshow _ => Some a
+    | Sassign x o e =>
+        if in_dec Nat.eq_dec x (fv e) then None
+        else Some (setv a x (mapp o (vs a x) (eval e a)))
+    | Sswap x y => Some (setv (setv a x (vs a y)) y (vs a x))
+    | Sseq s1 s2 =>
+        match run k G s1 a with
+        | Some b => run k G s2 b
+        | None => None
+        end
+    | Sif e1 s1 s2 e2 =>
+        if Z.eqb (eval e1 a) 0
+        then match run k G s2 a with
+             | Some b => if Z.eqb (eval e2 b) 0 then Some b else None
+             | None => None
+             end
+        else match run k G s1 a with
+             | Some b => if Z.eqb (eval e2 b) 0 then None else Some b
+             | None => None
+             end
+    | Sloop e1 s1 s2 e2 =>
+        if Z.eqb (eval e1 a) 0 then None
+        else match run k G s1 a with
+             | Some b => run_loop k G e1 s1 s2 e2 b
+             | None => None
+             end
+    | Slocal x e1 s' e2 =>
+        if in_dec Nat.eq_dec x (fv e1) then None
+        else if in_dec Nat.eq_dec x (fv e2) then None
+        else match run k G s' (setv a x (eval e1 a)) with
+             | Some b =>
+                 if Z.eqb (vs b x) (eval e2 b)
+                 then Some (setv b x (vs a x))
+                 else None
+             | None => None
+             end
+    | Scall m args =>
+        match procs G m with
+        | Some (MDecl ps body) =>
+            if Nat.eqb (length ps) (length args)
+            then run k G (rename (mk_ren ps args) body) a
+            else None
+        | None => None
+        end
+    | Suncall m args =>
+        match procs G m with
+        | Some (MDecl ps body) =>
+            if Nat.eqb (length ps) (length args)
+            then run k G (invert (rename (mk_ren ps args) body)) a
+            else None
+        | None => None
+        end
+    | _ => None
+    end
+  end
+
+with run_loop (fuel : nat) (G : menv) (e1 : exp) (s1 s2 : stm) (e2 : exp)
+              (a : state) {struct fuel} : option state :=
+  match fuel with
+  | O => None
+  | S k =>
+    if Z.eqb (eval e2 a) 0
+    then match run k G s2 a with
+         | Some b =>
+             if Z.eqb (eval e1 b) 0
+             then match run k G s1 b with
+                  | Some c => run_loop k G e1 s1 s2 e2 c
+                  | None => None
+                  end
+             else None
+         | None => None
+         end
+    else Some a
+  end.
+
+Lemma run_sound_aux : forall fuel G,
+  (forall s a b, run fuel G s a = Some b -> exec G s a b)
+  /\ (forall e1 s1 s2 e2 a b,
+        run_loop fuel G e1 s1 s2 e2 a = Some b -> loopx G e1 s1 s2 e2 a b).
+Proof.
+  induction fuel as [ | k IH ]; intro G.
+  - split; intros; discriminate.
+  - destruct (IH G) as [ IHrun IHloop ]. split.
+    + intros s a b H; destruct s; simpl in H; try discriminate.
+      * (* skip *) injection H as Heq; subst b; apply E_skip, steq_refl.
+      * (* assign *)
+        destruct (in_dec Nat.eq_dec x (fv e)); [ discriminate | ].
+        injection H as Heq; subst b. apply E_assign; [ assumption | apply steq_refl ].
+      * (* swap *) injection H as Heq; subst b. apply E_swap, steq_refl.
+      * (* seq *)
+        destruct (run k G s1 a) as [ m | ] eqn:R1; [ | discriminate ].
+        eapply E_seq; [ apply IHrun; eassumption | apply IHrun; assumption ].
+      * (* if *)
+        destruct (Z.eqb (eval e1 a) 0) eqn:E1.
+        -- apply Z.eqb_eq in E1.
+           destruct (run k G s2 a) as [ m | ] eqn:R; [ | discriminate ].
+           destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ | discriminate ].
+           injection H as Heq; subst b. apply Z.eqb_eq in E2.
+           apply E_if_f; [ assumption | apply IHrun; assumption | assumption ].
+        -- apply Z.eqb_neq in E1.
+           destruct (run k G s1 a) as [ m | ] eqn:R; [ | discriminate ].
+           destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ discriminate | ].
+           injection H as Heq; subst b. apply Z.eqb_neq in E2.
+           apply E_if_t; [ assumption | apply IHrun; assumption | assumption ].
+      * (* loop *)
+        destruct (Z.eqb (eval e1 a) 0) eqn:E1; [ discriminate | ].
+        apply Z.eqb_neq in E1.
+        destruct (run k G s1 a) as [ m | ] eqn:R; [ | discriminate ].
+        eapply E_loop; [ assumption | apply IHrun; eassumption | ].
+        apply IHloop; assumption.
+      * (* local *)
+        destruct (in_dec Nat.eq_dec x (fv e1)); [ discriminate | ].
+        destruct (in_dec Nat.eq_dec x (fv e2)); [ discriminate | ].
+        destruct (run k G s (setv a x (eval e1 a))) as [ m | ] eqn:R;
+          [ | discriminate ].
+        destruct (Z.eqb (vs m x) (eval e2 m)) eqn:Ex; [ | discriminate ].
+        injection H as Heq; subst b. apply Z.eqb_eq in Ex.
+        eapply E_local; try eassumption.
+        -- apply IHrun; eassumption.
+        -- apply steq_refl.
+      * (* show *) injection H as Heq; subst b; apply E_show, steq_refl.
+      * (* call *)
+        destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; [ | discriminate ].
+        destruct (Nat.eqb (length ps) (length args)) eqn:Hlen; [ | discriminate ].
+        apply Nat.eqb_eq in Hlen.
+        eapply E_call; [ eassumption | eassumption | apply IHrun; assumption ].
+      * (* uncall *)
+        destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; [ | discriminate ].
+        destruct (Nat.eqb (length ps) (length args)) eqn:Hlen; [ | discriminate ].
+        apply Nat.eqb_eq in Hlen.
+        eapply E_uncall; [ eassumption | eassumption | apply IHrun; assumption ].
+    + intros e1 s1 s2 e2 a b H; simpl in H.
+      destruct (Z.eqb (eval e2 a) 0) eqn:E2.
+      * apply Z.eqb_eq in E2.
+        destruct (run k G s2 a) as [ x1 | ] eqn:R2; [ | discriminate ].
+        destruct (Z.eqb (eval e1 x1) 0) eqn:E1; [ | discriminate ].
+        apply Z.eqb_eq in E1.
+        destruct (run k G s1 x1) as [ x2 | ] eqn:R1; [ | discriminate ].
+        eapply L_step; try eassumption.
+        -- apply IHrun; eassumption.
+        -- apply IHrun; eassumption.
+        -- apply IHloop; assumption.
+      * injection H as Heq; subst b. apply Z.eqb_neq in E2.
+        apply L_done; [ assumption | apply steq_refl ].
+Qed.
+
+(** **The extracted interpreter is sound**: every state it returns is one
+    the reversible semantics allows, so all the theorems above apply to it. *)
+Theorem run_sound : forall fuel G s a b,
+  run fuel G s a = Some b -> exec G s a b.
+Proof. intros fuel G; apply (run_sound_aux fuel G). Qed.
+
+(** Consequences for the extracted interpreter, for free. *)
+Corollary run_injective : forall fuel1 fuel2 G s a1 a2 b,
+  run fuel1 G s a1 = Some b -> run fuel2 G s a2 = Some b -> a1 == a2.
+Proof.
+  intros fuel1 fuel2 G s a1 a2 b H1 H2.
+  eapply exec_inj; eapply run_sound; eassumption.
+Qed.
+
+Corollary run_invert : forall fuel G s a b,
+  run fuel G s a = Some b -> exec G (invert s) b a.
+Proof. intros; apply exec_invert; eapply run_sound; eassumption. Qed.
+
+(* ------------------------------------------------------------------ *)
 (** * A static type system, and its preservation under inversion       *)
 (* ------------------------------------------------------------------ *)
 
@@ -1605,3 +1795,5 @@ Print Assumptions exec_det.
 Print Assumptions exec_inj.
 Print Assumptions exec_round_trip.
 Print Assumptions wt_invert.
+Print Assumptions run_sound.
+Print Assumptions run_injective.

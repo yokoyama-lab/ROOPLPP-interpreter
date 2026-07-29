@@ -1,7 +1,7 @@
 ; OUnit2 suites; each *_test.ml is its own test executable run by `dune test`.
 (tests
  (names eval_test invert_test print_test pretty_test env_store_test eval_prog_test
-        diagnostics_test error_test example_test cli_test)
+        diagnostics_test error_test example_test cli_test extracted_test)
  ; example_test は example/*.rplpp を、cli_test は rplpp バイナリを使う
  (deps (glob_files ../example/*.rplpp) ../bin/main.exe)
- (libraries rooplpp ounit2))
+ (libraries rooplpp roopl_extracted ounit2))

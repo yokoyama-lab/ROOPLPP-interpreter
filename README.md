@@ -232,7 +232,7 @@ bisect-ppx-report summary --per-file
 ## 可逆性の機械検証（Rocq）
 
 `coq/roopl.v` に，ROOPL++ の操作的意味論と可逆性の機械検証がある
-（Rocq 9.1.1，単一ファイル 1607 行，**公理ゼロ**）。
+（Rocq 9.1.1，単一ファイル 1799 行，**公理ゼロ**）。
 
 | 定理 | 主張 |
 |---|---|
@@ -241,12 +241,18 @@ bisect-ppx-report summary --per-file
 | `exec_iff` | `exec s a b ↔ exec (invert s) b a` |
 | `exec_det` | 前方決定性 |
 | **`exec_inj`** | **可逆性**：`exec s a1 b → exec s a2 b → a1 == a2` |
+| **`run_sound`** | 抽出した実行可能インタプリタが意味論に対して健全 |
 | `exec_round_trip` | 実行してから逆を実行すると元に戻る |
 | **`wt_invert`** | 反転で型付けが保存される（Haulund 2017 の定理） |
 
 ```
-cd coq && make && make check
+cd coq && make && make check     # 証明のビルドと再検査
+cd coq && make extract           # 検証済みインタプリタを OCaml へ抽出
 ```
+
+抽出物 `coq/extracted/rooplRun.ml` はコミット済みで、`test/extracted_test.ml` が
+**検証済みインタプリタと `lib/eval.ml` の差分テスト**を行う（成功する計算だけでなく、
+表明違反で失敗するプログラムも両者で一致することを確認）。
 
 対象は skip・可逆代入・**フィールド代入 `x.f += e`**・**配列代入 `x[e] += e`**・
 整数/オブジェクト/**配列要素**の swap・

@@ -10,7 +10,7 @@ COMPILE = $(ROCQ) c -Q . ROOPL roopl.v
 CHECK   = $(ROCQ) check -Q . ROOPL ROOPL.roopl
 endif
 
-.PHONY: all check clean
+.PHONY: all check extract clean
 
 all: roopl.vo
 
@@ -20,6 +20,14 @@ roopl.vo: roopl.v
 # 独立した検査器で .vo を再検査する（証明の受理を二重確認する）
 check: roopl.vo
 	$(CHECK)
+
+# 検証済みインタプリタを OCaml へ抽出する（生成物は extracted/ にコミット済み）
+extract: roopl.vo
+ifeq ($(ROCQ),)
+	coqc -Q . ROOPL extract.v
+else
+	$(ROCQ) c -Q . ROOPL extract.v
+endif
 
 clean:
 	rm -f *.vo *.vos *.vok *.glob .*.aux .lia.cache

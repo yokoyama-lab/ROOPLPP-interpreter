@@ -1,7 +1,7 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。単一ファイル `roopl.v`（1607 行，外部ライブラリ依存なし）。
+機械検証したもの。単一ファイル `roopl.v`（1799 行，外部ライブラリ依存なし）。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
 「文の反転で well-typedness が保存される」ことなども証明されているが，**証明支援系による
@@ -27,13 +27,15 @@ Rocq 9.1.1 で確認。
 | `exec_det` | 前方決定性 |
 | **`exec_inj`** | `exec s a1 b → exec s a2 b → a1 == a2` — **可逆性**：最終状態が初期状態を一意に定める（プログラムは状態上の単射部分関数を表す） |
 | `exec_round_trip` | 実行してから逆を実行すると元に戻る |
+| **`run_sound`** | `run fuel G s a = Some b → exec s a b` — **抽出した実行可能インタプリタが意味論に対して健全** |
+| `run_injective` / `run_invert` | その系（`run` の結果は単射・逆は逆向きに走る） |
 | **`wt_invert`** | `wt E S s → wt E S (invert s)` — **反転で型付けが保存される**（Haulund 2017 の定理） |
 
 補助定理として `exec_loopx_eq`（実行は状態の点ごとの等しさを保つ），`loopx_exit`（ループ末尾は
 出口表明を満たす）を経由する。`exec_invert` / `exec_det` はいずれも `exec` と補助関係 `loopx`
 に対する**相互帰納法**（`Combined Scheme`）で証明している。
 
-**公理はゼロ**。7 定理すべてについて `Print Assumptions` が `Closed under the global context`
+**公理はゼロ**。9 定理すべてについて `Print Assumptions` が `Closed under the global context`
 を返す（ビルド時に表示される）。
 
 型システムは整数・オブジェクト・配列の 3 種（クラス名は区別しない）。`construct` は
@@ -155,6 +157,32 @@ C（A から継承）で構築すると 1 を足す。
 - **`ex_call_uncall`** — `method inc(int n) n += 1` を `call inc(X)` で呼ぶと
   呼出し側の `X` が 1 になり（＝参照渡しになっている），`uncall inc(X)` で戻る
 - `ex_self_assign_stuck` — 副条件が効いていること：`X += X` には導出が存在しない
+
+## 抽出した検証済みインタプリタ
+
+`exec` は関係なので実行できない。`run : nat -> menv -> stm -> state -> option state`
+は**実行可能なインタプリタ**で、`run_sound` により「`run` が返す状態は必ず意味論が
+許す状態である」ことが証明されている。したがって上の可逆性・決定性の定理は
+そのまま `run` にも移る（`run_injective` / `run_invert`）。
+
+燃料で再帰を止めるので `run` は全域関数。`None` は「燃料切れ」か「導出が無い」の
+どちらかで、可逆言語では後者（表明を満たさないプログラムの拒否）が普通の動作である。
+
+```
+make extract    # coq/extracted/rooplRun.ml{,i} を再生成
+```
+
+生成物はリポジトリにコミットしてあるので、OCaml 側のビルドに Rocq は要らない。
+`test/extracted_test.ml` が**この抽出インタプリタと `lib/eval.ml` の差分テスト**で、
+成功する計算だけでなく**失敗（出口表明の不一致・入口表明が偽・`delocal` の不一致）も
+両者で一致する**ことを確認している。ここが「証明と実装をつなぐ」部分にあたる。
+
+### run が扱わないもの
+
+オブジェクトブロック・フィールド/配列更新・動的束縛では `run` は `None` を返す。
+`destruct` の規則が「**すべての**フィールドがゼロ」を要求しており、フィールドが
+無限にあるこのモデルでは決定不能なため。各オブジェクトにセル数 `hz : loc -> nat`
+を持たせれば有界になり決定可能になる（状態の 6 成分目を足す改修）。
 
 ## 対応関係（実装との）
 

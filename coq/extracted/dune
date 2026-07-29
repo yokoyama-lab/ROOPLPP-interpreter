@@ -1,0 +1,7 @@
+; Rocq から抽出した検証済みインタプリタ。生成物なので警告は抑止する。
+; 再生成は coq/ で `make extract`。
+(library
+ (name roopl_extracted)
+ (wrapped false)
+ (modules rooplRun)
+ (flags (:standard -w -a)))
