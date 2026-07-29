@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main, 'fix/**', 'feat/**' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ocaml:
+    name: build and test the interpreter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+          dune-cache: true
+
+      - name: install dependencies
+        run: opam install -y dune ounit2
+
+      - name: build
+        run: opam exec -- dune build
+
+      - name: test
+        run: opam exec -- dune test --force
+
+  python:
+    name: test the Python port
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install pytest
+        run: pip install pytest
+
+      # 差分テストは OCaml 実装のバイナリを使うのでここでビルドする
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+          dune-cache: true
+
+      - name: build the reference interpreter
+        run: |
+          opam install -y dune
+          opam exec -- dune build bin/main.exe
+
+      - name: test
+        run: python -m pytest python/tests -q
+
+  rocq:
+    name: check the mechanized semantics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # roopl.v は `Require Import` だけを使うので Coq 8.x でも通る
+      - uses: coq-community/docker-coq-action@v1
+        with:
+          coq_version: "8.20"
+          ocaml_version: "default"
+          custom_script: |
+            startGroup "build the proof"
+              cd coq && make
+            endGroup
+            startGroup "re-check with the independent checker"
+              cd coq && make check
+            endGroup

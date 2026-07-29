@@ -36,6 +36,7 @@ test/               OUnit2 テストスイート
 example/            サンプルプログラム（*.rplpp）
 library/            標準ライブラリ（Library.rplpp）
 coq/                可逆性の機械検証（Rocq, roopl.v）
+python/             Python への移植（差分テストで OCaml 実装と同期）
 web/                オンラインインタプリタ（PHP + TypeScript）
 ```
 
@@ -209,6 +210,17 @@ dune exec test/eval_test.exe   # 個別スイートを実行
 | `error_test` | エラー経路（可逆性の表明が正しく落ちること：ループ・条件分岐の表明，`delocal` の一致，`delete` 前のゼロクリア，値引数の不変性ほか） |
 | `example_test` | `example/*.rplpp` 全件の回帰（パース／`invert(invert p)=p`／`parse(pretty p)=p`／実行）＋代表例の値 |
 | `cli_test` | `rplpp` コマンド（フラグ・終了コード・ゼロクリア検査の出力・エラーの体裁） |
+
+### Python ポートのテスト
+
+`python/` は `lib/` の手作業移植なので、**両実装が同じ振る舞いをすることを差分テストで
+検査する**（`example/` 全件の標準出力と終了コード、`-inverse` の出力、`-no-zero-check`）。
+
+```
+cd python && python3 -m pytest tests -q     # 202 件（差分163 / 診断22 / エラー経路17）
+```
+
+OCaml 側のバイナリ（`_build/default/bin/main.exe`）が無い場合、差分テストはスキップされる。
 
 カバレッジは bisect_ppx で測れる（`opam install bisect_ppx` が必要）。
 

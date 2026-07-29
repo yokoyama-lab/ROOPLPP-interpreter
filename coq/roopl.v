@@ -27,7 +27,9 @@
   rules that build a state relate it *pointwise* (==) to the intended update.
 *)
 
-From Stdlib Require Import ZArith List Bool Arith Lia.
+(* Plain Require so the file compiles both on Rocq 9.x and on Coq 8.x
+   (CI uses a Coq 8.20 image; `From Stdlib` would be 9.x-only). *)
+Require Import ZArith List Bool Arith Lia.
 Import ListNotations.
 Open Scope Z_scope.
 
