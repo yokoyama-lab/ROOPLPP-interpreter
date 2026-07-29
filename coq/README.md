@@ -1,7 +1,7 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。単一ファイル `roopl.v`（959 行，外部ライブラリ依存なし）。
+機械検証したもの。単一ファイル `roopl.v`（1043 行，外部ライブラリ依存なし）。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
 「文の反転で well-typedness が保存される」ことなども証明されているが，**証明支援系による
@@ -74,9 +74,15 @@ Record state := St {
 | `Sloop e1 s1 s2 e2` | `from e1 do s1 loop s2 until e2` |
 | `Slocal x e1 s e2` | `local t x = e1  s  delocal t x = e2` |
 | `Sobj x s` | `construct C x  s  destruct x`（確保・ゼロクリア検査・解放つき） |
-| `Scall m` / `Suncall m` | 引数なしメソッドの `call` / `uncall` |
+| `Scall m args` / `Suncall m args` | **引数つきメソッド**の `call` / `uncall`（参照渡し） |
 
 式は定数・整数変数・**フィールド参照 `x.f`**・二項演算。
+
+メソッドは `MDecl ps body`（仮引数リストと本体）で，呼出しは**参照渡し**を
+「仮引数を実引数の名前に置き換えて本体を実行する」として形式化している
+（`rename (mk_ren ps args) body`）。`invert_rename` により名前替えは反転と可換。
+名前替えは capture-avoiding ではない（束縛子も一様に置き換える）が，ROOPL++ の
+スコープ規則の下では捕獲は起きず，定理はこの点に依存しない。
 
 副条件について：整数代入は構文的な `x ∉ fv(e)`，フィールド代入は**意味的な条件**
 `eval e b = eval e a`（書き込みが右辺の値を変えない）を使う。後者は別名（`x` と `y` が同じ
@@ -87,7 +93,7 @@ Record state := St {
 
 - **配列**（`new int[n] xs` / `delete` / `xs[i]`）
 - **継承・サブタイプ・動的ディスパッチ**
-- **引数つきメソッド**（値渡し引数の不変性条件，実引数の相異条件を含む）
+- **値渡し引数**（`call q(3)` のような式引数と，その不変性条件）
 - **`new` / `delete`**（ブロック構造でない確保・解放。ヒープをスタックとして扱えなくなる）
 - 型システム（Haulund 2017 の「反転で型が保存される」の機械化）
 
@@ -102,7 +108,8 @@ Record state := St {
 - **`ex_object`** — `construct O ... destruct O` の中でフィールドに書き，読み戻し，消す。
   ブロック中はヒープが伸び，`destruct` で戻る
 - **`ex_copy_uncopy`** — 参照の複製と取り消しが元に戻る
-- `ex_call_uncall` — `call` してから `uncall` すると元に戻る
+- **`ex_call_uncall`** — `method inc(int n) n += 1` を `call inc(X)` で呼ぶと
+  呼出し側の `X` が 1 になり（＝参照渡しになっている），`uncall inc(X)` で戻る
 - `ex_self_assign_stuck` — 副条件が効いていること：`X += X` には導出が存在しない
 
 ## 対応関係（実装との）

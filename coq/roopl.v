@@ -243,8 +243,8 @@ Inductive stm :=
 | Sloop (e1 : exp) (s1 s2 : stm) (e2 : exp)
 | Slocal (x : id) (e1 : exp) (s : stm) (e2 : exp)
 | Sobj (x : id) (s : stm)                             (**r construct C x s destruct x *)
-| Scall (m : mid)
-| Suncall (m : mid).
+| Scall (m : mid) (args : list id)
+| Suncall (m : mid) (args : list id).
 
 Fixpoint invert (s : stm) : stm :=
   match s with
@@ -260,9 +260,55 @@ Fixpoint invert (s : stm) : stm :=
   | Sloop e1 s1 s2 e2 => Sloop e2 (invert s1) (invert s2) e1
   | Slocal x e1 s e2 => Slocal x e2 (invert s) e1
   | Sobj x s => Sobj x (invert s)
-  | Scall m => Suncall m
-  | Suncall m => Scall m
+  | Scall m args => Suncall m args
+  | Suncall m args => Scall m args
   end.
+
+(** Call by reference: executing a method body means executing it with its
+    formal parameters renamed to the actual ones.  [mk_ren ps args] is that
+    renaming; names that are not parameters are left alone. *)
+Fixpoint mk_ren (ps args : list id) (x : id) : id :=
+  match ps, args with
+  | p :: ps', a :: args' => if Nat.eqb p x then a else mk_ren ps' args' x
+  | _, _ => x
+  end.
+
+Fixpoint rename_exp (r : id -> id) (e : exp) : exp :=
+  match e with
+  | Cst z => Cst z
+  | Var x => Var (r x)
+  | Fld x f => Fld (r x) f
+  | Bop o e1 e2 => Bop o (rename_exp r e1) (rename_exp r e2)
+  end.
+
+Fixpoint rename (r : id -> id) (s : stm) : stm :=
+  match s with
+  | Sskip => Sskip
+  | Sassign x o e => Sassign (r x) o (rename_exp r e)
+  | Sfassign x f o e => Sfassign (r x) f o (rename_exp r e)
+  | Sswap x y => Sswap (r x) (r y)
+  | Soswap x y => Soswap (r x) (r y)
+  | Scopy x y => Scopy (r x) (r y)
+  | Suncopy x y => Suncopy (r x) (r y)
+  | Sseq s1 s2 => Sseq (rename r s1) (rename r s2)
+  | Sif e1 s1 s2 e2 =>
+      Sif (rename_exp r e1) (rename r s1) (rename r s2) (rename_exp r e2)
+  | Sloop e1 s1 s2 e2 =>
+      Sloop (rename_exp r e1) (rename r s1) (rename r s2) (rename_exp r e2)
+  | Slocal x e1 s' e2 =>
+      Slocal (r x) (rename_exp r e1) (rename r s') (rename_exp r e2)
+  | Sobj x s' => Sobj (r x) (rename r s')
+  | Scall m args => Scall m (map r args)
+  | Suncall m args => Suncall m (map r args)
+  end.
+
+(** Renaming commutes with inversion. *)
+Lemma invert_rename : forall r s, invert (rename r s) = rename r (invert s).
+Proof.
+  intros r s; induction s; simpl; try reflexivity;
+    try (rewrite IHs1, IHs2; reflexivity);
+    try (rewrite IHs; reflexivity).
+Qed.
 
 Theorem invert_invert : forall s, invert (invert s) = s.
 Proof.
@@ -341,7 +387,10 @@ Qed.
 (** * Big-step operational semantics                                   *)
 (* ------------------------------------------------------------------ *)
 
-Definition menv := mid -> option stm.
+(** A method is a parameter list and a body. *)
+Inductive mdecl := MDecl (ps : list id) (body : stm).
+
+Definition menv := mid -> option mdecl.
 
 Inductive exec (G : menv) : stm -> state -> state -> Prop :=
 | E_skip : forall a b,
@@ -394,10 +443,16 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     (forall f, hp b (hn a) f = 0) ->
     c == dealloc b x ->
     exec G (Sobj x s) a c
-| E_call : forall m s a b,
-    G m = Some s -> exec G s a b -> exec G (Scall m) a b
-| E_uncall : forall m s a b,
-    G m = Some s -> exec G (invert s) a b -> exec G (Suncall m) a b
+| E_call : forall m ps body args a b,
+    G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    exec G (rename (mk_ren ps args) body) a b ->
+    exec G (Scall m args) a b
+| E_uncall : forall m ps body args a b,
+    G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    exec G (invert (rename (mk_ren ps args) body)) a b ->
+    exec G (Suncall m args) a b
 
 with loopx (G : menv) : exp -> stm -> stm -> exp -> state -> state -> Prop :=
 | L_done : forall e1 s1 s2 e2 a b,
@@ -503,9 +558,9 @@ Proof.
     + eapply steq_rewrite with (b := c) (c := dealloc b x);
         [ assumption | apply steq_refl | assumption ].
   - (* call *)
-    intros m s a b Hm Hs IH a' b' Ha Hb. eapply E_call; eauto.
+    intros m ps body args a b Hm Hlen Hs IH a' b' Ha Hb. eapply E_call; eauto.
   - (* uncall *)
-    intros m s a b Hm Hs IH a' b' Ha Hb. eapply E_uncall; eauto.
+    intros m ps body args a b Hm Hlen Hs IH a' b' Ha Hb. eapply E_uncall; eauto.
   - (* loop done *)
     intros e1 s1 s2 e2 a b H1 Hab a' b' Ha Hb.
     apply L_done.
@@ -713,9 +768,10 @@ Proof.
     + intro f; simpl; rewrite Hcn, Nat.eqb_refl; reflexivity.
     + apply steq_sym; now apply dealloc_alloc.
   - (* call *)
-    intros m s a b Hm Hs IH. simpl. eapply E_uncall; eassumption.
+    intros m ps body args a b Hm Hlen Hs IH. simpl. eapply E_uncall; eassumption.
   - (* uncall *)
-    intros m s a b Hm Hs IH. simpl. eapply E_call; [ eassumption | ].
+    intros m ps body args a b Hm Hlen Hs IH. simpl.
+    eapply E_call; [ eassumption | eassumption | ].
     rewrite invert_invert in IH; assumption.
   - (* loop tail: done *)
     intros e1 s1 s2 e2 a b H1 Hab t u Ht Hu.
@@ -787,15 +843,17 @@ Proof.
     eapply steq_trans; [ | apply steq_sym; eassumption ].
     apply dealloc_steq. now apply IH.
   - (* call *)
-    intros m s a b Hm Hs IH b' H; inversion H; subst.
+    intros m ps body args a b Hm Hlen Hs IH b' H; inversion H; subst.
     match goal with
-    | [ HG : G m = Some ?s0 |- _ ] => rewrite Hm in HG; injection HG as ->
+    | [ HG : G m = Some (MDecl _ _) |- _ ] =>
+        rewrite Hm in HG; injection HG as E1 E2; subst
     end.
     now apply IH.
   - (* uncall *)
-    intros m s a b Hm Hs IH b' H; inversion H; subst.
+    intros m ps body args a b Hm Hlen Hs IH b' H; inversion H; subst.
     match goal with
-    | [ HG : G m = Some ?s0 |- _ ] => rewrite Hm in HG; injection HG as ->
+    | [ HG : G m = Some (MDecl _ _) |- _ ] =>
+        rewrite Hm in HG; injection HG as E1 E2; subst
     end.
     now apply IH.
   - (* loop tail: done *)
@@ -936,6 +994,32 @@ Proof.
     split; [ | split; [ | split ] ]; simpl.
     + intro y0; reflexivity.
     + intro y0; destruct y0 as [ | [ | [ | [ | y0 ] ] ] ]; reflexivity.
+    + reflexivity.
+    + intros l f Hl; lia.
+Qed.
+
+(** A method with a parameter, called by reference:
+      method inc(int n)  n += 1
+    `call inc(X)` increments the caller's X, and `uncall inc(X)` undoes it. *)
+Definition M0 : mid := 0%nat.
+Definition P0 : id := 10%nat.
+Definition genv : menv :=
+  fun m => if Nat.eqb m M0 then Some (MDecl [P0] (Sassign P0 MAdd (Cst 1))) else None.
+
+Example ex_call_uncall :
+  exists b c, exec genv (Scall M0 [X]) zero b
+              /\ exec genv (Suncall M0 [X]) b c
+              /\ vs b X = 1 /\ c == zero.
+Proof.
+  eexists. eexists. split; [ | split; [ | split ] ].
+  - eapply E_call; [ reflexivity | reflexivity | ].
+    simpl. apply E_assign; [ simpl; tauto | apply steq_refl ].
+  - eapply E_uncall; [ reflexivity | reflexivity | ].
+    simpl. apply E_assign; [ simpl; tauto | apply steq_refl ].
+  - reflexivity.
+  - split; [ | split; [ | split ] ]; simpl.
+    + intro y; unfold X; destruct y; reflexivity.
+    + intro y; reflexivity.
     + reflexivity.
     + intros l f Hl; lia.
 Qed.
