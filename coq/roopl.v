@@ -41,6 +41,7 @@ Definition id := nat.
 Definition mid := nat.
 Definition loc := nat.
 Definition field := nat.
+Definition cid := nat.   (**r class name *)
 
 (** [vs]: integer variables, [os]: object variables (None = nil),
     [hn]: heap height, [hp]: the fields of every allocated object. *)
@@ -48,61 +49,72 @@ Record state := St {
   vs : id -> Z;
   os : id -> option loc;
   hn : nat;
-  hp : loc -> field -> Z
+  hp : loc -> field -> Z;
+  hc : loc -> cid            (**r the run-time class of each allocated object *)
 }.
 
 Definition setv (a : state) (x : id) (v : Z) : state :=
-  St (fun y => if Nat.eqb x y then v else vs a y) (os a) (hn a) (hp a).
+  St (fun y => if Nat.eqb x y then v else vs a y) (os a) (hn a) (hp a) (hc a).
 
 Definition seto (a : state) (x : id) (r : option loc) : state :=
-  St (vs a) (fun y => if Nat.eqb x y then r else os a y) (hn a) (hp a).
+  St (vs a) (fun y => if Nat.eqb x y then r else os a y) (hn a) (hp a) (hc a).
 
 Definition setf (a : state) (l : loc) (f : field) (v : Z) : state :=
   St (vs a) (os a) (hn a)
-     (fun l' f' => if andb (Nat.eqb l l') (Nat.eqb f f') then v else hp a l' f').
+     (fun l' f' => if andb (Nat.eqb l l') (Nat.eqb f f') then v else hp a l' f')
+     (hc a).
 
 (** Allocation: the fresh location is the current height, its fields are
     zeroed, and the object variable [x] is bound to it. *)
-Definition alloc (a : state) (x : id) : state :=
+(** [alloc a c x]: allocate a fresh object of class [c] and bind [x] to it. *)
+Definition alloc (a : state) (c : cid) (x : id) : state :=
   St (vs a)
      (fun y => if Nat.eqb x y then Some (hn a) else os a y)
      (S (hn a))
-     (fun l f => if Nat.eqb l (hn a) then 0 else hp a l f).
+     (fun l f => if Nat.eqb l (hn a) then 0 else hp a l f)
+     (fun l => if Nat.eqb l (hn a) then c else hc a l).
 
 (** Deallocation: pop the top object and set [x] back to nil. *)
 Definition dealloc (a : state) (x : id) : state :=
   St (vs a)
      (fun y => if Nat.eqb x y then None else os a y)
      (pred (hn a))
-     (hp a).
+     (hp a)
+     (hc a).
 
 (** Pointwise equality of states, up to the live prefix of the heap. *)
 Definition steq (a b : state) : Prop :=
   (forall x, vs a x = vs b x)
   /\ (forall x, os a x = os b x)
   /\ hn a = hn b
-  /\ (forall l f, (l < hn a)%nat -> hp a l f = hp b l f).
+  /\ (forall l f, (l < hn a)%nat -> hp a l f = hp b l f)
+  /\ (forall l, (l < hn a)%nat -> hc a l = hc b l).
 Infix "==" := steq (at level 70, no associativity).
 
 Lemma steq_refl : forall a, a == a.
 Proof. intro a; repeat split; auto. Qed.
 
+(* 以降、状態は 5 成分（vs / os / hn / hp / hc）なので分解はこの形になる *)
+Ltac steq_split := split; [ | split; [ | split; [ | split ] ] ].
+
 Lemma steq_sym : forall a b, a == b -> b == a.
 Proof.
-  intros a b (Hv & Ho & Hn & Hh); repeat split.
+  intros a b (Hv & Ho & Hn & Hh & Hc); steq_split.
   - intro x; symmetry; apply Hv.
   - intro x; symmetry; apply Ho.
   - symmetry; apply Hn.
   - intros l f Hl; symmetry; apply Hh; lia.
+  - intros l Hl; symmetry; apply Hc; lia.
 Qed.
 
 Lemma steq_trans : forall a b c, a == b -> b == c -> a == c.
 Proof.
-  intros a b c (Hv1 & Ho1 & Hn1 & Hh1) (Hv2 & Ho2 & Hn2 & Hh2); repeat split.
+  intros a b c (Hv1 & Ho1 & Hn1 & Hh1 & Hc1) (Hv2 & Ho2 & Hn2 & Hh2 & Hc2); steq_split.
   - intro x; rewrite Hv1; apply Hv2.
   - intro x; rewrite Ho1; apply Ho2.
   - lia.
   - intros l f Hl; rewrite Hh1 by lia; apply Hh2; lia.
+  - intros l Hl; rewrite Hc1 by lia; apply Hc2; lia.
 Qed.
 
 Hint Resolve steq_refl steq_sym steq_trans : core.
@@ -120,7 +132,26 @@ Proof. intros a b x (_ & H & _); apply H. Qed.
 Lemma steq_hn : forall a b, a == b -> hn a = hn b.
 Proof. intros a b (_ & _ & H & _); apply H. Qed.
 Lemma steq_hp : forall a b l f, a == b -> (l < hn a)%nat -> hp a l f = hp b l f.
-Proof. intros a b l f (_ & _ & _ & H); apply H. Qed.
+Proof. intros a b l f (_ & _ & _ & H & _); apply H. Qed.
+Lemma steq_hc : forall a b l, a == b -> (l < hn a)%nat -> hc a l = hc b l.
+Proof. intros a b l (_ & _ & _ & _ & H); apply H. Qed.
+
+(** hc 成分（実行時クラス）は状態を作るどの操作でも変わらないので、
+    証明中はいつも同じ形になる。まとめてタクティクにしておく。 *)
+Ltac hc_auto :=
+  intros ?loc ?Hloc; simpl in *;
+  first
+    [ reflexivity
+    | match goal with
+      | [ H : ?B == _ |- hc _ ?L = hc ?B ?L ] =>
+          symmetry; apply (steq_hc B _ L H);
+          try (rewrite (steq_hn B _ H); simpl); try assumption; try lia
+      end
+    | match goal with
+      | [ H : ?A == _ |- hc ?A ?L = hc _ ?L ] =>
+          apply (steq_hc A _ L H); try assumption; try lia
+      end ].
+
 
 (* ------------------------------------------------------------------ *)
 (** * Expressions                                                      *)
@@ -251,9 +282,12 @@ Inductive stm :=
 | Sif (e1 : exp) (s1 s2 : stm) (e2 : exp)
 | Sloop (e1 : exp) (s1 s2 : stm) (e2 : exp)
 | Slocal (x : id) (e1 : exp) (s : stm) (e2 : exp)
-| Sobj (x : id) (s : stm)                             (**r construct C x s destruct x *)
+| Sshow (e : exp)                                     (**r show(e) / print("...") *)
+| Sobj (cl : cid) (x : id) (s : stm)                  (**r construct C x s destruct x *)
 | Scall (m : mid) (args : list id)
-| Suncall (m : mid) (args : list id).
+| Suncall (m : mid) (args : list id)
+| Socall (x : id) (m : mid) (args : list id)    (**r call x::m(args) *)
+| Souncall (x : id) (m : mid) (args : list id). (**r uncall x::m(args) *)
 
 Fixpoint invert (s : stm) : stm :=
   match s with
@@ -270,9 +304,12 @@ Fixpoint invert (s : stm) : stm :=
   | Sif e1 s1 s2 e2 => Sif e2 (invert s1) (invert s2) e1
   | Sloop e1 s1 s2 e2 => Sloop e2 (invert s1) (invert s2) e1
   | Slocal x e1 s e2 => Slocal x e2 (invert s) e1
-  | Sobj x s => Sobj x (invert s)
+  | Sshow e => Sshow e
+  | Sobj c x s => Sobj c x (invert s)
   | Scall m args => Suncall m args
   | Suncall m args => Scall m args
+  | Socall x m args => Souncall x m args
+  | Souncall x m args => Socall x m args
   end.
 
 (** Call by reference: executing a method body means executing it with its
@@ -311,9 +348,12 @@ Fixpoint rename (r : id -> id) (s : stm) : stm :=
       Sloop (rename_exp r e1) (rename r s1) (rename r s2) (rename_exp r e2)
   | Slocal x e1 s' e2 =>
       Slocal (r x) (rename_exp r e1) (rename r s') (rename_exp r e2)
-  | Sobj x s' => Sobj (r x) (rename r s')
+  | Sshow e => Sshow (rename_exp r e)
+  | Sobj c x s' => Sobj c (r x) (rename r s')
   | Scall m args => Scall m (map r args)
   | Suncall m args => Suncall m (map r args)
+  | Socall x m args => Socall (r x) m (map r args)
+  | Souncall x m args => Souncall (r x) m (map r args)
   end.
 
 (** Renaming commutes with inversion. *)
@@ -338,62 +378,71 @@ Qed.
 
 Lemma setv_steq : forall a b x v, a == b -> setv a x v == setv b x v.
 Proof.
-  intros a b x v (Hv & Ho & Hn & Hh); split; [ | split; [ | split ] ]; simpl.
+  intros a b x v (Hv & Ho & Hn & Hh & Hc); steq_split; simpl.
   - intro y; destruct (Nat.eqb x y); [ reflexivity | apply Hv ].
   - apply Ho.
   - apply Hn.
   - intros l f Hl; apply Hh; exact Hl.
+  - intros l Hl; apply Hc; exact Hl.
 Qed.
 
 Lemma seto_steq : forall a b x r, a == b -> seto a x r == seto b x r.
 Proof.
-  intros a b x r (Hv & Ho & Hn & Hh); split; [ | split; [ | split ] ]; simpl.
+  intros a b x r (Hv & Ho & Hn & Hh & Hc); steq_split; simpl.
   - apply Hv.
   - intro y; destruct (Nat.eqb x y); [ reflexivity | apply Ho ].
   - apply Hn.
   - intros l f Hl; apply Hh; exact Hl.
+  - intros l Hl; apply Hc; exact Hl.
 Qed.
 
 Lemma setf_steq : forall a b l f v, a == b -> setf a l f v == setf b l f v.
 Proof.
-  intros a b l f v (Hv & Ho & Hn & Hh); split; [ | split; [ | split ] ]; simpl.
+  intros a b l f v (Hv & Ho & Hn & Hh & Hc); steq_split; simpl.
   - apply Hv.
   - apply Ho.
   - apply Hn.
   - intros l' f' Hl'.
     destruct (Nat.eqb l l' && Nat.eqb f f')%bool; [ reflexivity | apply Hh; exact Hl' ].
+  - intros l' Hl'; apply Hc; exact Hl'.
 Qed.
 
-Lemma alloc_steq : forall a b x, a == b -> alloc a x == alloc b x.
+Lemma alloc_steq : forall a b c x, a == b -> alloc a c x == alloc b c x.
 Proof.
-  intros a b x (Hv & Ho & Hn & Hh); split; [ | split; [ | split ] ]; simpl.
+  intros a b c x (Hv & Ho & Hn & Hh & Hcl); steq_split; simpl.
   - apply Hv.
   - intro y; destruct (Nat.eqb x y); [ rewrite Hn; reflexivity | apply Ho ].
   - rewrite Hn; reflexivity.
   - intros l f Hl; simpl in Hl; rewrite <- Hn.
     destruct (Nat.eqb l (hn a)) eqn:E; [ reflexivity | ].
     apply Hh; apply Nat.eqb_neq in E; lia.
+  - intros l Hl; simpl in Hl; rewrite <- Hn.
+    destruct (Nat.eqb l (hn a)) eqn:E; [ reflexivity | ].
+    apply Hcl; apply Nat.eqb_neq in E; lia.
 Qed.
 
 Lemma dealloc_steq : forall a b x, a == b -> dealloc a x == dealloc b x.
 Proof.
-  intros a b x (Hv & Ho & Hn & Hh); split; [ | split; [ | split ] ]; simpl.
+  intros a b x (Hv & Ho & Hn & Hh & Hc); steq_split; simpl.
   - apply Hv.
   - intro y; destruct (Nat.eqb x y); [ reflexivity | apply Ho ].
   - rewrite Hn; reflexivity.
   - intros l f Hl; apply Hh; simpl in Hl; lia.
+  - intros l Hl; apply Hc; simpl in Hl; lia.
 Qed.
 
 (** Allocating then deallocating is the identity (the fresh cell is above
     the live prefix, so nothing observable changes). *)
-Lemma dealloc_alloc : forall a x, os a x = None -> dealloc (alloc a x) x == a.
+Lemma dealloc_alloc : forall a c x, os a x = None -> dealloc (alloc a c x) x == a.
 Proof.
-  intros a x Hx; split; [ | split; [ | split ] ]; simpl.
+  intros a c x Hx; steq_split; simpl.
   - reflexivity.
   - intro y; destruct (Nat.eqb x y) eqn:E; [ | reflexivity ].
     apply Nat.eqb_eq in E; subst; now rewrite Hx.
   - reflexivity.
   - intros l f Hl; destruct (Nat.eqb l (hn a)) eqn:E; [ | reflexivity ].
+    apply Nat.eqb_eq in E; subst; lia.
+  - intros l Hl; destruct (Nat.eqb l (hn a)) eqn:E; [ | reflexivity ].
     apply Nat.eqb_eq in E; subst; lia.
 Qed.
 
@@ -411,7 +460,7 @@ Proof.
                else hp a l f).
   { intros l f Hl. rewrite (steq_hp b _ l f Hb) by (rewrite Hhn; assumption).
     simpl. reflexivity. }
-  split; [ | split; [ | split ] ].
+  steq_split.
   - intro y; simpl; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
   - intro y; simpl; symmetry; rewrite (steq_os b _ y Hb); reflexivity.
   - simpl; symmetry; assumption.
@@ -430,16 +479,56 @@ Proof.
       * apply andb_true_iff in E1 as [A B]; apply Nat.eqb_eq in A;
           apply Nat.eqb_eq in B; subst l f. now rewrite Hb2.
       * rewrite (Hcell l f Hl), E2, E1. reflexivity.
+  - intros l Hl; simpl; symmetry; apply (steq_hc b _ l Hb).
+    rewrite Hhn; assumption.
 Qed.
 
 (* ------------------------------------------------------------------ *)
 (** * Big-step operational semantics                                   *)
 (* ------------------------------------------------------------------ *)
 
-(** A method is a parameter list and a body. *)
+(** A method is a parameter list and a body.  For a method that is called on
+    an object, the *first* formal parameter is its receiver (`this`), so
+    dispatching is just the renaming that binds it to the actual object. *)
 Inductive mdecl := MDecl (ps : list id) (body : stm).
 
-Definition menv := mid -> option mdecl.
+(** A class: its superclass (if any) and its own methods. *)
+Inductive cdecl := CDecl (parent : option cid) (methods : mid -> option mdecl).
+
+Definition ctable := cid -> option cdecl.
+
+(** Dynamic dispatch: look the method up in the object's *run-time* class and
+    walk up the inheritance chain.  This is subtype polymorphism: the class
+    that is searched is the one the object was constructed with, not the
+    declared type of the variable. *)
+Inductive dispatch (T : ctable) : cid -> mid -> mdecl -> Prop :=
+| D_here : forall c p ms m d,
+    T c = Some (CDecl p ms) -> ms m = Some d -> dispatch T c m d
+| D_up : forall c q ms m d,
+    T c = Some (CDecl (Some q) ms) -> ms m = None -> dispatch T q m d ->
+    dispatch T c m d.
+
+Lemma dispatch_det : forall T c m d1 d2,
+  dispatch T c m d1 -> dispatch T c m d2 -> d1 = d2.
+Proof.
+  intros T c m d1 d2 H1; revert d2; induction H1; intros d2 H2; inversion H2; subst;
+    match goal with
+    | [ HA : T ?c = Some _, HB : T ?c = Some _ |- _ ] =>
+        rewrite HA in HB; injection HB as E1 E2; subst
+    end.
+  - congruence.
+  - congruence.
+  - congruence.
+  - now apply IHdispatch.
+Qed.
+
+(** 呼出し先の本体：受け手 x と実引数を仮引数へ束縛する（参照渡し）。 *)
+Definition call_body (d : mdecl) (x : id) (args : list id) : stm :=
+  match d with MDecl ps body => rename (mk_ren ps (x :: args)) body end.
+
+(** The environment a program runs in: free-standing methods and the class
+    table. *)
+Record menv := MEnv { procs : mid -> option mdecl; classes : ctable }.
 
 Inductive exec (G : menv) : stm -> state -> state -> Prop :=
 | E_skip : forall a b,
@@ -499,24 +588,43 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     vs b x = eval e2 b ->
     c == setv b x (vs a x) ->
     exec G (Slocal x e1 s e2) a c
-| E_obj : forall x s a b c,
+(* show / print は状態を変えないので、状態変換としては恒等（それ自身が逆）。 *)
+| E_show : forall e a b, a == b -> exec G (Sshow e) a b
+| E_obj : forall cl x s a b c,
     os a x = None ->
-    exec G s (alloc a x) b ->
+    exec G s (alloc a cl x) b ->
     os b x = Some (hn a) ->
     hn b = S (hn a) ->
     (forall f, hp b (hn a) f = 0) ->
+    hc b (hn a) = cl ->
     c == dealloc b x ->
-    exec G (Sobj x s) a c
+    exec G (Sobj cl x s) a c
 | E_call : forall m ps body args a b,
-    G m = Some (MDecl ps body) ->
+    procs G m = Some (MDecl ps body) ->
     length ps = length args ->
     exec G (rename (mk_ren ps args) body) a b ->
     exec G (Scall m args) a b
 | E_uncall : forall m ps body args a b,
-    G m = Some (MDecl ps body) ->
+    procs G m = Some (MDecl ps body) ->
     length ps = length args ->
     exec G (invert (rename (mk_ren ps args) body)) a b ->
     exec G (Suncall m args) a b
+
+(* 動的束縛つきのメソッド呼出し。受け手が呼出し中に動かないこと
+   （ROOPL++ では this は代入できない）とヒープ高さが釣り合うことは，
+   言語の構文が保証している性質をここでは意味論の側で述べている。 *)
+| E_ocall : forall x m args a b l d,
+    os a x = Some l -> (l < hn a)%nat ->
+    dispatch (classes G) (hc a l) m d ->
+    exec G (call_body d x args) a b ->
+    os b x = Some l -> hc b l = hc a l -> hn b = hn a ->
+    exec G (Socall x m args) a b
+| E_ouncall : forall x m args a b l d,
+    os a x = Some l -> (l < hn a)%nat ->
+    dispatch (classes G) (hc a l) m d ->
+    exec G (invert (call_body d x args)) a b ->
+    os b x = Some l -> hc b l = hc a l -> hn b = hn a ->
+    exec G (Souncall x m args) a b
 
 with loopx (G : menv) : exp -> stm -> stm -> exp -> state -> state -> Prop :=
 | L_done : forall e1 s1 s2 e2 a b,
@@ -644,11 +752,14 @@ Proof.
     + rewrite <- (steq_vs a a' x Ha).
       eapply steq_rewrite with (b := c) (c := setv b x (vs a x));
         [ assumption | apply steq_refl | assumption ].
+  - (* show / print *)
+    intros e a b Hab a' b' Ha Hb. apply E_show; eauto.
   - (* object block *)
-    intros x s a b c Hx Hs IH Hbx Hbn Hbz Hc a' c' Ha Hc'.
+    intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc a' c' Ha Hc'.
     eapply E_obj with (b := b).
     + rewrite <- (steq_os a a' x Ha); assumption.
     + apply IH; [ now apply alloc_steq | apply steq_refl ].
+    + rewrite <- (steq_hn a a' Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
@@ -658,6 +769,28 @@ Proof.
     intros m ps body args a b Hm Hlen Hs IH a' b' Ha Hb. eapply E_call; eauto.
   - (* uncall *)
     intros m ps body args a b Hm Hlen Hs IH a' b' Ha Hb. eapply E_uncall; eauto.
+  - (* object call *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7 a' b' Ha Hb.
+    assert (Hlb : (l < hn b)%nat) by (rewrite H7; assumption).
+    eapply E_ocall with (l := l) (d := d).
+    + rewrite <- (steq_os a a' x Ha); assumption.
+    + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (steq_hc a a' l Ha H2); assumption.
+    + apply IH; assumption.
+    + rewrite <- (steq_os b b' x Hb); assumption.
+    + rewrite <- (steq_hc b b' l Hb Hlb), <- (steq_hc a a' l Ha H2); assumption.
+    + rewrite <- (steq_hn b b' Hb), <- (steq_hn a a' Ha); assumption.
+  - (* object uncall *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7 a' b' Ha Hb.
+    assert (Hlb : (l < hn b)%nat) by (rewrite H7; assumption).
+    eapply E_ouncall with (l := l) (d := d).
+    + rewrite <- (steq_os a a' x Ha); assumption.
+    + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (steq_hc a a' l Ha H2); assumption.
+    + apply IH; assumption.
+    + rewrite <- (steq_os b b' x Hb); assumption.
+    + rewrite <- (steq_hc b b' l Hb Hlb), <- (steq_hc a a' l Ha H2); assumption.
+    + rewrite <- (steq_hn b b' Hb), <- (steq_hn a a' Ha); assumption.
   - (* loop done *)
     intros e1 s1 s2 e2 a b H1 Hab a' b' Ha Hb.
     apply L_done.
@@ -706,7 +839,7 @@ Proof.
       by (rewrite (steq_vs b _ x Hb); simpl; now rewrite Nat.eqb_refl).
     assert (He : eval e b = eval e a) by (eapply eval_off_v; eauto).
     rewrite Hv, He, mapp_minv.
-    split; [ | split; [ | split ] ]; simpl.
+    steq_split; simpl.
     + intro y. destruct (Nat.eqb x y) eqn:E.
       * apply Nat.eqb_eq in E; subst y; reflexivity.
       * rewrite (steq_vs b _ y Hb); simpl; now rewrite E.
@@ -715,6 +848,7 @@ Proof.
     + intros l f Hl; symmetry.
       rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
       rewrite (steq_hn b _ Hb); simpl; assumption.
+    + hc_auto.
   - (* field assign *)
     intros x f o e a b l Hl Hlt Hb He.
     assert (Hos : os b x = Some l)
@@ -726,7 +860,7 @@ Proof.
     eapply E_fassign with (l := l); auto.
     + rewrite Hhn; assumption.
     + rewrite Hf, He, mapp_minv.
-      split; [ | split; [ | split ] ]; simpl.
+      steq_split; simpl.
       * intro y; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
       * intro y; symmetry; rewrite (steq_os b _ y Hb); reflexivity.
       * symmetry; assumption.
@@ -735,6 +869,7 @@ Proof.
            apply Nat.eqb_eq in E1; apply Nat.eqb_eq in E2; subst; reflexivity.
         -- symmetry. rewrite (steq_hp b _ l' f' Hb) by (rewrite Hhn; assumption).
            simpl. now rewrite E.
+      * hc_auto.
   - (* array assign *)
     intros x ei o e a b l Hl Hlt Hb Hei He.
     assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
@@ -747,7 +882,7 @@ Proof.
     + rewrite (steq_os b _ x Hb); simpl; assumption.
     + rewrite Hhn; assumption.
     + rewrite Hidx, Hf, He, mapp_minv.
-      split; [ | split; [ | split ] ]; simpl.
+      steq_split; simpl.
       * intro y; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
       * intro y; symmetry; rewrite (steq_os b _ y Hb); reflexivity.
       * symmetry; assumption.
@@ -757,6 +892,7 @@ Proof.
              apply Nat.eqb_eq in E2; subst; reflexivity.
         -- symmetry. rewrite (steq_hp b _ l' f' Hb) by (rewrite Hhn; assumption).
            simpl. now rewrite E.
+      * hc_auto.
     + now rewrite Hei.
     + now rewrite He.
   - (* int swap *)
@@ -767,7 +903,7 @@ Proof.
     assert (Hby : vs b y = vs a x)
       by (rewrite (steq_vs b _ y Hb); simpl; now rewrite Nat.eqb_refl).
     rewrite Hbx, Hby.
-    split; [ | split; [ | split ] ]; simpl.
+    steq_split; simpl.
     + intro z. destruct (Nat.eqb y z) eqn:Eyz.
       * apply Nat.eqb_eq in Eyz; subst z.
         destruct (Nat.eqb y x) eqn:Eyx; [ apply Nat.eqb_eq in Eyx; subst y | ]; reflexivity.
@@ -779,6 +915,7 @@ Proof.
     + symmetry; rewrite (steq_hn b _ Hb); reflexivity.
     + intros l f Hl; symmetry. rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
       rewrite (steq_hn b _ Hb); simpl; assumption.
+    + hc_auto.
   - (* array swap *)
     intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2.
     assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
@@ -798,7 +935,7 @@ Proof.
     assert (Hby : os b y = os a x)
       by (rewrite (steq_os b _ y Hb); simpl; now rewrite Nat.eqb_refl).
     rewrite Hbx, Hby.
-    split; [ | split; [ | split ] ]; simpl.
+    steq_split; simpl.
     + intro z; symmetry; rewrite (steq_vs b _ z Hb); reflexivity.
     + intro z. destruct (Nat.eqb y z) eqn:Eyz.
       * apply Nat.eqb_eq in Eyz; subst z.
@@ -810,6 +947,7 @@ Proof.
     + symmetry; rewrite (steq_hn b _ Hb); reflexivity.
     + intros l f Hl; symmetry. rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
       rewrite (steq_hn b _ Hb); simpl; assumption.
+    + hc_auto.
   - (* copy *)
     intros x y a b Hxy Hy Hb. apply E_uncopy; auto.
     + assert (Hbx : os b x = os a x).
@@ -818,7 +956,7 @@ Proof.
       assert (Hby : os b y = os a x)
         by (rewrite (steq_os b _ y Hb); simpl; now rewrite Nat.eqb_refl).
       now rewrite Hbx, Hby.
-    + split; [ | split; [ | split ] ]; simpl.
+    + steq_split; simpl.
       * intro z; symmetry; rewrite (steq_vs b _ z Hb); reflexivity.
       * intro z; destruct (Nat.eqb y z) eqn:E.
         -- apply Nat.eqb_eq in E; subst z; now rewrite Hy.
@@ -826,6 +964,7 @@ Proof.
       * symmetry; rewrite (steq_hn b _ Hb); reflexivity.
       * intros l f Hl; symmetry. rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
         rewrite (steq_hn b _ Hb); simpl; assumption.
+      * hc_auto.
   - (* uncopy *)
     intros x y a b Hxy Hxy2 Hb. apply E_copy; auto.
     + rewrite (steq_os b _ y Hb); simpl; now rewrite Nat.eqb_refl.
@@ -833,7 +972,7 @@ Proof.
       { rewrite (steq_os b _ x Hb); simpl.
         destruct (Nat.eqb y x) eqn:E; [ apply Nat.eqb_eq in E; congruence | reflexivity ]. }
       rewrite Hbx, Hxy2.
-      split; [ | split; [ | split ] ]; simpl.
+      steq_split; simpl.
       * intro z; symmetry; rewrite (steq_vs b _ z Hb); reflexivity.
       * intro z; destruct (Nat.eqb y z) eqn:E.
         -- apply Nat.eqb_eq in E; subst z; reflexivity.
@@ -841,6 +980,7 @@ Proof.
       * symmetry; rewrite (steq_hn b _ Hb); reflexivity.
       * intros l f Hl; symmetry. rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
         rewrite (steq_hn b _ Hb); simpl; assumption.
+      * hc_auto.
   - (* seq *)
     intros s1 s2 a b c H1 IH1 H2 IH2. simpl. eapply E_seq; eassumption.
   - (* if true *)
@@ -857,7 +997,7 @@ Proof.
     eapply E_local with (b := setv a x (eval e1 a)); auto.
     + eapply exec_eq; [ eassumption | | apply steq_refl ].
       assert (Hec : eval e2 c = eval e2 b) by (eapply eval_off_v; eauto).
-      split; [ | split; [ | split ] ]; simpl.
+      steq_split; simpl.
       * intro y; destruct (Nat.eqb x y) eqn:E.
         -- apply Nat.eqb_eq in E; subst y. rewrite Hec, <- Hx; reflexivity.
         -- rewrite (steq_vs c _ y Hc); simpl; now rewrite E.
@@ -865,22 +1005,26 @@ Proof.
       * rewrite (steq_hn c _ Hc); reflexivity.
       * intros l f Hl; symmetry; apply (steq_hp c _ l f Hc).
         rewrite (steq_hn c _ Hc); simpl; assumption.
+      * hc_auto.
     + simpl; rewrite Nat.eqb_refl; symmetry; now apply eval_setv_notin.
     + assert (Hcx : vs c x = vs a x)
         by (rewrite (steq_vs c _ x Hc); simpl; now rewrite Nat.eqb_refl).
       rewrite Hcx.
-      split; [ | split; [ | split ] ]; simpl.
+      steq_split; simpl.
       * intro y; destruct (Nat.eqb x y) eqn:E;
           [ apply Nat.eqb_eq in E; subst y | ]; reflexivity.
       * reflexivity.
       * reflexivity.
       * reflexivity.
+      * hc_auto.
+  - (* show / print *)
+    intros e a b Hab. apply E_show. now apply steq_sym.
   - (* object block *)
-    intros x s a b c Hx Hs IH Hbx Hbn Hbz Hc. simpl.
+    intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc. simpl.
     assert (Hcn : hn c = hn a).
     { rewrite (steq_hn c _ Hc); simpl; rewrite Hbn; reflexivity. }
-    assert (Halloc : alloc c x == b).
-    { split; [ | split; [ | split ] ]; simpl.
+    assert (Halloc : alloc c cl x == b).
+    { steq_split; simpl.
       - intro y; rewrite (steq_vs c _ y Hc); reflexivity.
       - intro y; destruct (Nat.eqb x y) eqn:E.
         + apply Nat.eqb_eq in E; subst y. rewrite Hcn; now rewrite Hbx.
@@ -891,13 +1035,20 @@ Proof.
         + rewrite (steq_hp c _ l f Hc).
           * reflexivity.
           * rewrite (steq_hn c _ Hc); simpl. rewrite Hbn; simpl.
+            apply Nat.eqb_neq in E. rewrite Hcn in E. simpl in Hl. lia.
+      - intros l Hl; destruct (Nat.eqb l (hn c)) eqn:E.
+        + apply Nat.eqb_eq in E; subst l. rewrite Hcn; symmetry; apply Hbc.
+        + rewrite (steq_hc c _ l Hc).
+          * reflexivity.
+          * rewrite (steq_hn c _ Hc); simpl. rewrite Hbn; simpl.
             apply Nat.eqb_neq in E. rewrite Hcn in E. simpl in Hl. lia. }
-    eapply E_obj with (b := alloc a x).
+    eapply E_obj with (b := alloc a cl x).
     + rewrite (steq_os c _ x Hc); simpl; now rewrite Nat.eqb_refl.
     + eapply exec_eq; [ eassumption | now apply steq_sym | apply steq_refl ].
     + simpl; rewrite Nat.eqb_refl, Hcn; reflexivity.
     + simpl; rewrite Hcn; reflexivity.
     + intro f; simpl; rewrite Hcn, Nat.eqb_refl; reflexivity.
+    + simpl; rewrite Hcn, Nat.eqb_refl; reflexivity.
     + apply steq_sym; now apply dealloc_alloc.
   - (* call *)
     intros m ps body args a b Hm Hlen Hs IH. simpl. eapply E_uncall; eassumption.
@@ -905,6 +1056,21 @@ Proof.
     intros m ps body args a b Hm Hlen Hs IH. simpl.
     eapply E_call; [ eassumption | eassumption | ].
     rewrite invert_invert in IH; assumption.
+  - (* object call *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7. simpl.
+    eapply E_ouncall with (l := l) (d := d); try assumption.
+    + rewrite H7; assumption.
+    + rewrite H6; assumption.
+    + now symmetry.
+    + now symmetry.
+  - (* object uncall *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7. simpl.
+    eapply E_ocall with (l := l) (d := d); try assumption.
+    + rewrite H7; assumption.
+    + rewrite H6; assumption.
+    + rewrite invert_invert in IH; assumption.
+    + now symmetry.
+    + now symmetry.
   - (* loop tail: done *)
     intros e1 s1 s2 e2 a b H1 Hab t u Ht Hu.
     exists t; split; [ | assumption ].
@@ -975,25 +1141,47 @@ Proof.
     eapply steq_trans; [ eassumption | ].
     eapply steq_trans; [ | apply steq_sym; eassumption ].
     apply setv_steq. now apply IH.
+  - (* show / print *)
+    intros e a b Hab b' H; inversion H; subst; eauto.
   - (* object block *)
-    intros x s a b c Hx Hs IH Hbx Hbn Hbz Hc c' H; inversion H; subst.
+    intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc c' H; inversion H; subst.
     eapply steq_trans; [ eassumption | ].
     eapply steq_trans; [ | apply steq_sym; eassumption ].
     apply dealloc_steq. now apply IH.
   - (* call *)
     intros m ps body args a b Hm Hlen Hs IH b' H; inversion H; subst.
     match goal with
-    | [ HG : G m = Some (MDecl _ _) |- _ ] =>
+    | [ HG : procs G m = Some (MDecl _ _) |- _ ] =>
         rewrite Hm in HG; injection HG as E1 E2; subst
     end.
     now apply IH.
   - (* uncall *)
     intros m ps body args a b Hm Hlen Hs IH b' H; inversion H; subst.
     match goal with
-    | [ HG : G m = Some (MDecl _ _) |- _ ] =>
+    | [ HG : procs G m = Some (MDecl _ _) |- _ ] =>
         rewrite Hm in HG; injection HG as E1 E2; subst
     end.
     now apply IH.
+  - (* object call *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7 b' H; inversion H; subst.
+    match goal with
+    | [ HA : os a x = Some ?l0 |- _ ] => assert (l0 = l) by congruence
+    end.
+    subst.
+    match goal with
+    | [ HD : dispatch _ _ m ?d0 |- _ ] => assert (d0 = d) by (eapply dispatch_det; eassumption)
+    end.
+    subst. now apply IH.
+  - (* object uncall *)
+    intros x m args a b l d H1 H2 H3 H4 IH H5 H6 H7 b' H; inversion H; subst.
+    match goal with
+    | [ HA : os a x = Some ?l0 |- _ ] => assert (l0 = l) by congruence
+    end.
+    subst.
+    match goal with
+    | [ HD : dispatch _ _ m ?d0 |- _ ] => assert (d0 = d) by (eapply dispatch_det; eassumption)
+    end.
+    subst. now apply IH.
   - (* loop tail: done *)
     intros e1 s1 s2 e2 a b H1 Hab b' H; inversion H; subst.
     + eauto.
@@ -1087,7 +1275,13 @@ Inductive wt (E : tenv) (S : sigenv) : stm -> Prop :=
     wt_exp E e1 -> wt_exp E e2 -> wt E S s ->
     wt E S (Slocal x e1 s e2)
 (* construct allocates a cell block: an object or a (fixed-size) array *)
-| WT_obj : forall x s, E x = Tobj \/ E x = Tarr -> wt E S s -> wt E S (Sobj x s)
+| WT_obj : forall cl x s,
+    E x = Tobj \/ E x = Tarr -> wt E S s -> wt E S (Sobj cl x s)
+| WT_show : forall e, wt_exp E e -> wt E S (Sshow e)
+| WT_ocall : forall x m args,
+    E x = Tobj -> wt E S (Socall x m args)
+| WT_ouncall : forall x m args,
+    E x = Tobj -> wt E S (Souncall x m args)
 | WT_call : forall m args,
     map E args = S m -> wt E S (Scall m args)
 | WT_uncall : forall m args,
@@ -1114,12 +1308,14 @@ Proof. intros E S s H; rewrite invert_invert; assumption. Qed.
 (** * Sanity checks: the semantics is not vacuous                      *)
 (* ------------------------------------------------------------------ *)
 
-Definition empty_env : menv := fun _ => None.
-Definition zero : state := St (fun _ => 0) (fun _ => None) 0%nat (fun _ _ => 0).
+Definition empty_env : menv := MEnv (fun _ => None) (fun _ => None).
+Definition zero : state :=
+  St (fun _ => 0) (fun _ => None) 0%nat (fun _ _ => 0) (fun _ => 0%nat).
 Definition X : id := 0%nat.
 Definition Y : id := 1%nat.
 Definition T : id := 2%nat.
 Definition O : id := 3%nat.
+Definition C0 : cid := 0%nat.   (* 例で使うクラス名 *)
 Definition F0 : field := 0%nat.
 
 (** X += 3 ; X <=> Y   leaves X = 0 and Y = 3 *)
@@ -1172,7 +1368,7 @@ Qed.
 (** An object block that writes a field, reads it back and clears it again.
     The heap grows during the block and is popped by `destruct`. *)
 Definition objprog : stm :=
-  Sobj O (Sseq (Sfassign O F0 MAdd (Cst 3))
+  Sobj C0 O (Sseq (Sfassign O F0 MAdd (Cst 3))
                (Sseq (Sassign X MAdd (Fld O F0))
                      (Sfassign O F0 MSub (Cst 3)))).
 
@@ -1193,6 +1389,7 @@ Proof.
     + reflexivity.
     + reflexivity.
     + intro f; simpl; destruct f; reflexivity.
+    + reflexivity.
     + apply steq_refl.
   - split; [ reflexivity | split; reflexivity ].
 Qed.
@@ -1201,7 +1398,7 @@ Qed.
       ar[0] += 5 ; ar[0] <=> ar[1] ; X += ar[1] ; ar[1] -= 5
     leaves X = 5 and the cells zero-cleared, so `destruct` may pop them. *)
 Definition arrprog : stm :=
-  Sobj O (Sseq (Saassign O (Cst 0) MAdd (Cst 5))
+  Sobj C0 O (Sseq (Saassign O (Cst 0) MAdd (Cst 5))
           (Sseq (Saswap O (Cst 0) O (Cst 1))
            (Sseq (Sassign X MAdd (Idx O (Cst 1)))
                  (Saassign O (Cst 1) MSub (Cst 5))))).
@@ -1226,6 +1423,7 @@ Proof.
     + reflexivity.
     + reflexivity.
     + intro f; simpl; destruct f as [ | [ | f ] ]; reflexivity.
+    + reflexivity.
     + apply steq_refl.
   - split; reflexivity.
 Qed.
@@ -1253,7 +1451,7 @@ Proof. apply wt_invert, ex_wt_array. Qed.
 
 (** copy C x y then uncopy C x y restores the state. *)
 Example ex_copy_uncopy :
-  exists b c, exec empty_env (Sobj O (Sseq (Scopy O Y) (Suncopy O Y))) zero b
+  exists b c, exec empty_env (Sobj C0 O (Sseq (Scopy O Y) (Suncopy O Y))) zero b
               /\ b == zero /\ c == zero.
 Proof.
   eexists. exists zero. split.
@@ -1265,13 +1463,15 @@ Proof.
     + reflexivity.
     + reflexivity.
     + intro f; reflexivity.
+    + reflexivity.
     + apply steq_refl.
   - split; [ | apply steq_refl ].
-    split; [ | split; [ | split ] ]; simpl.
+    steq_split; simpl.
     + intro y0; reflexivity.
     + intro y0; destruct y0 as [ | [ | [ | [ | y0 ] ] ] ]; reflexivity.
     + reflexivity.
     + intros l f Hl; lia.
+    + intros l Hl; lia.
 Qed.
 
 (** A method with a parameter, called by reference:
@@ -1280,7 +1480,9 @@ Qed.
 Definition M0 : mid := 0%nat.
 Definition P0 : id := 10%nat.
 Definition genv : menv :=
-  fun m => if Nat.eqb m M0 then Some (MDecl [P0] (Sassign P0 MAdd (Cst 1))) else None.
+  MEnv (fun m => if Nat.eqb m M0 then Some (MDecl [P0] (Sassign P0 MAdd (Cst 1)))
+                 else None)
+       (fun _ => None).
 
 Example ex_call_uncall :
   exists b c, exec genv (Scall M0 [X]) zero b
@@ -1293,11 +1495,96 @@ Proof.
   - eapply E_uncall; [ reflexivity | reflexivity | ].
     simpl. apply E_assign; [ simpl; tauto | apply steq_refl ].
   - reflexivity.
-  - split; [ | split; [ | split ] ]; simpl.
+  - steq_split; simpl.
     + intro y; unfold X; destruct y; reflexivity.
     + intro y; reflexivity.
     + reflexivity.
     + intros l f Hl; lia.
+    + hc_auto.
+Qed.
+
+(** **Subtype polymorphism.**  Class B inherits A and overrides `bump`;
+    class C inherits A and does not.  The very same statement
+    `call o::bump()` runs B's method when o was constructed as a B and A's
+    method when it was constructed as a C, because dispatch looks at the
+    *run-time* class recorded in the heap. *)
+Definition CA : cid := 1%nat.
+Definition CB : cid := 2%nat.
+Definition CC : cid := 3%nat.
+Definition MB : mid := 1%nat.      (* the method name "bump" *)
+Definition TH : id := 20%nat.      (* its receiver parameter, i.e. `this` *)
+
+Definition bumpA : mdecl := MDecl [TH] (Sfassign TH F0 MAdd (Cst 1)).
+Definition bumpB : mdecl := MDecl [TH] (Sfassign TH F0 MAdd (Cst 2)).
+
+Definition ctab : ctable := fun c =>
+  if Nat.eqb c CA then Some (CDecl None (fun m => if Nat.eqb m MB then Some bumpA else None))
+  else if Nat.eqb c CB then Some (CDecl (Some CA) (fun m => if Nat.eqb m MB then Some bumpB else None))
+  else if Nat.eqb c CC then Some (CDecl (Some CA) (fun _ => None))
+  else None.
+
+Definition oenv : menv := MEnv (fun _ => None) ctab.
+
+(** construct <c> o   call o::bump()   X += o.f   o.f -= <k>   destruct o *)
+Definition dispatch_prog (c : cid) (k : Z) : stm :=
+  Sobj c O (Sseq (Socall O MB [])
+            (Sseq (Sassign X MAdd (Fld O F0))
+                  (Sfassign O F0 MSub (Cst k)))).
+
+Example ex_dispatch_override :
+  exists b, exec oenv (dispatch_prog CB 2) zero b /\ vs b X = 2 /\ hn b = 0%nat.
+Proof.
+  eexists. split.
+  - eapply E_obj.
+    + reflexivity.
+    + eapply E_seq.
+      * eapply E_ocall with (l := 0%nat) (d := bumpB).
+        -- reflexivity.
+        -- simpl; lia.
+        -- eapply D_here; reflexivity.
+        -- simpl. eapply E_fassign with (l := 0%nat);
+             [ reflexivity | simpl; lia | apply steq_refl | reflexivity ].
+        -- reflexivity.
+        -- reflexivity.
+        -- reflexivity.
+      * eapply E_seq.
+        -- apply E_assign; [ simpl; tauto | apply steq_refl ].
+        -- eapply E_fassign with (l := 0%nat);
+             [ reflexivity | simpl; lia | apply steq_refl | reflexivity ].
+    + reflexivity.
+    + reflexivity.
+    + intro f; simpl; destruct f; reflexivity.
+    + reflexivity.
+    + apply steq_refl.
+  - split; reflexivity.
+Qed.
+
+Example ex_dispatch_inherited :
+  exists b, exec oenv (dispatch_prog CC 1) zero b /\ vs b X = 1 /\ hn b = 0%nat.
+Proof.
+  eexists. split.
+  - eapply E_obj.
+    + reflexivity.
+    + eapply E_seq.
+      * eapply E_ocall with (l := 0%nat) (d := bumpA).
+        -- reflexivity.
+        -- simpl; lia.
+        -- eapply D_up; [ reflexivity | reflexivity | eapply D_here; reflexivity ].
+        -- simpl. eapply E_fassign with (l := 0%nat);
+             [ reflexivity | simpl; lia | apply steq_refl | reflexivity ].
+        -- reflexivity.
+        -- reflexivity.
+        -- reflexivity.
+      * eapply E_seq.
+        -- apply E_assign; [ simpl; tauto | apply steq_refl ].
+        -- eapply E_fassign with (l := 0%nat);
+             [ reflexivity | simpl; lia | apply steq_refl | reflexivity ].
+    + reflexivity.
+    + reflexivity.
+    + intro f; simpl; destruct f; reflexivity.
+    + reflexivity.
+    + apply steq_refl.
+  - split; reflexivity.
 Qed.
 
 (** The side condition on assignment bites: `X += X` has no derivation. *)

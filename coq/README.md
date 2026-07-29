@@ -1,7 +1,7 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。単一ファイル `roopl.v`（1318 行，外部ライブラリ依存なし）。
+機械検証したもの。単一ファイル `roopl.v`（1607 行，外部ライブラリ依存なし）。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
 「文の反転で well-typedness が保存される」ことなども証明されているが，**証明支援系による
@@ -81,7 +81,9 @@ Record state := St {
 | `Sif e1 s1 s2 e2` | `if e1 then s1 else s2 fi e2` |
 | `Sloop e1 s1 s2 e2` | `from e1 do s1 loop s2 until e2` |
 | `Slocal x e1 s e2` | `local t x = e1  s  delocal t x = e2` |
-| `Sobj x s` | `construct C x  s  destruct x`（確保・ゼロクリア検査・解放つき） |
+| `Sobj cl x s` | `construct C x  s  destruct x`（確保・ゼロクリア検査・解放つき） |
+| `Socall x m args` / `Souncall x m args` | **`call x::m(...)` / `uncall x::m(...)`（動的束縛）** |
+| `Sshow e` | `show(e)` / `print("...")`（状態を変えないので恒等） |
 | `Scall m args` / `Suncall m args` | **引数つきメソッド**の `call` / `uncall`（参照渡し） |
 
 式は定数・整数変数・**フィールド参照 `x.f`**・**配列参照 `x[e]`**・二項演算。
@@ -102,8 +104,32 @@ Record state := St {
 オブジェクトを指す場合など）を構文で近似せずに直接表現したもの。`copy`/`uncopy` の `x ≠ y`
 は ROOPL++ の別名禁止規則そのもので，これが無いと `uncopy x x` が非可逆になる。
 
+### 継承とサブタイプ多相
+
+クラス表 `ctable` は各クラスの親クラスとメソッド表を持ち，`dispatch` 関係が
+**オブジェクトの実行時クラス**から継承チェーンを上へたどってメソッドを決める
+（`dispatch_det` で一意性も証明済み）。実行時クラスは状態の `hc : loc -> cid`
+に記録され，`construct C x` が確保時に書き込む。
+
+受け手の束縛は既存の名前替えで済む：メソッドの**第 1 仮引数が `this`** という規約に
+して，`call_body d x args = rename (mk_ren ps (x :: args)) body` とした。
+
+`ex_dispatch_override` / `ex_dispatch_inherited` が多相を示す：まったく同じ
+`call o::bump()` が，`o` を B（`bump` をオーバーライド）で構築すると 2 を，
+C（A から継承）で構築すると 1 を足す。
+
+呼出し規則には「呼出し中に受け手が動かない・ヒープ高さが釣り合う」という前提を
+置いている。ROOPL++ では `this` が代入不可でブロックが釣り合うので構文的に保証
+されるが，ここでは意味論の側で述べている。
+
 ### 含まれていないもの（今後の課題）
 
+- **`for x in (e1..e2) do s end`** — 可逆化には `from/loop` とは別の帰納法（数え上げ
+  チェーンの反転補題）が必要。さらに**本体が範囲式 `e1`/`e2` を変えないこと**が
+  可逆性の条件になるが，**この処理系はそれを検査していない**（例:
+  `for i in (0..n) do n += 1 end` は逆にできない）。形式化はこの条件を明示する形で
+  行うべきで、実装側にも検査を足す価値がある
+- **`switch` / `hctiws`** — case 列・`esac` 値・`break` の意味論が大きく，別途必要
 - **配列の長さと範囲検査**（`new int[n] xs` の `n` を状態に持たせていない）
 - **継承・サブタイプ・動的ディスパッチ**
 - **値渡し引数**（`call q(3)` のような式引数と，その不変性条件）
