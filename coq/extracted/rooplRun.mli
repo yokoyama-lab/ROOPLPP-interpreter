@@ -14,6 +14,8 @@ type comparison =
 
 val compOpp : comparison -> comparison
 
+val pred : nat -> nat
+
 val add : nat -> nat -> nat
 
 type positive =
@@ -37,6 +39,8 @@ module Nat :
   val leb : nat -> nat -> bool
 
   val ltb : nat -> nat -> bool
+
+  val max : nat -> nat -> nat
 
   val eq_dec : nat -> nat -> bool
  end
@@ -112,7 +116,11 @@ module Z :
 
 val map : ('a1 -> 'a2) -> 'a1 list -> 'a2 list
 
+val seq : nat -> nat -> nat list
+
 val in_dec : ('a1 -> 'a1 -> bool) -> 'a1 -> 'a1 list -> bool
+
+val forallb : ('a1 -> bool) -> 'a1 list -> bool
 
 type id = nat
 
@@ -128,6 +136,14 @@ type state = { vs : (id -> z); os : (id -> loc option); hn : nat;
                hp : (loc -> field -> z); hc : (loc -> cid) }
 
 val setv : state -> id -> z -> state
+
+val seto : state -> id -> loc option -> state
+
+val setf : state -> loc -> field -> z -> state
+
+val alloc : state -> cid -> id -> state
+
+val dealloc : state -> id -> state
 
 type binop =
 | Oadd
@@ -199,12 +215,19 @@ type cdecl =
 
 type ctable = cid -> cdecl option
 
+val call_body : mdecl -> id -> id list -> stm
+
 type menv = { procs : (mid -> mdecl option); classes : ctable }
 
-val run : nat -> menv -> stm -> state -> state option
+val dispatch_fn : nat -> ctable -> cid -> mid -> mdecl option
+
+val oloc_eqb : loc option -> loc option -> bool
+
+val run : nat -> menv -> stm -> state -> nat -> (state*nat) option
 
 val run_loop :
-  nat -> menv -> exp -> stm -> stm -> exp -> state -> state option
+  nat -> menv -> exp -> stm -> stm -> exp -> state -> nat -> (state*nat)
+  option
 
 val for_up : id -> exp -> exp -> stm -> stm
 

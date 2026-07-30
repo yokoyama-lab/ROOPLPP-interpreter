@@ -28,6 +28,12 @@ let compOpp = function
 | Lt -> Gt
 | Gt -> Lt
 
+(** val pred : nat -> nat **)
+
+let pred n0 = match n0 with
+| O -> n0
+| S u -> u
+
 module Coq__1 = struct
  (** val add : nat -> nat -> nat **)
 
@@ -78,6 +84,15 @@ module Nat =
 
   let ltb n0 m =
     leb (S n0) m
+
+  (** val max : nat -> nat -> nat **)
+
+  let rec max n0 m =
+    match n0 with
+    | O -> m
+    | S n' -> (match m with
+               | O -> n0
+               | S m' -> S (max n' m'))
 
   (** val eq_dec : nat -> nat -> bool **)
 
@@ -421,11 +436,23 @@ let rec map f = function
 | [] -> []
 | a::l0 -> (f a)::(map f l0)
 
+(** val seq : nat -> nat -> nat list **)
+
+let rec seq start = function
+| O -> []
+| S len0 -> start::(seq (S start) len0)
+
 (** val in_dec : ('a1 -> 'a1 -> bool) -> 'a1 -> 'a1 list -> bool **)
 
 let rec in_dec h a = function
 | [] -> false
 | y::l0 -> let s = h y a in if s then true else in_dec h a l0
+
+(** val forallb : ('a1 -> bool) -> 'a1 list -> bool **)
+
+let rec forallb f = function
+| [] -> true
+| a::l0 -> if f a then forallb f l0 else false
 
 type id = nat
 
@@ -445,6 +472,32 @@ type state = { vs : (id -> z); os : (id -> loc option); hn : nat;
 let setv a x v =
   { vs = (fun y -> if Nat.eqb x y then v else a.vs y); os = a.os; hn = a.hn;
     hp = a.hp; hc = a.hc }
+
+(** val seto : state -> id -> loc option -> state **)
+
+let seto a x r =
+  { vs = a.vs; os = (fun y -> if Nat.eqb x y then r else a.os y); hn = a.hn;
+    hp = a.hp; hc = a.hc }
+
+(** val setf : state -> loc -> field -> z -> state **)
+
+let setf a l f v =
+  { vs = a.vs; os = a.os; hn = a.hn; hp = (fun l' f' ->
+    if if Nat.eqb l l' then Nat.eqb f f' else false then v else a.hp l' f');
+    hc = a.hc }
+
+(** val alloc : state -> cid -> id -> state **)
+
+let alloc a c x =
+  { vs = a.vs; os = (fun y -> if Nat.eqb x y then Some a.hn else a.os y);
+    hn = (S a.hn); hp = (fun l f -> if Nat.eqb l a.hn then Z0 else a.hp l f);
+    hc = (fun l -> if Nat.eqb l a.hn then c else a.hc l) }
+
+(** val dealloc : state -> id -> state **)
+
+let dealloc a x =
+  { vs = a.vs; os = (fun y -> if Nat.eqb x y then None else a.os y); hn =
+    (pred a.hn); hp = a.hp; hc = a.hc }
 
 type binop =
 | Oadd
@@ -616,57 +669,164 @@ type cdecl =
 
 type ctable = cid -> cdecl option
 
+(** val call_body : mdecl -> id -> id list -> stm **)
+
+let call_body d x args =
+  let MDecl (ps, body) = d in rename (mk_ren ps (x::args)) body
+
 type menv = { procs : (mid -> mdecl option); classes : ctable }
 
-(** val run : nat -> menv -> stm -> state -> state option **)
+(** val dispatch_fn : nat -> ctable -> cid -> mid -> mdecl option **)
 
-let rec run fuel g s a =
+let rec dispatch_fn fuel t c m =
+  match fuel with
+  | O -> None
+  | S k ->
+    (match t c with
+     | Some c0 ->
+       let CDecl (p, ms) = c0 in
+       (match ms m with
+        | Some d -> Some d
+        | None -> (match p with
+                   | Some q -> dispatch_fn k t q m
+                   | None -> None))
+     | None -> None)
+
+(** val oloc_eqb : loc option -> loc option -> bool **)
+
+let oloc_eqb r1 r2 =
+  match r1 with
+  | Some l1 -> (match r2 with
+                | Some l2 -> Nat.eqb l1 l2
+                | None -> false)
+  | None -> (match r2 with
+             | Some _ -> false
+             | None -> true)
+
+(** val run : nat -> menv -> stm -> state -> nat -> (state*nat) option **)
+
+let rec run fuel g s a nf =
   match fuel with
   | O -> None
   | S k ->
     (match s with
-     | Sskip -> Some a
      | Sassign (x, o, e) ->
        if in_dec Nat.eq_dec x (fv e)
        then None
-       else Some (setv a x (mapp o (a.vs x) (eval e a)))
-     | Sswap (x, y) -> Some (setv (setv a x (a.vs y)) y (a.vs x))
+       else Some ((setv a x (mapp o (a.vs x) (eval e a))),nf)
+     | Sfassign (x, f, o, e) ->
+       (match a.os x with
+        | Some l ->
+          if Nat.ltb l a.hn
+          then let b = setf a l f (mapp o (a.hp l f) (eval e a)) in
+               if Z.eqb (eval e b) (eval e a)
+               then Some (b,(Nat.max (S f) nf))
+               else None
+          else None
+        | None -> None)
+     | Saassign (x, ei, o, e) ->
+       (match a.os x with
+        | Some l ->
+          if Nat.ltb l a.hn
+          then let i = Z.to_nat (eval ei a) in
+               let b = setf a l i (mapp o (a.hp l i) (eval e a)) in
+               if if Z.eqb (eval ei b) (eval ei a)
+                  then Z.eqb (eval e b) (eval e a)
+                  else false
+               then Some (b,(Nat.max (S i) nf))
+               else None
+          else None
+        | None -> None)
+     | Sswap (x, y) -> Some ((setv (setv a x (a.vs y)) y (a.vs x)),nf)
+     | Saswap (x, e1, y, e2) ->
+       (match a.os x with
+        | Some l1 ->
+          (match a.os y with
+           | Some l2 ->
+             if if Nat.ltb l1 a.hn then Nat.ltb l2 a.hn else false
+             then let i1 = Z.to_nat (eval e1 a) in
+                  let i2 = Z.to_nat (eval e2 a) in
+                  let b = setf (setf a l1 i1 (a.hp l2 i2)) l2 i2 (a.hp l1 i1)
+                  in
+                  if if Z.eqb (eval e1 b) (eval e1 a)
+                     then Z.eqb (eval e2 b) (eval e2 a)
+                     else false
+                  then Some (b,(Nat.max (S i2) (Nat.max (S i1) nf)))
+                  else None
+             else None
+           | None -> None)
+        | None -> None)
+     | Soswap (x, y) -> Some ((seto (seto a x (a.os y)) y (a.os x)),nf)
+     | Scopy (x, y) ->
+       if Nat.eqb x y
+       then None
+       else (match a.os y with
+             | Some _ -> None
+             | None -> Some ((seto a y (a.os x)),nf))
+     | Suncopy (x, y) ->
+       if Nat.eqb x y
+       then None
+       else if oloc_eqb (a.os x) (a.os y)
+            then Some ((seto a y None),nf)
+            else None
      | Sseq (s1, s2) ->
-       (match run k g s1 a with
-        | Some b -> run k g s2 b
+       (match run k g s1 a nf with
+        | Some p -> let b,nf1 = p in run k g s2 b nf1
         | None -> None)
      | Sif (e1, s1, s2, e2) ->
        if Z.eqb (eval e1 a) Z0
-       then (match run k g s2 a with
-             | Some b -> if Z.eqb (eval e2 b) Z0 then Some b else None
+       then (match run k g s2 a nf with
+             | Some p ->
+               let b,nf1 = p in
+               if Z.eqb (eval e2 b) Z0 then Some (b,nf1) else None
              | None -> None)
-       else (match run k g s1 a with
-             | Some b -> if Z.eqb (eval e2 b) Z0 then None else Some b
+       else (match run k g s1 a nf with
+             | Some p ->
+               let b,nf1 = p in
+               if Z.eqb (eval e2 b) Z0 then None else Some (b,nf1)
              | None -> None)
      | Sloop (e1, s1, s2, e2) ->
        if Z.eqb (eval e1 a) Z0
        then None
-       else (match run k g s1 a with
-             | Some b -> run_loop k g e1 s1 s2 e2 b
+       else (match run k g s1 a nf with
+             | Some p -> let b,nf1 = p in run_loop k g e1 s1 s2 e2 b nf1
              | None -> None)
      | Slocal (x, e1, s', e2) ->
        if in_dec Nat.eq_dec x (fv e1)
        then None
        else if in_dec Nat.eq_dec x (fv e2)
             then None
-            else (match run k g s' (setv a x (eval e1 a)) with
-                  | Some b ->
+            else (match run k g s' (setv a x (eval e1 a)) nf with
+                  | Some p ->
+                    let b,nf1 = p in
                     if Z.eqb (b.vs x) (eval e2 b)
-                    then Some (setv b x (a.vs x))
+                    then Some ((setv b x (a.vs x)),nf1)
                     else None
                   | None -> None)
-     | Sshow _ -> Some a
+     | Sobj (cl, x, s') ->
+       (match a.os x with
+        | Some _ -> None
+        | None ->
+          (match run k g s' (alloc a cl x) nf with
+           | Some p ->
+             let b,nf1 = p in
+             if if oloc_eqb (b.os x) (Some a.hn)
+                then if Nat.eqb b.hn (S a.hn)
+                     then if Nat.eqb (b.hc a.hn) cl
+                          then forallb (fun f -> Z.eqb (b.hp a.hn f) Z0)
+                                 (seq O nf1)
+                          else false
+                     else false
+                else false
+             then Some ((dealloc b x),nf1)
+             else None
+           | None -> None))
      | Scall (m, args) ->
        (match g.procs m with
         | Some m0 ->
           let MDecl (ps, body) = m0 in
           if Nat.eqb (length ps) (length args)
-          then run k g (rename (mk_ren ps args) body) a
+          then run k g (rename (mk_ren ps args) body) a nf
           else None
         | None -> None)
      | Suncall (m, args) ->
@@ -674,28 +834,71 @@ let rec run fuel g s a =
         | Some m0 ->
           let MDecl (ps, body) = m0 in
           if Nat.eqb (length ps) (length args)
-          then run k g (invert (rename (mk_ren ps args) body)) a
+          then run k g (invert (rename (mk_ren ps args) body)) a nf
           else None
         | None -> None)
-     | _ -> None)
+     | Socall (x, m, args) ->
+       (match a.os x with
+        | Some l ->
+          if Nat.ltb l a.hn
+          then (match dispatch_fn k g.classes (a.hc l) m with
+                | Some d ->
+                  (match run k g (call_body d x args) a nf with
+                   | Some p ->
+                     let b,nf1 = p in
+                     if if oloc_eqb (b.os x) (Some l)
+                        then if Nat.eqb (b.hc l) (a.hc l)
+                             then Nat.eqb b.hn a.hn
+                             else false
+                        else false
+                     then Some (b,nf1)
+                     else None
+                   | None -> None)
+                | None -> None)
+          else None
+        | None -> None)
+     | Souncall (x, m, args) ->
+       (match a.os x with
+        | Some l ->
+          if Nat.ltb l a.hn
+          then (match dispatch_fn k g.classes (a.hc l) m with
+                | Some d ->
+                  (match run k g (invert (call_body d x args)) a nf with
+                   | Some p ->
+                     let b,nf1 = p in
+                     if if oloc_eqb (b.os x) (Some l)
+                        then if Nat.eqb (b.hc l) (a.hc l)
+                             then Nat.eqb b.hn a.hn
+                             else false
+                        else false
+                     then Some (b,nf1)
+                     else None
+                   | None -> None)
+                | None -> None)
+          else None
+        | None -> None)
+     | _ -> Some (a,nf))
 
 (** val run_loop :
-    nat -> menv -> exp -> stm -> stm -> exp -> state -> state option **)
+    nat -> menv -> exp -> stm -> stm -> exp -> state -> nat -> (state*nat)
+    option **)
 
-and run_loop fuel g e1 s1 s2 e2 a =
+and run_loop fuel g e1 s1 s2 e2 a nf =
   match fuel with
   | O -> None
   | S k ->
     if Z.eqb (eval e2 a) Z0
-    then (match run k g s2 a with
-          | Some b ->
+    then (match run k g s2 a nf with
+          | Some p ->
+            let b,nf1 = p in
             if Z.eqb (eval e1 b) Z0
-            then (match run k g s1 b with
-                  | Some c -> run_loop k g e1 s1 s2 e2 c
+            then (match run k g s1 b nf1 with
+                  | Some p0 ->
+                    let c,nf2 = p0 in run_loop k g e1 s1 s2 e2 c nf2
                   | None -> None)
             else None
           | None -> None)
-    else Some a
+    else Some (a,nf)
 
 (** val for_up : id -> exp -> exp -> stm -> stm **)
 

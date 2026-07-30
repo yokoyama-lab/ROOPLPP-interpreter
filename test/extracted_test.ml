@@ -47,6 +47,13 @@ let name_of_id (i : R.nat) : string =
   let rec go = function R.O -> 0 | R.S n -> 1 + go n in
   "v" ^ string_of_int (go i)
 
+
+(* 形式側のフィールド番号は、実装側では名前 f0, f1, … に対応させる *)
+let field_name (f : R.nat) : string =
+  let rec go = function R.O -> 0 | R.S n -> 1 + go n in
+  "f" ^ string_of_int (go f)
+
+
 let rec exp_of_formal (e : R.exp) : exp =
   match e with
   | R.Cst z -> Const (int_of_z z)
@@ -57,9 +64,23 @@ let rec exp_of_formal (e : R.exp) : exp =
        | R.Oeq -> Eq | R.Olt -> Lt
      in
      Binary (op, exp_of_formal e1, exp_of_formal e2)
-  | R.Fld _ | R.Idx _ -> failwith "not in the integer fragment"
+  | R.Fld (x, f) -> Dot (Var (name_of_id x), Var (field_name f))
+  | R.Idx _ -> failwith "arrays are not in the differential harness"
 
 let obj_of_id (x : R.nat) : obj = VarArray (name_of_id x, None)
+
+(* 形式側のフィールド番号は、実装側では名前 f0, f1, … に対応させる *)
+let field_name (f : R.nat) : string =
+  let rec go = function R.O -> 0 | R.S n -> 1 + go n in
+  "f" ^ string_of_int (go f)
+
+let obj_field (x : R.nat) (f : R.nat) : obj =
+  InstVar (obj_of_id x, VarArray (field_name f, None))
+
+(* オブジェクトブロックのクラス名 *)
+let class_name (c : R.nat) : string =
+  let rec go = function R.O -> 0 | R.S n -> 1 + go n in
+  "C" ^ string_of_int (go c)
 
 let modop_of_formal = function
   | R.MAdd -> ModAdd | R.MSub -> ModSub | R.MXor -> ModXor
@@ -69,6 +90,11 @@ let rec stm_of_formal (s : R.stm) : stm =
   | R.Sskip -> Skip
   | R.Sassign (x, o, e) -> Assign (obj_of_id x, modop_of_formal o, exp_of_formal e)
   | R.Sswap (x, y) -> Swap (obj_of_id x, obj_of_id y)
+  | R.Soswap (x, y) -> Swap (obj_of_id x, obj_of_id y)
+  | R.Sfassign (x, f, o, e) ->
+     Assign (obj_field x f, modop_of_formal o, exp_of_formal e)
+  | R.Sobj (cl, x, s') ->
+     ObjectBlock (class_name cl, name_of_id x, stms_of_formal s')
   | R.Sseq _ -> failwith "sequences are flattened by stms_of_formal"
   | R.Sif (e1, s1, s2, e2) ->
      Conditional (exp_of_formal e1, stms_of_formal s1, stms_of_formal s2,
@@ -97,6 +123,14 @@ and stms_of_formal (s : R.stm) : stm list =
 
 (* ---- 両エンジンの実行 ------------------------------------------------ *)
 
+(* オブジェクトブロックの相手になるクラス。形式側は「クラス名＋フィールド番号」
+   しか持たないので、実装側では f0.. という名前のフィールドを持つクラスを
+   用意しておく（使わないプログラムには影響しない）。 *)
+let object_classes : cDecl list =
+  [ CDecl ("C0", None,
+           [ Decl (IntegerType, "f0"); Decl (IntegerType, "f1") ],
+           [ MDecl ("noop", [], [ Skip ]) ]) ]
+
 let zero_state : R.state =
   { R.vs = (fun _ -> R.Z0); R.os = (fun _ -> None); R.hn = R.O;
     R.hp = (fun _ _ -> R.Z0); R.hc = (fun _ -> R.O) }
@@ -104,17 +138,20 @@ let zero_state : R.state =
 let empty_menv : R.menv = { R.procs = (fun _ -> None); R.classes = (fun _ -> None) }
 
 (* 検証済みインタプリタで走らせ、指定した変数の値を読む *)
+(* run は状態と一緒に「書き込んだフィールド番号の上限」を返す。初期状態は
+   ヒープが空なので、上限 0 から始めればよい（roopl.v の above_zero_heap）。 *)
 let run_verified ?(env = empty_menv) (s : R.stm) (vars : int list) : int list option =
-  match R.run (nat_of_int 20000) env s zero_state with
+  match R.run (nat_of_int 20000) env s zero_state R.O with
   | None -> None
-  | Some st -> Some (List.map (fun v -> int_of_z (st.R.vs (nat_of_int v))) vars)
+  | Some (st, _) -> Some (List.map (fun v -> int_of_z (st.R.vs (nat_of_int v))) vars)
 
 (* 同じプログラムをこの処理系で走らせる *)
 let run_interpreter_stms ?(methods = []) (stms : stm list) (vars : int list)
     : int list option =
   let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
   let main = MDecl ("main", [], stms) in
-  let prog = Prog [ CDecl ("Program", None, fields, main :: methods) ] in
+  let prog = Prog (CDecl ("Program", None, fields, main :: methods)
+                   :: object_classes) in
   match (try Some (Eval.eval_prog prog) with
          | Util.Runtime_error _ | Failure _ -> None) with
   | None -> None
@@ -133,7 +170,8 @@ let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list opt
 let interpreter_error (stms : stm list) (vars : int list) : string option =
   let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
   let prog =
-    Prog [ CDecl ("Program", None, fields, [ MDecl ("main", [], stms) ]) ] in
+    Prog (CDecl ("Program", None, fields, [ MDecl ("main", [], stms) ])
+          :: object_classes) in
   match Eval.eval_prog prog with
   | _ -> None
   | exception Util.Runtime_error m -> Some m
@@ -306,6 +344,45 @@ let bad_for_body_r =
 let o_for_bad = [ For (oid 2, Const 1, Const 3, bad_for_body_o) ]
 let r_for_bad = R.for_up (v 2) (c 1) (c 3) bad_for_body_r
 
+(* ---- オブジェクトブロック（run が扱えるようになった範囲） -------------
+
+   construct C x … destruct x は「確保 → 体 → 全フィールドのゼロクリア検査
+   → 解放」。検証済みインタプリタは、書き込んだフィールド番号の上限を
+   持ち回ることでゼロクリア検査を有限の検査に落としている。 *)
+
+(* construct C0 v5  v5.f0 += 3  v0 += v5.f0  v5.f0 -= 3  destruct v5 *)
+let p_object =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 3),
+                  R.Sseq (R.Sassign (v 0, R.MAdd, R.Fld (v 5, nat_of_int 0)),
+                          R.Sfassign (v 5, nat_of_int 0, R.MSub, c 3))))
+
+(* 2 つのフィールドを使い、片方を消し忘れる（両方で落ちるはず） *)
+let p_object_dirty =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sseq (R.Sfassign (v 5, nat_of_int 1, R.MAdd, c 7),
+                  R.Sassign (v 0, R.MAdd, R.Fld (v 5, nat_of_int 1))))
+
+(* 入れ子のオブジェクトブロック *)
+let p_object_nested =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sobj (nat_of_int 0, v 6,
+                  R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 2),
+                          R.Sseq (R.Sfassign (v 6, nat_of_int 0, R.MAdd, c 5),
+                                  R.Sseq (R.Sassign (v 0, R.MAdd,
+                                                     R.Fld (v 6, nat_of_int 0)),
+                                          R.Sseq (R.Sfassign (v 6, nat_of_int 0,
+                                                              R.MSub, c 5),
+                                                  R.Sfassign (v 5, nat_of_int 0,
+                                                              R.MAdd, c (-2))))))))
+
+(* オブジェクト参照の swap。相手も束縛されている必要があるので、内側の
+   ブロック変数と入れ替えて戻す *)
+let p_object_swap =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sobj (nat_of_int 0, v 6,
+                  R.Sseq (R.Soswap (v 5, v 6), R.Soswap (v 5, v 6))))
+
 let suite = "test suite for the extracted verified interpreter" >::: [
       agree "arithmetic" p_arith [ 0; 1 ];
       agree "swap" p_swap [ 0; 1 ];
@@ -332,12 +409,12 @@ let suite = "test suite for the extracted verified interpreter" >::: [
 
       (* 可逆性: 逆プログラムを走らせると元に戻る（run_invert / run_injective） *)
       "running the inverse undoes the program" >:: (fun _ ->
-        match R.run (nat_of_int 20000) empty_menv p_arith zero_state with
+        match R.run (nat_of_int 20000) empty_menv p_arith zero_state R.O with
         | None -> assert_failure "forward run failed"
-        | Some st ->
-           (match R.run (nat_of_int 20000) empty_menv (R.invert p_arith) st with
+        | Some (st, nf) ->
+           (match R.run (nat_of_int 20000) empty_menv (R.invert p_arith) st nf with
             | None -> assert_failure "backward run failed"
-            | Some st2 ->
+            | Some (st2, _) ->
                assert_equal ~printer:string_of_int 0 (int_of_z (st2.R.vs (v 0)));
                assert_equal ~printer:string_of_int 0 (int_of_z (st2.R.vs (v 1)))));
 
@@ -366,10 +443,23 @@ let suite = "test suite for the extracted verified interpreter" >::: [
             assert_bool ("unexpected message: " ^ m)
               (Diagnostics.contains ~needle:"must not change" m)));
 
-      (* 形式化の範囲外は None を返す（黙って間違えない） *)
-      "statements outside the fragment are rejected" >:: (fun _ ->
+      (* オブジェクトブロック *)
+      agree "object block (field written and cleared)" p_object [ 0 ];
+      agree "object block leaving a field dirty" p_object_dirty [ 0 ];
+      agree "nested object blocks" p_object_nested [ 0 ];
+      agree "object reference swap inside a block" p_object_swap [ 0 ];
+
+      "the verified interpreter runs object blocks" >:: (fun _ ->
+        assert_equal ~printer (Some [ 3 ]) (run_verified p_object [ 0 ]);
+        assert_equal ~printer (Some [ 5 ]) (run_verified p_object_nested [ 0 ]);
+        assert_equal ~printer None (run_verified p_object_dirty [ 0 ]));
+
+      (* ゼロクリアを忘れたオブジェクトブロックは意味論どおり落ちる *)
+      "an object block that leaves a field dirty is rejected" >:: (fun _ ->
         assert_equal ~printer None
-          (run_verified (R.Sobj (nat_of_int 0, v 0, R.Sskip)) [ 0 ]));
+          (run_verified
+             (R.Sobj (nat_of_int 0, v 5,
+                      R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 3))) [ 0 ]));
     ]
 
 let _ = run_test_tt_main suite

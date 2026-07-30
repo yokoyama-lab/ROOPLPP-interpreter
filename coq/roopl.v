@@ -1233,54 +1233,198 @@ Qed.
     in this model.  Giving each object a cell count would make it decidable
     -- see coq/README.md. *)
 
-Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) {struct fuel}
-  : option state :=
+(** 動的束縛の計算版。関係 [dispatch] は継承の鎖をさかのぼるので、
+    鎖の長さぶんの燃料で打ち切る。 *)
+Fixpoint dispatch_fn (fuel : nat) (T : ctable) (c : cid) (m : mid)
+  : option mdecl :=
+  match fuel with
+  | O => None
+  | S k =>
+      match T c with
+      | Some (CDecl p ms) =>
+          match ms m with
+          | Some d => Some d
+          | None =>
+              match p with
+              | Some q => dispatch_fn k T q m
+              | None => None
+              end
+          end
+      | None => None
+      end
+  end.
+
+Lemma dispatch_fn_sound : forall fuel T c m d,
+  dispatch_fn fuel T c m = Some d -> dispatch T c m d.
+Proof.
+  induction fuel as [ | k IH ]; intros T c m d H; simpl in H; [ discriminate | ].
+  destruct (T c) as [ [ p ms ] | ] eqn:Hc; [ | discriminate ].
+  destruct (ms m) as [ d0 | ] eqn:Hm.
+  - injection H as Heq; subst d0. eapply D_here; eassumption.
+  - destruct p as [ q | ]; [ | discriminate ].
+    eapply D_up; [ eassumption | eassumption | now apply IH ].
+Qed.
+
+(** オブジェクト参照の等価判定（[copy]/[uncopy] の副条件に要る）。 *)
+Definition oloc_eqb (r1 r2 : option loc) : bool :=
+  match r1, r2 with
+  | None, None => true
+  | Some l1, Some l2 => Nat.eqb l1 l2
+  | _, _ => false
+  end.
+
+Lemma oloc_eqb_eq : forall r1 r2, oloc_eqb r1 r2 = true -> r1 = r2.
+Proof.
+  intros [ l1 | ] [ l2 | ] H; simpl in H; try discriminate; [ | reflexivity ].
+  apply Nat.eqb_eq in H; now subst.
+Qed.
+
+(** 実行中に書き込みうるフィールド番号の上限。オブジェクトブロックの出口で
+    「確保した対象の全フィールドがゼロ」を確かめる必要があるが、フィールドは
+    自然数なので [forall f, hp b l f = 0] はそのままでは決定できない。そこで
+    **上限 [nf] を実行と一緒に持ち回り**、[nf] 未満だけを実際に調べる
+    （[nf] 以上は確保時の 0 のまま、という不変条件 [above] が保証する）。 *)
+Definition above (nf : nat) (a : state) : Prop :=
+  forall l f, (nf <= f)%nat -> hp a l f = 0.
+
+Lemma above_setv : forall nf a x v, above nf a -> above nf (setv a x v).
+Proof. intros nf a x v H l f Hf; apply H; assumption. Qed.
+
+Lemma above_seto : forall nf a x r, above nf a -> above nf (seto a x r).
+Proof. intros nf a x r H l f Hf; apply H; assumption. Qed.
+
+Lemma above_setf : forall nf a l f v,
+  above nf a -> above (Nat.max (S f) nf) (setf a l f v).
+Proof.
+  intros nf a l0 f0 v H l f Hf; simpl.
+  destruct (Nat.eqb l0 l) eqn:El; destruct (Nat.eqb f0 f) eqn:Ef; simpl;
+    try (apply H; lia).
+  apply Nat.eqb_eq in Ef; subst f0; lia.
+Qed.
+
+Lemma above_mono : forall nf nf' a,
+  (nf <= nf')%nat -> above nf a -> above nf' a.
+Proof. intros nf nf' a Hle H l f Hf; apply H; lia. Qed.
+
+Lemma above_alloc : forall nf a cl x, above nf a -> above nf (alloc a cl x).
+Proof.
+  intros nf a cl x H l f Hf; simpl.
+  destruct (Nat.eqb l (hn a)); [ reflexivity | apply H; assumption ].
+Qed.
+
+Lemma above_dealloc : forall nf a x, above nf a -> above nf (dealloc a x).
+Proof. intros nf a x H l f Hf; apply H; assumption. Qed.
+
+(** 実行可能インタプリタ。状態と一緒にフィールド番号の上限を返す。 *)
+Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
+              {struct fuel} : option (state * nat) :=
   match fuel with
   | O => None
   | S k =>
     match s with
-    | Sskip => Some a
-    | Sshow _ => Some a
+    | Sskip => Some (a, nf)
+    | Sshow _ => Some (a, nf)
     | Sassign x o e =>
         if in_dec Nat.eq_dec x (fv e) then None
-        else Some (setv a x (mapp o (vs a x) (eval e a)))
-    | Sswap x y => Some (setv (setv a x (vs a y)) y (vs a x))
+        else Some (setv a x (mapp o (vs a x) (eval e a)), nf)
+    | Sswap x y => Some (setv (setv a x (vs a y)) y (vs a x), nf)
+    (* フィールド・配列・オブジェクト参照。副条件はどれも決定可能で、
+       規則が [b == …] の形で許す状態のうち、右辺そのものを返せばよい。 *)
+    | Sfassign x f o e =>
+        match os a x with
+        | Some l =>
+            if Nat.ltb l (hn a) then
+              let b := setf a l f (mapp o (hp a l f) (eval e a)) in
+              if Z.eqb (eval e b) (eval e a)
+              then Some (b, Nat.max (S f) nf) else None
+            else None
+        | None => None
+        end
+    | Saassign x ei o e =>
+        match os a x with
+        | Some l =>
+            if Nat.ltb l (hn a) then
+              let i := Z.to_nat (eval ei a) in
+              let b := setf a l i (mapp o (hp a l i) (eval e a)) in
+              if andb (Z.eqb (eval ei b) (eval ei a)) (Z.eqb (eval e b) (eval e a))
+              then Some (b, Nat.max (S i) nf) else None
+            else None
+        | None => None
+        end
+    | Saswap x e1 y e2 =>
+        match os a x, os a y with
+        | Some l1, Some l2 =>
+            if andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a)) then
+              let i1 := Z.to_nat (eval e1 a) in
+              let i2 := Z.to_nat (eval e2 a) in
+              let b := setf (setf a l1 i1 (hp a l2 i2)) l2 i2 (hp a l1 i1) in
+              if andb (Z.eqb (eval e1 b) (eval e1 a)) (Z.eqb (eval e2 b) (eval e2 a))
+              then Some (b, Nat.max (S i2) (Nat.max (S i1) nf)) else None
+            else None
+        | _, _ => None
+        end
+    | Soswap x y => Some (seto (seto a x (os a y)) y (os a x), nf)
+    | Scopy x y =>
+        if Nat.eqb x y then None
+        else match os a y with
+             | None => Some (seto a y (os a x), nf)
+             | Some _ => None
+             end
+    | Suncopy x y =>
+        if Nat.eqb x y then None
+        else if oloc_eqb (os a x) (os a y) then Some (seto a y None, nf) else None
     | Sseq s1 s2 =>
-        match run k G s1 a with
-        | Some b => run k G s2 b
+        match run k G s1 a nf with
+        | Some (b, nf1) => run k G s2 b nf1
         | None => None
         end
     | Sif e1 s1 s2 e2 =>
         if Z.eqb (eval e1 a) 0
-        then match run k G s2 a with
-             | Some b => if Z.eqb (eval e2 b) 0 then Some b else None
+        then match run k G s2 a nf with
+             | Some (b, nf1) => if Z.eqb (eval e2 b) 0 then Some (b, nf1) else None
              | None => None
              end
-        else match run k G s1 a with
-             | Some b => if Z.eqb (eval e2 b) 0 then None else Some b
+        else match run k G s1 a nf with
+             | Some (b, nf1) => if Z.eqb (eval e2 b) 0 then None else Some (b, nf1)
              | None => None
              end
     | Sloop e1 s1 s2 e2 =>
         if Z.eqb (eval e1 a) 0 then None
-        else match run k G s1 a with
-             | Some b => run_loop k G e1 s1 s2 e2 b
+        else match run k G s1 a nf with
+             | Some (b, nf1) => run_loop k G e1 s1 s2 e2 b nf1
              | None => None
              end
     | Slocal x e1 s' e2 =>
         if in_dec Nat.eq_dec x (fv e1) then None
         else if in_dec Nat.eq_dec x (fv e2) then None
-        else match run k G s' (setv a x (eval e1 a)) with
-             | Some b =>
+        else match run k G s' (setv a x (eval e1 a)) nf with
+             | Some (b, nf1) =>
                  if Z.eqb (vs b x) (eval e2 b)
-                 then Some (setv b x (vs a x))
+                 then Some (setv b x (vs a x), nf1)
                  else None
              | None => None
              end
+    (* オブジェクトブロック。出口の「全フィールドがゼロ」は、持ち回った上限
+       [nf1] 未満を実際に調べれば足りる（[above] より [nf1] 以上は 0）。 *)
+    | Sobj cl x s' =>
+        match os a x with
+        | None =>
+            match run k G s' (alloc a cl x) nf with
+            | Some (b, nf1) =>
+                if andb (oloc_eqb (os b x) (Some (hn a)))
+                   (andb (Nat.eqb (hn b) (S (hn a)))
+                   (andb (Nat.eqb (hc b (hn a)) cl)
+                         (forallb (fun f => Z.eqb (hp b (hn a) f) 0) (seq 0 nf1))))
+                then Some (dealloc b x, nf1) else None
+            | None => None
+            end
+        | Some _ => None
+        end
     | Scall m args =>
         match procs G m with
         | Some (MDecl ps body) =>
             if Nat.eqb (length ps) (length args)
-            then run k G (rename (mk_ren ps args) body) a
+            then run k G (rename (mk_ren ps args) body) a nf
             else None
         | None => None
         end
@@ -1288,120 +1432,403 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) {struct fuel}
         match procs G m with
         | Some (MDecl ps body) =>
             if Nat.eqb (length ps) (length args)
-            then run k G (invert (rename (mk_ren ps args) body)) a
+            then run k G (invert (rename (mk_ren ps args) body)) a nf
             else None
         | None => None
         end
-    | _ => None
+    (* 動的束縛つきのメソッド呼出し。受け手が呼出し中に動かないことと
+       ヒープの高さが釣り合うことを、出口で確かめる。 *)
+    | Socall x m args =>
+        match os a x with
+        | Some l =>
+            if Nat.ltb l (hn a) then
+              match dispatch_fn k (classes G) (hc a l) m with
+              | Some d =>
+                  match run k G (call_body d x args) a nf with
+                  | Some (b, nf1) =>
+                      if andb (oloc_eqb (os b x) (Some l))
+                              (andb (Nat.eqb (hc b l) (hc a l))
+                                    (Nat.eqb (hn b) (hn a)))
+                      then Some (b, nf1) else None
+                  | None => None
+                  end
+              | None => None
+              end
+            else None
+        | None => None
+        end
+    | Souncall x m args =>
+        match os a x with
+        | Some l =>
+            if Nat.ltb l (hn a) then
+              match dispatch_fn k (classes G) (hc a l) m with
+              | Some d =>
+                  match run k G (invert (call_body d x args)) a nf with
+                  | Some (b, nf1) =>
+                      if andb (oloc_eqb (os b x) (Some l))
+                              (andb (Nat.eqb (hc b l) (hc a l))
+                                    (Nat.eqb (hn b) (hn a)))
+                      then Some (b, nf1) else None
+                  | None => None
+                  end
+              | None => None
+              end
+            else None
+        | None => None
+        end
     end
   end
 
 with run_loop (fuel : nat) (G : menv) (e1 : exp) (s1 s2 : stm) (e2 : exp)
-              (a : state) {struct fuel} : option state :=
+              (a : state) (nf : nat) {struct fuel} : option (state * nat) :=
   match fuel with
   | O => None
   | S k =>
     if Z.eqb (eval e2 a) 0
-    then match run k G s2 a with
-         | Some b =>
+    then match run k G s2 a nf with
+         | Some (b, nf1) =>
              if Z.eqb (eval e1 b) 0
-             then match run k G s1 b with
-                  | Some c => run_loop k G e1 s1 s2 e2 c
+             then match run k G s1 b nf1 with
+                  | Some (c, nf2) => run_loop k G e1 s1 s2 e2 c nf2
                   | None => None
                   end
              else None
          | None => None
          end
-    else Some a
+    else Some (a, nf)
   end.
 
-Lemma run_sound_aux : forall fuel G,
-  (forall s a b, run fuel G s a = Some b -> exec G s a b)
-  /\ (forall e1 s1 s2 e2 a b,
-        run_loop fuel G e1 s1 s2 e2 a = Some b -> loopx G e1 s1 s2 e2 a b).
+(** 持ち回った上限は本物：実行後の状態でも、上限以上のフィールドは 0 のまま。 *)
+Lemma run_above : forall fuel G,
+  (forall s a nf b nf', run fuel G s a nf = Some (b, nf') ->
+     above nf a -> above nf' b)
+  /\ (forall e1 s1 s2 e2 a nf b nf',
+        run_loop fuel G e1 s1 s2 e2 a nf = Some (b, nf') ->
+        above nf a -> above nf' b).
 Proof.
   induction fuel as [ | k IH ]; intro G.
   - split; intros; discriminate.
   - destruct (IH G) as [ IHrun IHloop ]. split.
-    + intros s a b H; destruct s; simpl in H; try discriminate.
-      * (* skip *) injection H as Heq; subst b; apply E_skip, steq_refl.
+    + intros s a nf b nf' H Ha; destruct s; simpl in H;
+        (* 状態を作らない文・オブジェクト参照だけを動かす文 *)
+        try (injection H as Heq Hn; subst;
+             solve [ assumption
+                   | now apply above_setv
+                   | now repeat apply above_setv
+                   | now apply above_seto
+                   | now repeat apply above_seto ]).
       * (* assign *)
         destruct (in_dec Nat.eq_dec x (fv e)); [ discriminate | ].
-        injection H as Heq; subst b. apply E_assign; [ assumption | apply steq_refl ].
-      * (* swap *) injection H as Heq; subst b. apply E_swap, steq_refl.
+        injection H as Heq Hn; subst; now apply above_setv.
+      * (* field assignment *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (Z.eqb _ _) eqn:He; try discriminate.
+        injection H as Heq Hn; subst; now apply above_setf.
+      * (* array assignment *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (andb _ _) eqn:He; try discriminate.
+        injection H as Heq Hn; subst; now apply above_setf.
+      * (* array element swap *)
+        destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
+        destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
+        destruct (andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a))) eqn:Hl;
+          try discriminate.
+        destruct (andb (Z.eqb _ _) (Z.eqb _ _)) eqn:He; try discriminate.
+        injection H as Heq Hn; subst.
+        (* 上限は setf の適用順（外側が e2 の添字）に合わせてある *)
+        apply above_setf, above_setf; assumption.
+      * (* copy *)
+        destruct (Nat.eqb x y); try discriminate.
+        destruct (os a y) as [ l | ] eqn:Hy; try discriminate.
+        injection H as Heq Hn; subst; now apply above_seto.
+      * (* uncopy *)
+        destruct (Nat.eqb x y); try discriminate.
+        destruct (oloc_eqb (os a x) (os a y)); try discriminate.
+        injection H as Heq Hn; subst; now apply above_seto.
       * (* seq *)
-        destruct (run k G s1 a) as [ m | ] eqn:R1; [ | discriminate ].
-        eapply E_seq; [ apply IHrun; eassumption | apply IHrun; assumption ].
+        destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R1; try discriminate.
+        eapply IHrun; [ eassumption | ]. eapply IHrun; eassumption.
+      * (* if *)
+        destruct (Z.eqb (eval e1 a) 0) eqn:E1.
+        -- destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
+           destruct (Z.eqb (eval e2 m) 0); try discriminate.
+           injection H as Heq Hn; subst. eapply IHrun; eassumption.
+        -- destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
+           destruct (Z.eqb (eval e2 m) 0); try discriminate.
+           injection H as Heq Hn; subst. eapply IHrun; eassumption.
+      * (* loop *)
+        destruct (Z.eqb (eval e1 a) 0); try discriminate.
+        destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
+        eapply IHloop; [ eassumption | ]. eapply IHrun; eassumption.
+      * (* local *)
+        destruct (in_dec Nat.eq_dec x (fv e1)); try discriminate.
+        destruct (in_dec Nat.eq_dec x (fv e2)); try discriminate.
+        destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (Z.eqb (vs m x) (eval e2 m)); try discriminate.
+        injection H as Heq Hn; subst.
+        apply above_setv. eapply IHrun; [ eassumption | now apply above_setv ].
+      * (* object block *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (run k G s (alloc a _ x) nf) as [ [ m n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst.
+        apply above_dealloc.
+        eapply IHrun; [ eassumption | now apply above_alloc ].
+      * (* call *)
+        destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; try discriminate.
+        destruct (Nat.eqb (length ps) (length args)); try discriminate.
+        eapply IHrun; eassumption.
+      * (* uncall *)
+        destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; try discriminate.
+        destruct (Nat.eqb (length ps) (length args)); try discriminate.
+        eapply IHrun; eassumption.
+      * (* object call *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)); try discriminate.
+        destruct (dispatch_fn k (classes G) (hc a l) m) as [ d | ];
+          try discriminate.
+        destruct (run k G (call_body d x args) a nf) as [ [ c n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst. eapply IHrun; eassumption.
+      * (* object uncall *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)); try discriminate.
+        destruct (dispatch_fn k (classes G) (hc a l) m) as [ d | ];
+          try discriminate.
+        destruct (run k G (invert (call_body d x args)) a nf) as [ [ c n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst. eapply IHrun; eassumption.
+    + intros e1 s1 s2 e2 a nf b nf' H Ha; simpl in H.
+      destruct (Z.eqb (eval e2 a) 0) eqn:E2.
+      * destruct (run k G s2 a nf) as [ [ x1 n1 ] | ] eqn:R2; try discriminate.
+        destruct (Z.eqb (eval e1 x1) 0) eqn:E1; try discriminate.
+        destruct (run k G s1 x1 n1) as [ [ x2 n2 ] | ] eqn:R1; try discriminate.
+        eapply IHloop; [ eassumption | ].
+        eapply IHrun; [ eassumption | ]. eapply IHrun; eassumption.
+      * injection H as Heq Hn; subst; assumption.
+Qed.
+
+(** 上限までのゼロ検査を、有限な [seq] の走査として実行する。 *)
+Lemma forallb_seq_zero : forall n b l,
+  forallb (fun f => Z.eqb (hp b l f) 0) (seq 0 n) = true ->
+  forall f, (f < n)%nat -> hp b l f = 0.
+Proof.
+  intros n b l H f Hf.
+  rewrite forallb_forall in H.
+  apply Z.eqb_eq, H, in_seq; lia.
+Qed.
+
+Lemma run_sound_aux : forall fuel G,
+  (forall s a nf b nf',
+     run fuel G s a nf = Some (b, nf') -> above nf a -> exec G s a b)
+  /\ (forall e1 s1 s2 e2 a nf b nf',
+        run_loop fuel G e1 s1 s2 e2 a nf = Some (b, nf') -> above nf a ->
+        loopx G e1 s1 s2 e2 a b).
+Proof.
+  induction fuel as [ | k IH ]; intro G.
+  - split; intros; discriminate.
+  - destruct (IH G) as [ IHrun IHloop ]. split.
+    + intros s a nf b nf' H Ha; destruct s; simpl in H; try discriminate.
+      * (* skip *) injection H as Heq Hn; subst b; apply E_skip, steq_refl.
+      * (* assign *)
+        destruct (in_dec Nat.eq_dec x (fv e)); [ discriminate | ].
+        injection H as Heq Hn; subst b.
+        apply E_assign; [ assumption | apply steq_refl ].
+      * (* field assignment *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (Z.eqb _ _) eqn:He; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.ltb_lt in Hl. apply Z.eqb_eq in He.
+        eapply E_fassign; [ eassumption | assumption | apply steq_refl | assumption ].
+      * (* array assignment *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (andb _ _) eqn:He; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.ltb_lt in Hl.
+        apply andb_true_iff in He as [ Hi Hv ].
+        apply Z.eqb_eq in Hi. apply Z.eqb_eq in Hv.
+        eapply E_aassign;
+          [ eassumption | assumption | apply steq_refl | assumption | assumption ].
+      * (* swap *) injection H as Heq Hn; subst b. apply E_swap, steq_refl.
+      * (* array element swap *)
+        destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
+        destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
+        destruct (andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a))) eqn:Hl;
+          try discriminate.
+        destruct (andb (Z.eqb _ _) (Z.eqb _ _)) eqn:He; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply andb_true_iff in Hl as [ Hl1 Hl2 ].
+        apply Nat.ltb_lt in Hl1. apply Nat.ltb_lt in Hl2.
+        apply andb_true_iff in He as [ H1 H2 ].
+        apply Z.eqb_eq in H1. apply Z.eqb_eq in H2.
+        eapply E_aswap;
+          [ eassumption | assumption | eassumption | assumption
+          | apply steq_refl | assumption | assumption ].
+      * (* object swap *)
+        injection H as Heq Hn; subst b. apply E_oswap, steq_refl.
+      * (* copy *)
+        destruct (Nat.eqb x y) eqn:Hxy; try discriminate.
+        destruct (os a y) as [ l | ] eqn:Hy; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.eqb_neq in Hxy.
+        apply E_copy; [ assumption | assumption | apply steq_refl ].
+      * (* uncopy *)
+        destruct (Nat.eqb x y) eqn:Hxy; try discriminate.
+        destruct (oloc_eqb (os a x) (os a y)) eqn:Ho; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.eqb_neq in Hxy. apply oloc_eqb_eq in Ho.
+        apply E_uncopy; [ assumption | assumption | apply steq_refl ].
+      * (* seq *)
+        destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R1; [ | discriminate ].
+        eapply E_seq.
+        -- eapply IHrun; eassumption.
+        -- eapply IHrun; [ eassumption | ].
+           eapply (proj1 (run_above k G)); eassumption.
       * (* if *)
         destruct (Z.eqb (eval e1 a) 0) eqn:E1.
         -- apply Z.eqb_eq in E1.
-           destruct (run k G s2 a) as [ m | ] eqn:R; [ | discriminate ].
+           destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
            destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ | discriminate ].
-           injection H as Heq; subst b. apply Z.eqb_eq in E2.
-           apply E_if_f; [ assumption | apply IHrun; assumption | assumption ].
+           injection H as Heq Hn; subst b. apply Z.eqb_eq in E2.
+           apply E_if_f; [ assumption | eapply IHrun; eassumption | assumption ].
         -- apply Z.eqb_neq in E1.
-           destruct (run k G s1 a) as [ m | ] eqn:R; [ | discriminate ].
+           destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
            destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ discriminate | ].
-           injection H as Heq; subst b. apply Z.eqb_neq in E2.
-           apply E_if_t; [ assumption | apply IHrun; assumption | assumption ].
+           injection H as Heq Hn; subst b. apply Z.eqb_neq in E2.
+           apply E_if_t; [ assumption | eapply IHrun; eassumption | assumption ].
       * (* loop *)
         destruct (Z.eqb (eval e1 a) 0) eqn:E1; [ discriminate | ].
         apply Z.eqb_neq in E1.
-        destruct (run k G s1 a) as [ m | ] eqn:R; [ | discriminate ].
-        eapply E_loop; [ assumption | apply IHrun; eassumption | ].
-        apply IHloop; assumption.
+        destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
+        eapply E_loop; [ assumption | eapply IHrun; eassumption | ].
+        eapply IHloop; [ eassumption | ].
+        eapply (proj1 (run_above k G)); eassumption.
       * (* local *)
         destruct (in_dec Nat.eq_dec x (fv e1)); [ discriminate | ].
         destruct (in_dec Nat.eq_dec x (fv e2)); [ discriminate | ].
-        destruct (run k G s (setv a x (eval e1 a))) as [ m | ] eqn:R;
+        destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
           [ | discriminate ].
         destruct (Z.eqb (vs m x) (eval e2 m)) eqn:Ex; [ | discriminate ].
-        injection H as Heq; subst b. apply Z.eqb_eq in Ex.
+        injection H as Heq Hn; subst b. apply Z.eqb_eq in Ex.
         eapply E_local; try eassumption.
-        -- apply IHrun; eassumption.
+        -- eapply IHrun; [ eassumption | now apply above_setv ].
         -- apply steq_refl.
-      * (* show *) injection H as Heq; subst b; apply E_show, steq_refl.
+      * (* show *) injection H as Heq Hn; subst b; apply E_show, steq_refl.
+      * (* object block *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (run k G s (alloc a _ x) nf) as [ [ m n1 ] | ] eqn:R;
+          [ | discriminate ].
+        destruct (andb _ _) eqn:Hchk; [ | discriminate ].
+        injection H as Heq Hn; subst b.
+        apply andb_true_iff in Hchk as [ Hox Hrest ].
+        apply andb_true_iff in Hrest as [ Hhn Hrest2 ].
+        apply andb_true_iff in Hrest2 as [ Hhc Hzero ].
+        apply oloc_eqb_eq in Hox.
+        apply Nat.eqb_eq in Hhn. apply Nat.eqb_eq in Hhc.
+        (* 上限 [n1] 未満は実際に調べ、それ以上は不変条件から 0 *)
+        assert (Hz : forall f, hp m (hn a) f = 0).
+        { intro f. destruct (Nat.ltb f n1) eqn:Hf.
+          - apply Nat.ltb_lt in Hf. eapply forallb_seq_zero; eassumption.
+          - apply Nat.ltb_ge in Hf.
+            eapply (proj1 (run_above k G));
+              [ eassumption | now apply above_alloc | assumption ]. }
+        eapply E_obj;
+          [ eassumption | eapply IHrun; [ eassumption | now apply above_alloc ]
+          | assumption | assumption | assumption | assumption | apply steq_refl ].
       * (* call *)
         destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; [ | discriminate ].
         destruct (Nat.eqb (length ps) (length args)) eqn:Hlen; [ | discriminate ].
         apply Nat.eqb_eq in Hlen.
-        eapply E_call; [ eassumption | eassumption | apply IHrun; assumption ].
+        eapply E_call; [ eassumption | eassumption | eapply IHrun; eassumption ].
       * (* uncall *)
         destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; [ | discriminate ].
         destruct (Nat.eqb (length ps) (length args)) eqn:Hlen; [ | discriminate ].
         apply Nat.eqb_eq in Hlen.
-        eapply E_uncall; [ eassumption | eassumption | apply IHrun; assumption ].
-    + intros e1 s1 s2 e2 a b H; simpl in H.
+        eapply E_uncall; [ eassumption | eassumption | eapply IHrun; eassumption ].
+      * (* object call *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (dispatch_fn k (classes G) (hc a l) m) as [ d | ] eqn:Hd;
+          try discriminate.
+        destruct (run k G (call_body d x args) a nf) as [ [ c n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.ltb_lt in Hl.
+        apply andb_true_iff in Hchk as [ Hox Hrest ].
+        apply andb_true_iff in Hrest as [ Hcc Hnn ].
+        apply oloc_eqb_eq in Hox.
+        apply Nat.eqb_eq in Hcc. apply Nat.eqb_eq in Hnn.
+        eapply E_ocall;
+          [ eassumption | assumption | eapply dispatch_fn_sound; eassumption
+          | eapply IHrun; eassumption | assumption | assumption | assumption ].
+      * (* object uncall *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (dispatch_fn k (classes G) (hc a l) m) as [ d | ] eqn:Hd;
+          try discriminate.
+        destruct (run k G (invert (call_body d x args)) a nf) as [ [ c n1 ] | ] eqn:R;
+          try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst b.
+        apply Nat.ltb_lt in Hl.
+        apply andb_true_iff in Hchk as [ Hox Hrest ].
+        apply andb_true_iff in Hrest as [ Hcc Hnn ].
+        apply oloc_eqb_eq in Hox.
+        apply Nat.eqb_eq in Hcc. apply Nat.eqb_eq in Hnn.
+        eapply E_ouncall;
+          [ eassumption | assumption | eapply dispatch_fn_sound; eassumption
+          | eapply IHrun; eassumption | assumption | assumption | assumption ].
+    + intros e1 s1 s2 e2 a nf b nf' H Ha; simpl in H.
       destruct (Z.eqb (eval e2 a) 0) eqn:E2.
       * apply Z.eqb_eq in E2.
-        destruct (run k G s2 a) as [ x1 | ] eqn:R2; [ | discriminate ].
+        destruct (run k G s2 a nf) as [ [ x1 n1 ] | ] eqn:R2; [ | discriminate ].
         destruct (Z.eqb (eval e1 x1) 0) eqn:E1; [ | discriminate ].
         apply Z.eqb_eq in E1.
-        destruct (run k G s1 x1) as [ x2 | ] eqn:R1; [ | discriminate ].
+        destruct (run k G s1 x1 n1) as [ [ x2 n2 ] | ] eqn:R1; [ | discriminate ].
+        assert (Ha1 : above n1 x1)
+          by (eapply (proj1 (run_above k G)); eassumption).
         eapply L_step; try eassumption.
-        -- apply IHrun; eassumption.
-        -- apply IHrun; eassumption.
-        -- apply IHloop; assumption.
-      * injection H as Heq; subst b. apply Z.eqb_neq in E2.
+        -- eapply IHrun; eassumption.
+        -- eapply IHrun; eassumption.
+        -- eapply IHloop; [ eassumption | ].
+           eapply (proj1 (run_above k G)); eassumption.
+      * injection H as Heq Hn; subst b. apply Z.eqb_neq in E2.
         apply L_done; [ assumption | apply steq_refl ].
 Qed.
 
 (** **The extracted interpreter is sound**: every state it returns is one
     the reversible semantics allows, so all the theorems above apply to it. *)
-Theorem run_sound : forall fuel G s a b,
-  run fuel G s a = Some b -> exec G s a b.
+Theorem run_sound : forall fuel G s a nf b nf',
+  run fuel G s a nf = Some (b, nf') -> above nf a -> exec G s a b.
 Proof. intros fuel G; apply (run_sound_aux fuel G). Qed.
 
+(** 初期状態（ヒープが空）はどの上限についても不変条件を満たす。実際に
+    プログラムを走らせるときは [nf = 0] から始めればよい。 *)
+Lemma above_zero_heap : forall nf a,
+  (forall l f, hp a l f = 0) -> above nf a.
+Proof. intros nf a H l f _; apply H. Qed.
+
 (** Consequences for the extracted interpreter, for free. *)
-Corollary run_injective : forall fuel1 fuel2 G s a1 a2 b,
-  run fuel1 G s a1 = Some b -> run fuel2 G s a2 = Some b -> a1 == a2.
+Corollary run_injective : forall fuel1 fuel2 G s a1 nf1 a2 nf2 b n1 n2,
+  run fuel1 G s a1 nf1 = Some (b, n1) -> above nf1 a1 ->
+  run fuel2 G s a2 nf2 = Some (b, n2) -> above nf2 a2 ->
+  a1 == a2.
 Proof.
-  intros fuel1 fuel2 G s a1 a2 b H1 H2.
+  intros fuel1 fuel2 G s a1 nf1 a2 nf2 b n1 n2 H1 Ha1 H2 Ha2.
   eapply exec_inj; eapply run_sound; eassumption.
 Qed.
 
-Corollary run_invert : forall fuel G s a b,
-  run fuel G s a = Some b -> exec G (invert s) b a.
+Corollary run_invert : forall fuel G s a nf b nf',
+  run fuel G s a nf = Some (b, nf') -> above nf a -> exec G (invert s) b a.
 Proof. intros; apply exec_invert; eapply run_sound; eassumption. Qed.
 
 (* ------------------------------------------------------------------ *)
@@ -1912,6 +2339,34 @@ Proof.
   - split; reflexivity.
 Qed.
 
+(** 抽出したインタプリタが**オブジェクトブロックを実際に走らせる**こと。
+    出口の「全フィールドがゼロ」は、持ち回った上限までを調べて判定している。 *)
+Example ex_run_object :
+  exists b nf, run 100 empty_env objprog zero 0%nat = Some (b, nf)
+            /\ vs b X = 3 /\ hn b = 0%nat /\ os b O = None.
+Proof.
+  eexists; eexists; split; [ reflexivity | ].
+  split; [ reflexivity | ]. split; reflexivity.
+Qed.
+
+(** ゼロクリアを忘れたオブジェクトブロックは（意味論と同じく）落ちる。 *)
+Example ex_run_object_garbage :
+  run 100 empty_env (Sobj C0 O (Sfassign O F0 MAdd (Cst 3))) zero 0%nat = None.
+Proof. reflexivity. Qed.
+
+(** 動的束縛つきのメソッド呼出しも走る（[ex_dispatch_override] の計算版）。 *)
+Example ex_run_dispatch :
+  exists b nf, run 200 oenv (dispatch_prog CB 2) zero 0%nat = Some (b, nf)
+            /\ vs b X = 2 /\ hn b = 0%nat.
+Proof.
+  eexists; eexists; split; [ reflexivity | ]. split; reflexivity.
+Qed.
+
+Example ex_run_dispatch_inherited :
+  exists b nf, run 200 oenv (dispatch_prog CC 1) zero 0%nat = Some (b, nf)
+            /\ vs b X = 1.
+Proof. eexists; eexists; split; [ reflexivity | reflexivity ]. Qed.
+
 (** The side condition on assignment bites: `X += X` has no derivation. *)
 Example ex_self_assign_stuck :
   forall a b, ~ exec empty_env (Sassign X MAdd (Var X)) a b.
@@ -2008,6 +2463,9 @@ Print Assumptions exec_round_trip.
 Print Assumptions wt_invert.
 Print Assumptions run_sound.
 Print Assumptions run_injective.
+Print Assumptions run_above.
+Print Assumptions ex_run_object.
+Print Assumptions ex_run_dispatch.
 Print Assumptions for_up_reversible.
 Print Assumptions rev_switch_reversible.
 Print Assumptions ex_for.
