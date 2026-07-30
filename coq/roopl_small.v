@@ -46,8 +46,11 @@ Inductive mstm :=
 | Miff  (e1 : exp) (s1 : stm) (m : mstm) (e2 : exp)        (**r else 枝の中 *)
 | Mlp1  (e1 : exp) (m : mstm) (s2 : stm) (e2 : exp)        (**r ループの s1 の中 *)
 | Mlp2  (e1 : exp) (s1 : stm) (m : mstm) (e2 : exp)        (**r ループの s2 の中 *)
-| Mloc  (x : id) (e1 : exp) (m : mstm) (e2 : exp) (v : Z).
+| Mloc  (x : id) (e1 : exp) (m : mstm) (e2 : exp) (v : Z)
    (**r 局所ブロックの中。[v] は外側の [x] の値（出るときに戻す） *)
+| Mobj  (cl : cid) (x : id) (m : mstm) (h : nat).
+   (**r オブジェクトブロックの中。[h] は入口でのヒープの高さ（＝確保した
+        対象の位置）。局所ブロックが外側の値を退避するのと同じ役割 *)
 
 (** トークンを消すと元の文に戻る（配置がプログラムを保っていることの確認）。 *)
 Fixpoint erase (m : mstm) : stm :=
@@ -60,6 +63,7 @@ Fixpoint erase (m : mstm) : stm :=
   | Mlp1 e1 m s2 e2 => Sloop e1 (erase m) s2 e2
   | Mlp2 e1 s1 m e2 => Sloop e1 s1 (erase m) e2
   | Mloc x e1 m e2 _ => Slocal x e1 (erase m) e2
+  | Mobj cl x m _ => Sobj cl x (erase m)
   end.
 
 
@@ -180,7 +184,24 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
     ~ In x (fv e2) ->
     vs a x = eval e2 a ->
     b == setv a x v ->
-    step (Mloc x e1 (Mpost s) e2 v) a (Mpost (Slocal x e1 s e2)) b.
+    step (Mloc x e1 (Mpost s) e2 v) a (Mpost (Slocal x e1 s e2)) b
+
+(* オブジェクトブロック：入口で確保し、出口でゼロクリアを確かめて解放する。
+   確保した対象は常にヒープの一番上（高さ [hn] が退避値の役をする）。 *)
+| S_obj_in : forall cl x s a b,
+    os a x = None ->
+    b == alloc a cl x ->
+    step (Mpre (Sobj cl x s)) a (Mobj cl x (Mpre s) (hn a)) b
+| S_obj : forall cl x m m' h a a',
+    step m a m' a' ->
+    step (Mobj cl x m h) a (Mobj cl x m' h) a'
+| S_obj_out : forall cl x s h a b,
+    hn a = S h ->
+    os a x = Some h ->
+    (forall f, hp a h f = 0) ->
+    hc a h = cl ->
+    b == dealloc a x ->
+    step (Mobj cl x (Mpost s) h) a (Mpost (Sobj cl x s)) b.
 
 (** 多ステップ *)
 Inductive steps : mstm -> state -> mstm -> state -> Prop :=
@@ -488,6 +509,110 @@ Proof.
     rewrite <- Q1, <- Q2; reflexivity.
 Qed.
 
+(** オブジェクトブロックに入る一歩の単射性。確保はヒープの一番上に載せる
+    決定的な操作なので、確保後の状態から確保前の状態が復元できる。 *)
+Lemma obj_in_inj : forall cl x a1 a2 b,
+  os a1 x = None -> b == alloc a1 cl x ->
+  os a2 x = None -> b == alloc a2 cl x ->
+  a1 == a2.
+Proof.
+  intros cl x a1 a2 b Hx1 H1 Hx2 H2.
+  assert (Hn1 : hn b = S (hn a1)) by (rewrite (steq_hn b _ H1); reflexivity).
+  assert (Hn2 : hn b = S (hn a2)) by (rewrite (steq_hn b _ H2); reflexivity).
+  assert (Hnn : hn a1 = hn a2) by lia.
+  steq_split.
+  - intro y.
+    assert (Q1 : vs b y = vs a1 y) by (rewrite (steq_vs b _ y H1); reflexivity).
+    assert (Q2 : vs b y = vs a2 y) by (rewrite (steq_vs b _ y H2); reflexivity).
+    rewrite <- Q1, <- Q2; reflexivity.
+  - intro y; destruct (Nat.eqb x y) eqn:E.
+    + apply Nat.eqb_eq in E; subst y; rewrite Hx1, Hx2; reflexivity.
+    + assert (Q1 : os b y = os a1 y)
+        by (rewrite (steq_os b _ y H1); simpl; now rewrite E).
+      assert (Q2 : os b y = os a2 y)
+        by (rewrite (steq_os b _ y H2); simpl; now rewrite E).
+      rewrite <- Q1, <- Q2; reflexivity.
+  - assumption.
+  - intros l f Hl.
+    assert (Hb : (l < hn b)%nat) by lia.
+    assert (Q1 : hp b l f = hp a1 l f).
+    { rewrite (steq_hp b _ l f H1) by assumption. simpl.
+      destruct (Nat.eqb l (hn a1)) eqn:E; [ apply Nat.eqb_eq in E; lia | reflexivity ]. }
+    assert (Q2 : hp b l f = hp a2 l f).
+    { rewrite (steq_hp b _ l f H2) by assumption. simpl.
+      destruct (Nat.eqb l (hn a2)) eqn:E; [ apply Nat.eqb_eq in E; lia | reflexivity ]. }
+    rewrite <- Q1, <- Q2; reflexivity.
+  - intros l Hl.
+    assert (Hb : (l < hn b)%nat) by lia.
+    assert (Q1 : hc b l = hc a1 l).
+    { rewrite (steq_hc b _ l H1) by assumption. simpl.
+      destruct (Nat.eqb l (hn a1)) eqn:E; [ apply Nat.eqb_eq in E; lia | reflexivity ]. }
+    assert (Q2 : hc b l = hc a2 l).
+    { rewrite (steq_hc b _ l H2) by assumption. simpl.
+      destruct (Nat.eqb l (hn a2)) eqn:E; [ apply Nat.eqb_eq in E; lia | reflexivity ]. }
+    rewrite <- Q1, <- Q2; reflexivity.
+Qed.
+
+(** 出る一歩の単射性。解放前の状態は、解放後の状態と
+    「一番上のセルはゼロクリア済み・クラスは cl・[x] はそこを指す」から復元できる。 *)
+Lemma obj_out_inj : forall cl x h a1 a2 b,
+  hn a1 = S h -> os a1 x = Some h ->
+  (forall f, hp a1 h f = 0) -> hc a1 h = cl -> b == dealloc a1 x ->
+  hn a2 = S h -> os a2 x = Some h ->
+  (forall f, hp a2 h f = 0) -> hc a2 h = cl -> b == dealloc a2 x ->
+  a1 == a2.
+Proof.
+  intros cl x h a1 a2 b Hp1 Ho1 Hz1 Hc1 H1 Hp2 Ho2 Hz2 Hc2 H2.
+  assert (Hnn : hn a1 = hn a2) by lia.
+  steq_split.
+  - intro y.
+    assert (Q1 : vs b y = vs a1 y) by (rewrite (steq_vs b _ y H1); reflexivity).
+    assert (Q2 : vs b y = vs a2 y) by (rewrite (steq_vs b _ y H2); reflexivity).
+    rewrite <- Q1, <- Q2; reflexivity.
+  - intro y; destruct (Nat.eqb x y) eqn:E.
+    + apply Nat.eqb_eq in E; subst y; rewrite Ho1, Ho2; reflexivity.
+    + assert (Q1 : os b y = os a1 y)
+        by (rewrite (steq_os b _ y H1); simpl; now rewrite E).
+      assert (Q2 : os b y = os a2 y)
+        by (rewrite (steq_os b _ y H2); simpl; now rewrite E).
+      rewrite <- Q1, <- Q2; reflexivity.
+  - assumption.
+  - intros l f Hl.
+    destruct (Nat.eqb l h) eqn:E.
+    + apply Nat.eqb_eq in E; subst l. rewrite Hz1, Hz2; reflexivity.
+    + apply Nat.eqb_neq in E.
+      assert (Hn1 : hn b = pred (hn a1)) by (rewrite (steq_hn b _ H1); reflexivity).
+      assert (Hb : (l < hn b)%nat) by lia.
+      assert (Q1 : hp b l f = hp a1 l f)
+        by (rewrite (steq_hp b _ l f H1); [ reflexivity | assumption ]).
+      assert (Q2 : hp b l f = hp a2 l f)
+        by (rewrite (steq_hp b _ l f H2); [ reflexivity | assumption ]).
+      rewrite <- Q1, <- Q2; reflexivity.
+  - intros l Hl.
+    destruct (Nat.eqb l h) eqn:E.
+    + apply Nat.eqb_eq in E; subst l. rewrite Hc1, Hc2; reflexivity.
+    + apply Nat.eqb_neq in E.
+      assert (Hn1 : hn b = pred (hn a1)) by (rewrite (steq_hn b _ H1); reflexivity).
+      assert (Hb : (l < hn b)%nat) by lia.
+      assert (Q1 : hc b l = hc a1 l)
+        by (rewrite (steq_hc b _ l H1); [ reflexivity | assumption ]).
+      assert (Q2 : hc b l = hc a2 l)
+        by (rewrite (steq_hc b _ l H2); [ reflexivity | assumption ]).
+      rewrite <- Q1, <- Q2; reflexivity.
+Qed.
+
+(** 退避した高さも一意に決まる（解放後の高さがそれを教える）。 *)
+Lemma obj_out_h : forall x h h0 a1 a2 b,
+  hn a1 = S h -> b == dealloc a1 x ->
+  hn a2 = S h0 -> b == dealloc a2 x ->
+  h = h0.
+Proof.
+  intros x h h0 a1 a2 b Hp1 H1 Hp2 H2.
+  assert (Q1 : hn b = pred (hn a1)) by (rewrite (steq_hn b _ H1); reflexivity).
+  assert (Q2 : hn b = pred (hn a2)) by (rewrite (steq_hn b _ H2); reflexivity).
+  lia.
+Qed.
+
 (* ------------------------------------------------------------------ *)
 (** * 後方決定性（小ステップの可逆性）                                  *)
 (* ------------------------------------------------------------------ *)
@@ -534,6 +659,14 @@ Proof.
            split; [ reflexivity | ];
            eapply loc_in_inj; [ eassumption | eassumption | congruence ]
        end).
+  (* オブジェクトブロックの出口：退避した高さの一致を先に示す *)
+  all: try (match goal with
+       | [ Hh1 : hn ?aa = S ?hh, Hb1 : ?b == dealloc ?aa ?xx,
+           Hh2 : hn ?az = S ?hh0, Hb2 : ?b == dealloc ?az ?xx |- _ ] =>
+           assert (hh = hh0) by (eapply obj_out_h; eassumption); subst;
+           split; [ reflexivity | ];
+           eapply obj_out_inj; (eassumption || reflexivity)
+       end).
   all: lazymatch goal with
        | [ |- _ = _ /\ steq _ _ ] => split; [ reflexivity | ]
        | _ => idtac
@@ -551,7 +684,19 @@ Proof.
        | eapply (atom_inj (Suncopy _ _));     (eapply S_uncopy; eassumption) ].
   (* 配列の入れ替えは os の前提が 2 つあり、eassumption だと x と y の
      対応づけを取り違えるので、文を具体的に与えて曖昧さを消す *)
-  all: eapply (atom_inj (Saswap x e1 y e2)); (eapply S_aswap; eassumption).
+  all: try (match goal with
+       | [ HZ : step _ _ (Mpost (Saswap ?xx ?ee1 ?yy ?ee2)) _ |- _ ] =>
+           eapply (atom_inj (Saswap xx ee1 yy ee2)); (eapply S_aswap; eassumption)
+       end).
+  (* オブジェクトブロックの出入り *)
+  all: try (split; [ reflexivity | ]).
+  (* クラス名が [hc a (pred (hn a))] に単一化されている場合があるので、
+     その前提は reflexivity で閉じる *)
+  all: solve [ eapply obj_in_inj; (eassumption || reflexivity)
+             | eapply obj_out_inj; (eassumption || reflexivity)
+             | split; [ reflexivity | ];
+               solve [ eapply obj_in_inj; (eassumption || reflexivity)
+                     | eapply obj_out_inj; (eassumption || reflexivity) ] ].
   (* skip は結果を == で関係づけるので、両方の入口が同じ結果に等しい *)
   all: split; [ reflexivity | eauto using steq_trans, steq_sym ].
 Qed.
@@ -683,6 +828,24 @@ Proof.
     + apply S_loc_out; [ assumption | | apply steq_refl ].
       rewrite <- (steq_vs a a2 x Ha), <- (eval_steq e2 a a2 Ha); assumption.
     + eapply steq_trans; [ eassumption | now apply setv_steq ].
+  - (* オブジェクトブロックに入る *)
+    exists (alloc a2 cl x); split.
+    + rewrite (steq_hn a a2 Ha).     (* 配置が持つ入口の高さを合わせる *)
+      apply S_obj_in; [ | apply steq_refl ].
+      rewrite <- (steq_os a a2 x Ha); assumption.
+    + eapply steq_trans; [ eassumption | now apply alloc_steq ].
+  - (* オブジェクトブロックの中 *)
+    destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_obj | assumption ].
+  - (* オブジェクトブロックを出る *)
+    exists (dealloc a2 x); split.
+    + apply S_obj_out.
+      * rewrite <- (steq_hn a a2 Ha); assumption.
+      * rewrite <- (steq_os a a2 x Ha); assumption.
+      * intro f; rewrite <- (steq_hp a a2 h f Ha); [ auto | lia ].
+      * rewrite <- (steq_hc a a2 h Ha); [ assumption | lia ].
+      * apply steq_refl.
+    + eapply steq_trans; [ eassumption | now apply dealloc_steq ].
 Qed.
 
 Theorem steps_eq : forall m a m' a',
@@ -739,6 +902,13 @@ Proof.
   eapply steps_step; [ apply S_loc; eassumption | assumption ].
 Qed.
 
+Lemma steps_obj : forall cl x m a m' a' h,
+  steps m a m' a' -> steps (Mobj cl x m h) a (Mobj cl x m' h) a'.
+Proof.
+  intros cl x m a m' a' h H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_obj; eassumption | assumption ].
+Qed.
+
 Lemma steps_lp2 : forall e1 s1 m a m' a' e2,
   steps m a m' a' -> steps (Mlp2 e1 s1 m e2) a (Mlp2 e1 s1 m' e2) a'.
 Proof.
@@ -765,7 +935,8 @@ Inductive core : stm -> Prop :=
 | C_seq : forall s1 s2, core s1 -> core s2 -> core (Sseq s1 s2)
 | C_if : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sif e1 s1 s2 e2)
 | C_loop : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sloop e1 s1 s2 e2)
-| C_local : forall x e1 s e2, core s -> core (Slocal x e1 s e2).
+| C_local : forall x e1 s e2, core s -> core (Slocal x e1 s e2)
+| C_obj : forall cl x s, core s -> core (Sobj cl x s).
 
 Ltac not_core := intros; match goal with [ H : core _ |- _ ] => inversion H end.
 
@@ -875,7 +1046,23 @@ Proof.
     exists b; split; [ | apply steq_refl ].
     apply steps_one; eapply exec_atom with (G := dummy_env) (s := Sshow e);
       [ constructor | eapply E_show; eassumption ].
-  - (* object block *) not_core.
+  - (* object block *)
+    intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc Hcore; inversion Hcore; subst.
+    destruct (IH ltac:(assumption)) as [ b' [ Hsteps Hb ] ].
+    exists (dealloc b' x); split.
+    + eapply steps_step.
+      * apply S_obj_in; [ assumption | apply steq_refl ].
+      * assert (Hn : hn b' = S (hn a))
+          by (rewrite <- (steq_hn b b' Hb); exact Hbn).
+        eapply steps_trans; [ apply steps_obj; eassumption | ].
+        apply steps_one, S_obj_out.
+        -- exact Hn.
+        -- rewrite <- (steq_os b b' x Hb); exact Hbx.
+        -- intro f; rewrite <- (steq_hp b b' (hn a) f Hb); [ apply Hbz | lia ].
+        -- (* cl は subst で hc b (hn a) に置き換わっている *)
+           rewrite <- (steq_hc b b' (hn a) Hb); [ reflexivity | lia ].
+        -- apply steq_refl.
+    + eapply steq_trans; [ eassumption | now apply dealloc_steq ].
   - (* call *) not_core.
   - (* uncall *) not_core.
   - (* object call *) not_core.
@@ -1080,6 +1267,44 @@ Proof.
       * lia.
 Qed.
 
+(** オブジェクトブロックの分解。 *)
+Lemma obj_split : forall n cl x m a s h c,
+  stepsn n (Mobj cl x m h) a (Mpost (Sobj cl x s)) c ->
+  exists n1 b, stepsn n1 m a (Mpost s) b
+            /\ hn b = S h /\ os b x = Some h
+            /\ (forall f, hp b h f = 0) /\ hc b h = cl
+            /\ c == dealloc b x
+            /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros cl x m a s h c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + (* 中で一歩進む *)
+      destruct (IH _ _ _ _ _ _ _ HR)
+        as [ q1 [ bb [ P1 [ Hn1 [ Ho [ Hz [ Hcc [ Hd L1 ] ] ] ] ] ] ] ].
+      exists (S q1), bb.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ].
+      * exists m', a2; split; assumption.
+      * assumption.
+      * assumption.
+      * assumption.
+      * assumption.
+      * assumption.
+      * lia.
+    + (* 抜ける *)
+      destruct (post_stuck _ _ _ _ _ HR) as [ Em Ec ]; inversion Em; subst.
+      exists 0%nat, a.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ].
+      * split; reflexivity.
+      * assumption.
+      * assumption.
+      * assumption.
+      * (* cl は subst で hc a h に置き換わっていることがある *)
+        (assumption || reflexivity).
+      * assumption.
+      * lia.
+Qed.
+
 (* --- 本体：多ステップから大ステップを組み立てる --- *)
 
 Lemma steps_exec_aux : forall G n,
@@ -1176,6 +1401,18 @@ Proof.
       destruct (loc_split _ _ _ _ _ _ _ _ _ HR)
         as [ q1 [ bb [ P1 [ Hn2 [ Hx [ Hcc L1 ] ] ] ] ] ].
       eapply E_local; try eassumption.
+      assert (Hb : (q1 < S k)%nat) by lia.
+      eapply exec_eq with (G := G);
+        [ apply (proj1 (IH q1 Hb)); eassumption
+        | eassumption | apply steq_refl ].
+    + (* object block *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (obj_split _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ bb [ P1 [ Hn1 [ Ho [ Hz [ Hcc [ Hd L1 ] ] ] ] ] ] ] ].
+      (* 小ステップ側は入口の高さ [hn a] を配置に退避しているので、
+         大ステップ側が要求する [hn b = S (hn a)] がそのまま得られる *)
+      eapply E_obj with (b := bb); try eassumption.
       assert (Hb : (q1 < S k)%nat) by lia.
       eapply exec_eq with (G := G);
         [ apply (proj1 (IH q1 Hb)); eassumption
@@ -1314,6 +1551,41 @@ Proof.
           [ unfold X, T0; simpl; intuition discriminate | apply steq_refl ].
       * eapply steps_step; [ | apply steps_refl ].
         apply S_loc_out; [ simpl; tauto | reflexivity | apply steq_refl ].
+  - split; reflexivity.
+Qed.
+
+(** オブジェクトブロック：new C p ... delete C p。
+    体でフィールドに 5 を足して引き戻すので、出口の零消去条件を満たす。 *)
+Definition P : id := 3%nat.
+Definition CL : cid := 7%nat.
+Definition F0 : field := 0%nat.
+
+Definition prog3 : stm :=
+  Sobj CL P (Sseq (Sfassign P F0 MAdd (Cst 5))
+                  (Sfassign P F0 MSub (Cst 5))).
+
+Example ex_small_obj :
+  exists b, steps (Mpre prog3) zero0 (Mpost prog3) b
+            /\ hn b = 0%nat /\ os b P = None.
+Proof.
+  eexists. split.
+  - eapply steps_step; [ apply S_obj_in; [ reflexivity | apply steq_refl ] | ].
+    eapply steps_step; [ apply S_obj, S_seq_in | ].
+    eapply steps_step.
+    { apply S_obj, S_seq_l, S_fassign with (l := 0%nat);
+        [ reflexivity | simpl; lia | apply steq_refl | reflexivity ]. }
+    eapply steps_step; [ apply S_obj, S_seq_mid | ].
+    eapply steps_step.
+    { apply S_obj, S_seq_r, S_fassign with (l := 0%nat);
+        [ reflexivity | simpl; lia | apply steq_refl | reflexivity ]. }
+    eapply steps_step; [ apply S_obj, S_seq_out | ].
+    eapply steps_step; [ | apply steps_refl ].
+    apply S_obj_out.
+    + reflexivity.
+    + reflexivity.
+    + intro f; simpl; destruct f; reflexivity.
+    + reflexivity.
+    + apply steq_refl.
   - split; reflexivity.
 Qed.
 

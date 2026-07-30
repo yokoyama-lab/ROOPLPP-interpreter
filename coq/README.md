@@ -1,8 +1,8 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。`roopl.v`（大ステップ意味論，1799 行）と `roopl_small.v`（小ステップ意味論，
-外部ライブラリ依存なし）。
+機械検証したもの。`roopl.v`（大ステップ意味論，1799 行）と `roopl_small.v`（小ステップ意味論，1613 行）。
+外部ライブラリ依存なし。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
 「文の反転で well-typedness が保存される」ことなども証明されているが，**証明支援系による
@@ -55,6 +55,8 @@ Inductive mstm :=
 | Mpre (s : stm)   (* • s : これから s を実行する *)
 | Mpost (s : stm)  (* s • : s を実行し終えた *)
 | Mseql | Mseqr | Mift | Miff | Mlp1 | Mlp2   (* 入れ子の位置 *)
+| Mloc (x) (e1) (m) (e2) (v)                 (* 局所ブロックの中（退避値つき）*)
+| Mobj (cl) (x) (m) (h)                      (* オブジェクトブロックの中（入口の高さつき）*)
 ```
 
 | 定理 | 主張 |
@@ -66,6 +68,7 @@ Inductive mstm :=
 | `atom_exec` / `exec_atom` | 原子文では「小ステップ一歩 ＝ 大ステップ一歩」 |
 | `atom_inj` | その帰結：原子文の局所可逆性は大ステップの `exec_inj` から出る |
 | `loc_in_inj` / `loc_out_inj` | 局所ブロックの出入りの単射性（退避値も一意に決まる） |
+| `obj_in_inj` / `obj_out_inj` | オブジェクトブロックの出入りの単射性（零消去された対象が復元できる） |
 | `step_eq` / `steps_eq` | ステップは状態の `==` を尊重する |
 | `exec_steps` | 大ステップ → 小ステップ：`exec s a b` なら `(•s, a) →* (s•, b')` で `b == b'` |
 | `steps_exec` | 小ステップ → 大ステップ：`(•s, a) →* (s•, b)` なら `exec s a b` |
@@ -93,7 +96,23 @@ Inductive mstm :=
 
 を足し、**外側の `x` の値 `v` を配置に退避**する。出るときの表明
 `vs a x = eval e2 a` が、退避値と合わせて入口の状態を一意に決める
-（`loc_out_inj`）。**オブジェクトブロック `construct`／メソッド呼出し**は未対応。
+（`loc_out_inj`）。
+
+**オブジェクトブロック `construct C x … destruct C x`** も対応済み。配置は
+
+```coq
+| Mobj (cl : cid) (x : id) (m : mstm) (h : nat)
+```
+
+で、**入口でのヒープの高さ `h`（＝確保した対象の位置）を退避**する。局所ブロックが
+外側の値を退避するのと同じ役割で、これが無いと「体の中で確保したまま解放しなかった
+対象」を出口で見逃してしまい、大ステップ意味論の `E_obj`（`hn b = S (hn a)`）と
+食い違う。出口では **対象の全フィールドが零消去されている**ことと **クラスが `cl` で
+ある**ことを表明として要求し、この 2 つが `obj_out_inj`（＝解放後の状態から解放前を
+一意に復元できる）を成り立たせる。ヒープをスタックとして扱う（`construct`／`destruct`
+がブロック構造）設計なので、確保位置は状態の関数として決まる。
+
+**メソッド呼出し `call`／`uncall`** は未対応。
 
 原子文を足すのが安く済んだのは、**「小ステップ一歩 ＝ 大ステップ一歩」**という
 橋（`atom_exec` / `exec_atom`）を通したから。これで文ごとの局所可逆性補題を
@@ -108,7 +127,8 @@ Inductive mstm :=
 - `steps_exec`（小 → 大）はステップ数に関する強帰納法。多ステップを
   **再帰定義** `stepsn`（帰納型ではなく `Fixpoint`）にしてあるので、分解が
   `destruct` だけで済む。文脈ごとの分解補題 `seql_split` / `seqr_split` /
-  `ift_split` / `iff_split` / `lp1_split` / `lp2_split` が「列は文脈の中で進み、
+  `ift_split` / `iff_split` / `lp1_split` / `lp2_split` / `loc_split` /
+  `obj_split` が「列は文脈の中で進み、
   出るときに表明を満たす」ことを取り出し、`stepsn_program`（プログラムが列全体で
   不変）が「どの部分文だったか」の同定に効く。
 
