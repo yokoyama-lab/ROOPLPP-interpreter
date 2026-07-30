@@ -263,18 +263,22 @@ def ext_env_field(fields: list[Decl], n: int) -> Env:
 # --- Statement evaluation ---
 
 def eval_state(stml: list[Stm], env: Env, map_: list, st: State) -> State:
-    for stm in stml:
+    for stm0 in stml:
+        # 位置情報は診断専用なので、意味論に渡す前に剥がす
+        stm = strip_pos(stm0)
+        p = pos_of(stm0)
+        at = Diag.at_line(p.line) if p is not None else ""
         try:
             st = _update(stm, env, map_, st)
         except StmError as e:
-            # すでに文が付いている。いちばん内側のラッパだけが変数の値を足す。
+            # すでに文が付いている。いちばん内側のラッパだけが値と位置を足す。
             if Diag.has_where(str(e)):
                 raise
-            raise StmError(str(e) + Diag.where_line(stm, env, st)) from None
+            raise StmError(str(e) + Diag.where_line(stm, env, st) + at) from None
         except RuntimeError as e:
             raise StmError(
                 pretty_stms([stm], 0) + "\n" + str(e)
-                + Diag.where_line(stm, env, st)
+                + Diag.where_line(stm, env, st) + at
             ) from None
     return st
 

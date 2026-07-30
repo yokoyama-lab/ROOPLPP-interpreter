@@ -7,6 +7,13 @@ open Util
    その前に出てしまうので、ここでは何も表示しない。 *)
 let parse_error _ = ()
 
+(* 文に位置を付ける。n は規則右辺の何番目の記号か（ocamlyacc の規約）。
+   位置は診断（実行時エラーの行）専用で、意味論には影響しない。 *)
+let at_pos n s =
+  let p = Parsing.rhs_start_pos n in
+  Positioned ({ line = p.Lexing.pos_lnum;
+                col = p.Lexing.pos_cnum - p.Lexing.pos_bol }, s)
+
 let rec anyId2obj = function
   | VarArray(x, None)   -> Var x
   | VarArray(x, Some e) -> ArrayElement (x,e)
@@ -203,8 +210,8 @@ switch:
 
 // statement
 stms1:
-  | stms1 stm { $1 @ [$2]}
-  | stm       { [$1] }
+  | stms1 stm { $1 @ [ at_pos 2 $2 ] }
+  | stm       { [ at_pos 1 $1 ] }
 
 stm:
   | anyId modop exp

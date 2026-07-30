@@ -73,6 +73,9 @@ type break =
   | Break
   | NoBreak (**breakなし*)
 
+(**文の位置（診断用。意味論には影響しない）*)
+type pos = { line : int; col : int }
+
 (**文*)
 type stm =
   | Skip (**Skip*)
@@ -96,6 +99,17 @@ type stm =
   | ArrayDestruction of (typeId * exp) * obj (**delete Foo[length] fooList*)
   | Show of exp (**show(x)*)
   | Print of string (**print("")*)
+  | Positioned of pos * stm (**位置情報つきの文（構文解析器が付ける）*)
+
+(**位置情報の殻を剥がす。意味論・整形・反転はすべて剥がした文を見る*)
+let rec strip_pos = function
+  | Positioned(_, s) -> strip_pos s
+  | s -> s
+
+(**いちばん外側の位置情報を取り出す*)
+let pos_of = function
+  | Positioned(p, _) -> Some p
+  | _ -> None
 
 (**メソッドの引数*)
 type decl = Decl of dataType * id
@@ -108,3 +122,30 @@ type cDecl = CDecl of typeId * typeId option * decl list * mDecl list (**class C
 
 (**プログラム*)
 type prog = Prog of cDecl list (**class .. class*)
+
+(**位置情報をすべて取り除く。位置は同じプログラムでもソースの見た目で変わる
+   ので、AST を構造として比べるときはこれを通す（整形→再パースの往復検査など）。 *)
+let rec erase_pos_stm s =
+  match s with
+  | Positioned(_, s0) -> erase_pos_stm s0
+  | Conditional(e1, s1, s2, e2) ->
+     Conditional(e1, erase_pos_stms s1, erase_pos_stms s2, e2)
+  | Loop(e1, s1, s2, e2) -> Loop(e1, erase_pos_stms s1, erase_pos_stms s2, e2)
+  | For(x, e1, e2, ss) -> For(x, e1, e2, erase_pos_stms ss)
+  | Switch(o1, cases, ss, o2) ->
+     Switch(o1,
+            List.map (fun (h, ss1, t) -> (h, erase_pos_stms ss1, t)) cases,
+            erase_pos_stms ss, o2)
+  | ObjectBlock(t, x, ss) -> ObjectBlock(t, x, erase_pos_stms ss)
+  | LocalBlock(t, x, e1, ss, e2) -> LocalBlock(t, x, e1, erase_pos_stms ss, e2)
+  | s -> s
+
+and erase_pos_stms l = List.map erase_pos_stm l
+
+let erase_pos_prog (Prog cl) =
+  Prog (List.map
+          (fun (CDecl(c, sup, fl, ml)) ->
+            CDecl(c, sup, fl,
+                  List.map (fun (MDecl(m, ps, ss)) ->
+                      MDecl(m, ps, erase_pos_stms ss)) ml))
+          cl)

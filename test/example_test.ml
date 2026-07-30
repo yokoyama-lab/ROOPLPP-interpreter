@@ -55,7 +55,9 @@ let check_file name =
   let reparsed = try parse (src_of prog) with
     | Util.Parse_error _ -> assert_failure (name ^ ": pretty output does not re-parse")
   in
-  assert_equal ~msg:(name ^ ": parse (pretty p) <> p") prog reparsed;
+  (* 位置情報はソースの見た目で変わるので、構造として比べる *)
+  assert_equal ~msg:(name ^ ": parse (pretty p) <> p")
+    (Syntax.erase_pos_prog prog) (Syntax.erase_pos_prog reparsed);
   (* 実行 *)
   if List.mem name expected_to_fail then
     (match (try ignore (Eval.eval_prog prog); None with

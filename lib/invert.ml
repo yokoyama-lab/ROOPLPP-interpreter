@@ -2,6 +2,8 @@
 open Syntax
 (**文を逆変換する関数*)
 let rec invert_stm stm = match stm with
+  (* 位置は反転しても同じ文を指すので、そのまま持ち越す *)
+  | Positioned(p, s) -> Positioned(p, invert_stm s)
   | Skip -> Skip
   | Assign(obj, modOp, e) ->
      let invert_op = function

@@ -4,6 +4,9 @@ from .syntax import *
 
 def invert_stm(stm: Stm) -> Stm:
     match stm:
+        # 位置は反転しても同じ文を指すので、そのまま持ち越す
+        case Positioned(p, s0):
+            return Positioned(p, invert_stm(s0))
         case Skip():
             return Skip()
         case Assign(obj, op, exp):

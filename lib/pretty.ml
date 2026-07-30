@@ -108,6 +108,8 @@ let rec pretty_stms stms n =
 pretty_stm stm n =
   let s =
     match stm with
+    (* 位置情報は出力しない（-inverse の出力は再パースされるため） *)
+    | Positioned(_, s0) -> pretty_stm s0 n
     | Assign(obj, modOp, exp) -> pretty_obj obj ^ " " ^ pretty_modOp modOp ^ " " ^ pretty_exp exp
     | Swap(obj1, obj2) -> pretty_obj obj1 ^ " <=> " ^ pretty_obj obj2
     | Conditional(exp1, stm1, stm2, exp2) -> "if " ^ pretty_exp exp1 ^ " then\n" ^ pretty_stms stm1 (n + 1) ^ indent n ^ "else\n" ^ pretty_stms stm2 (n + 1) ^ indent n ^ "fi " ^ pretty_exp exp2

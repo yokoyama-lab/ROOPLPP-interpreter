@@ -10,12 +10,18 @@ from .syntax import (
     Assign, ArrayConstruction, ArrayDestruction, ArrayElement, Binary, Const,
     CopyReference, Conditional, Dot, For, LocalBlock, LocalCall, LocalUncall,
     Loop, Nil, ObjectBlock, ObjectCall, ObjectConstruction, ObjectDestruction,
-    ObjectUncall, Print, Show, Skip, Swap, Switch, UncopyReference, Var,
-    VarArray, InstVar, IdArg, ExpArg,
+    ObjectUncall, Positioned, Print, Show, Skip, Swap, Switch,
+    UncopyReference, Var, VarArray, InstVar, IdArg, ExpArg,
 )
 from .value import IntVal, LocsVal, LocsVec, ObjVal
 
 WHERE_MARKER = "WHERE:"
+# 構文解析器が付けた行番号。eval.py が文のラッパで積む
+AT_MARKER = "AT:"
+
+
+def at_line(n: int) -> str:
+    return "\n" + AT_MARKER + str(n)
 
 
 # ------------------------------------------------------------------
@@ -58,9 +64,24 @@ def _contains_at_boundary(needle: str, hay: str) -> bool:
 # 実行時エラーメッセージの分解
 # ------------------------------------------------------------------
 
+def exact_line(raw: str) -> int | None:
+    """生メッセージから、構文解析器由来の正確な行番号を取り出す"""
+    found = None
+    for ln in raw.split("\n"):
+        ln = ln.strip()
+        if ln.startswith(AT_MARKER):
+            try:
+                found = int(ln[len(AT_MARKER):].strip())
+            except ValueError:
+                pass
+    return found
+
+
 def split_runtime_message(raw: str) -> tuple[list[str], str, list[str]]:
     """生メッセージを (トレース, 本体メッセージ, 変数の値) に分ける"""
     lines = raw.split("\n")
+    # 位置マーカは本文にもトレースにも出さない
+    lines = [ln for ln in lines if not ln.strip().startswith(AT_MARKER)]
     where = [
         ln.strip()[len(WHERE_MARKER):].strip()
         for ln in lines
@@ -237,7 +258,15 @@ def format_runtime_error(raw: str, src: str | None = None, file: str | None = No
     out = ["ROOPL++ execution error", "  message: " + message]
     if file:
         out.append("  file: " + file)
-    if src is not None:
+    exact = exact_line(raw)
+    if exact is not None:
+        # 構文解析器が付けた位置があればそれを使う（推定は要らない）
+        out.append("  line: %d" % exact)
+        if src is not None:
+            ex = source_excerpt(src, exact)
+            if ex:
+                out += ["", "Source:"] + ex
+    elif src is not None:
         kind, val = locate(src, trace)
         if kind == "exact":
             out.append("  line: %d (best-effort match on the statement text)" % val)
@@ -402,6 +431,9 @@ def ids_of_arg(a) -> list[str]:
 def ids_of_stm(stm) -> list[str]:
     """文に直接現れる識別子（入れ子の文の中までは見ない）"""
     match stm:
+        # 位置情報の殻は素通し
+        case Positioned(_, s0):
+            return ids_of_stm(s0)
         case Skip() | Print(_):
             return []
         case Assign(o, _, e):

@@ -221,7 +221,7 @@ let rec eval_state stml env map st0 =
     | ModAdd -> (+)
     | ModSub -> (-)
     | ModXor -> (lxor) in
-  let update st stm =
+  let rec update st stm =
     (** y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す *)
     let rec lval_val y env =
     match y with
@@ -277,6 +277,9 @@ let rec eval_state stml env map st0 =
       | _ -> failwith "not implemented"
     in
     match stm with
+    (* 位置情報は診断専用。通常は update_with_stm が剥がしてから渡すので
+       ここには来ないが、念のため素通しする *)
+    | Positioned(_, s0) -> update st s0
     (*PRINT*)
     | Print str -> (print_string str; st)
     (*SHOW*)
@@ -570,15 +573,22 @@ let rec eval_state stml env map st0 =
   (* 文脈のない失敗（式の評価など）には、その文の pretty 表示を足してから
      外へ投げ直す。すでに文が付いているもの（Util.Runtime_error）は
      そのまま通すので、入れ子の文が何重にも積まれることはない。 *)
-  let update_with_stm st stm =
+  let update_with_stm st stm0 =
+    (* 位置情報は診断専用なので、意味論に渡す前に剥がす *)
+    let stm = strip_pos stm0 in
+    let at = match pos_of stm0 with
+      | Some p -> Diagnostics.at_line p.line
+      | None -> ""
+    in
     try update st stm with
     | Failure e ->
        raise (Util.Runtime_error
-                (pretty_stms [stm] 0 ^ "\n" ^ e ^ Diagnostics.where_line stm env st))
+                (pretty_stms [stm] 0 ^ "\n" ^ e
+                 ^ Diagnostics.where_line stm env st ^ at))
     (* fail_stm で投げられたものは文は付いているが変数の値はまだない。
-       いちばん内側のラッパ（＝その文自身）だけが値を付ける。 *)
+       いちばん内側のラッパ（＝その文自身）だけが値と位置を付ける。 *)
     | Util.Runtime_error e when not (Diagnostics.has_where e) ->
-       raise (Util.Runtime_error (e ^ Diagnostics.where_line stm env st))
+       raise (Util.Runtime_error (e ^ Diagnostics.where_line stm env st ^ at))
   in
   List.fold_left update_with_stm st0 stml
 

@@ -33,7 +33,72 @@ let src_oob =
 
 let contains_sub ~needle hay = Diagnostics.contains ~needle hay
 
+(* ---- 位置情報つきの行報告 --------------------------------------------
+
+   AST が位置を持つので、同じ文字列の文が複数行にあっても実際に落ちた行を
+   一意に言える（持つ前は「候補」を並べるしかなかった）。 *)
+
+let parse src = Parser.main Lexer.token (Lexing.from_string src)
+
+let run_and_format src =
+  match ignore (Eval.eval_prog (parse src)) with
+  | () -> None
+  | exception (Util.Runtime_error e | Failure e) ->
+     Some (Diagnostics.format_runtime_error ~src e)
+
+(* 同じ文 "x += 1 / y" が 6 行目と 8 行目にあり、落ちるのは 8 行目 *)
+let src_ambiguous =
+  s [ "class Program";
+      "    int x";
+      "    int y";
+      "    method main()";
+      "        if y = 1 then";
+      "            x += 1 / y";
+      "        else";
+      "            x += 1 / y";
+      "        fi x = 1" ]
+
+(* 入れ子（for の中の if の中）で落ちる。落ちるのは 8 行目 *)
+let src_nested =
+  s [ "class Program";
+      "    int x";
+      "    int y";
+      "    method main()";
+      "        for i in (0..2) do";
+      "            if i = 1 then";
+      "                x += 1";
+      "                x += 1 / y";
+      "            else";
+      "                skip";
+      "            fi i = 1";
+      "        end" ]
+
 let suite = "test suite for diagnostics.ml" >::: [
+      (* ---- 位置情報つきの行報告 -------------------------------------- *)
+      "the reported line is exact even when the statement text repeats"
+      >:: (fun _ ->
+        match run_and_format src_ambiguous with
+        | None -> assert_failure "expected a runtime error"
+        | Some out ->
+           assert_bool ("expected line 8 in:\n" ^ out)
+             (contains_sub ~needle:"line: 8" out);
+           assert_bool ("did not expect candidates in:\n" ^ out)
+             (not (contains_sub ~needle:"candidates" out)));
+
+      "the reported line is exact for a nested statement" >:: (fun _ ->
+        match run_and_format src_nested with
+        | None -> assert_failure "expected a runtime error"
+        | Some out ->
+           assert_bool ("expected line 8 in:\n" ^ out)
+             (contains_sub ~needle:"line: 8" out));
+
+      "the position marker does not leak into the message" >:: (fun _ ->
+        match run_and_format src_ambiguous with
+        | None -> assert_failure "expected a runtime error"
+        | Some out ->
+           assert_bool ("marker leaked into:\n" ^ out)
+             (not (contains_sub ~needle:"AT:" out)));
+
       (* ---- 生メッセージの分解 ---------------------------------------- *)
       "split_runtime_message: trace" >:: (fun _ ->
         let trace, _, _ = split_runtime_message raw_oob in

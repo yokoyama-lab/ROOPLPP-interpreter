@@ -172,7 +172,9 @@ let reparse_tests =
     (fun (name, src) ->
       name >:: (fun _ ->
         let p = parse src in
-        assert_equal p (parse (src_of p))))
+        (* 位置情報はソースの見た目で変わるので、構造として比べる *)
+        assert_equal (Syntax.erase_pos_prog p)
+          (Syntax.erase_pos_prog (parse (src_of p)))))
     named_progs
 
 let _ =

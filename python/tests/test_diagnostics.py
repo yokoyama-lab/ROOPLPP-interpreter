@@ -158,3 +158,67 @@ def test_garbage_report_handles_cycles() -> None:
     st = {1: ObjVal("Node", {"next": 2}), 2: LocsVal(1)}
     out = d.garbage_report([("head", LocsVal(1))], st)
     assert "already shown" in out
+
+
+# --- 位置情報つきの行報告（OCaml 側 diagnostics_test.ml の対応物）-----------
+
+from rooplpp.eval import eval_prog  # noqa: E402
+from rooplpp.parser import parse  # noqa: E402
+
+SRC_AMBIGUOUS = "\n".join([
+    "class Program",
+    "    int x",
+    "    int y",
+    "    method main()",
+    "        if y = 1 then",
+    "            x += 1 / y",
+    "        else",
+    "            x += 1 / y",
+    "        fi x = 1",
+])
+
+SRC_NESTED = "\n".join([
+    "class Program",
+    "    int x",
+    "    int y",
+    "    method main()",
+    "        for i in (0..2) do",
+    "            if i = 1 then",
+    "                x += 1",
+    "                x += 1 / y",
+    "            else",
+    "                skip",
+    "            fi i = 1",
+    "        end",
+])
+
+
+def run_and_format(src: str) -> str | None:
+    try:
+        eval_prog(parse(src))
+        return None
+    except RuntimeError as e:
+        return d.format_runtime_error(str(e), src=src)
+
+
+@pytest.mark.unit
+def test_exact_line_when_statement_text_repeats() -> None:
+    """同じ文が複数行にあっても、実際に落ちた行を一意に言える。"""
+    out = run_and_format(SRC_AMBIGUOUS)
+    assert out is not None
+    assert "line: 8" in out
+    assert "candidates" not in out
+
+
+@pytest.mark.unit
+def test_exact_line_for_a_nested_statement() -> None:
+    out = run_and_format(SRC_NESTED)
+    assert out is not None
+    assert "line: 8" in out
+
+
+@pytest.mark.unit
+def test_position_marker_does_not_leak() -> None:
+    out = run_and_format(SRC_AMBIGUOUS)
+    assert out is not None
+    assert "AT:" not in out

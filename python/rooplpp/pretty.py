@@ -74,6 +74,9 @@ def pretty_stms(stms: list[Stm], n: int) -> str:
 
 def pretty_stm(stm: Stm, n: int) -> str:
     match stm:
+        # 位置情報は出力しない（-inverse の出力は再パースされるため）
+        case Positioned(_, s0):
+            return pretty_stm(s0, n)
         case Assign(obj, op, exp):
             return f"{pretty_obj(obj)} {pretty_modop(op)} {pretty_exp(exp)}"
         case Swap(o1, o2):

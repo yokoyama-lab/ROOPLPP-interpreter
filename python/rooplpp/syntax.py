@@ -154,6 +154,20 @@ class Break(Enum):
 class Stm:
     pass
 
+
+@dataclass(frozen=True)
+class Pos:
+    """文の位置（診断用。意味論には影響しない）。"""
+    line: int
+    col: int
+
+
+@dataclass(frozen=True)
+class Positioned(Stm):
+    """位置情報つきの文（構文解析器が付ける）。"""
+    pos: Pos
+    stm: Stm
+
 @dataclass(frozen=True)
 class Skip(Stm):
     pass
@@ -307,3 +321,51 @@ class CDecl:
 @dataclass(frozen=True)
 class Prog:
     classes: list[CDecl]
+
+
+# --- 位置情報の除去 -------------------------------------------------------
+
+def strip_pos(s: Stm) -> Stm:
+    """位置情報の殻を剥がす（いちばん外側だけ）。"""
+    while isinstance(s, Positioned):
+        s = s.stm
+    return s
+
+
+def pos_of(s: Stm) -> Optional[Pos]:
+    """いちばん外側の位置情報を取り出す。"""
+    return s.pos if isinstance(s, Positioned) else None
+
+
+def erase_pos_stm(s: Stm) -> Stm:
+    """位置情報をすべて取り除く。AST を構造として比べるときに使う。"""
+    s = strip_pos(s)
+    if isinstance(s, Conditional):
+        return Conditional(s.test, erase_pos_stms(s.then_branch),
+                           erase_pos_stms(s.else_branch), s.fi)
+    if isinstance(s, Loop):
+        return Loop(s.from_exp, erase_pos_stms(s.do_body),
+                    erase_pos_stms(s.loop_body), s.until)
+    if isinstance(s, For):
+        return For(s.var, s.start, s.end, erase_pos_stms(s.body))
+    if isinstance(s, Switch):
+        return Switch(s.obj1,
+                      [(h, erase_pos_stms(body), t) for (h, body, t) in s.cases],
+                      erase_pos_stms(s.default), s.obj2)
+    if isinstance(s, ObjectBlock):
+        return ObjectBlock(s.type_id, s.name, erase_pos_stms(s.body))
+    if isinstance(s, LocalBlock):
+        return LocalBlock(s.dtype, s.name, s.init, erase_pos_stms(s.body), s.final)
+    return s
+
+
+def erase_pos_stms(l: list[Stm]) -> list[Stm]:
+    return [erase_pos_stm(s) for s in l]
+
+
+def erase_pos_prog(p: Prog) -> Prog:
+    return Prog([
+        CDecl(c.name, c.inherits, c.fields,
+              [MDecl(m.name, m.params, erase_pos_stms(m.body)) for m in c.methods])
+        for c in p.classes
+    ])

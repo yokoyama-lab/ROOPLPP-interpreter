@@ -13,6 +13,9 @@ open Value
 
 (**エラー本体の後ろに付ける「そのとき変数がどうだったか」の行の目印*)
 let where_marker = "WHERE:"
+(* 構文解析器が付けた行番号。eval.ml が文のラッパで積む *)
+let at_marker = "AT:"
+let at_line n = "\n" ^ at_marker ^ string_of_int n
 
 (* ------------------------------------------------------------------ *)
 (* 文字列ユーティリティ                                                 *)
@@ -76,8 +79,25 @@ let normalize s =
 (**eval.ml が投げた生メッセージを (トレース, 本体メッセージ, 変数の値) に分ける。
    トレースは外側の文・式から内側の式へ向かう順に並ぶ。
    変数の値は WHERE: 行（eval.ml の文ラッパが付ける）から取り出す。 *)
+(**生メッセージから、構文解析器由来の正確な行番号を取り出す*)
+let exact_line raw =
+  List.fold_left
+    (fun acc l ->
+      let l = String.trim l in
+      match index_of ~needle:at_marker l with
+      | Some 0 ->
+         (match int_of_string_opt
+                  (String.sub l (String.length at_marker)
+                     (String.length l - String.length at_marker) |> String.trim) with
+          | Some n -> Some n
+          | None -> acc)
+      | _ -> acc)
+    None (split_lines raw)
+
 let split_runtime_message raw =
   let ls = split_lines raw in
+  (* 位置マーカは本文にもトレースにも出さない *)
+  let ls = List.filter (fun l -> index_of ~needle:at_marker (String.trim l) <> Some 0) ls in
   let where =
     List.filter_map
       (fun l ->
@@ -299,6 +319,15 @@ let format_runtime_error ?src ?file raw =
   let head = [ "ROOPL++ execution error"; "  message: " ^ message ] in
   let file_line = match file with Some f -> [ "  file: " ^ f ] | None -> [] in
   let loc, excerpt =
+    match exact_line raw with
+    (* 構文解析器が付けた位置があればそれを使う（推定は要らない） *)
+    | Some n ->
+       ([ Printf.sprintf "  line: %d" n ],
+        (match src with
+         | None -> []
+         | Some src ->
+            (match source_excerpt src n with [] -> [] | e -> "" :: "Source:" :: e)))
+    | None ->
     match src with
     | None -> ([], [])
     | Some src ->
@@ -434,7 +463,9 @@ let ids_of_arg = function Id x -> [ x ] | Exp e -> ids_of_exp e
 
 (**文に直接現れる識別子。入れ子の文の中までは見ない（エラーはいちばん内側の
    文で報告されるので、その文のガードと被演算子だけあれば足りる）。 *)
-let ids_of_stm = function
+let rec ids_of_stm = function
+  (* 位置情報の殻は素通し *)
+  | Positioned (_, s) -> ids_of_stm s
   | Skip | Print _ -> []
   | Assign (o, _, e) -> ids_of_obj o @ ids_of_exp e
   | Swap (o1, o2) -> ids_of_obj o1 @ ids_of_obj o2

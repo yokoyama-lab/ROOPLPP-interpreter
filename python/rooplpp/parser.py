@@ -200,11 +200,21 @@ class Parser:
     # --- Statement parsing ---
 
     def parse_stms(self) -> list[Stm]:
-        """Parse one or more statements."""
-        stms = [self.parse_stm()]
+        """Parse one or more statements.
+
+        文には位置を付ける（診断で「どの行で落ちたか」を正確に言うため。
+        OCaml 側 parser.mly の at_pos に対応）。
+        """
+        stms = [self._parse_stm_at()]
         while self._at_stm_start():
-            stms.append(self.parse_stm())
+            stms.append(self._parse_stm_at())
         return stms
+
+    def _parse_stm_at(self) -> Stm:
+        t = self.peek()
+        line = getattr(t, "line", 0) or 0
+        col = getattr(t, "col", 0) or 0
+        return Positioned(Pos(line, col), self.parse_stm())
 
     def _at_stm_start(self) -> bool:
         """Check if current token can start a statement."""
