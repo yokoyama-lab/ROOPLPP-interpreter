@@ -65,7 +65,7 @@ let rec exp_of_formal (e : R.exp) : exp =
      in
      Binary (op, exp_of_formal e1, exp_of_formal e2)
   | R.Fld (x, f) -> Dot (Var (name_of_id x), Var (field_name f))
-  | R.Idx _ -> failwith "arrays are not in the differential harness"
+  | R.Idx (x, e) -> ArrayElement (name_of_id x, exp_of_formal e)
 
 let obj_of_id (x : R.nat) : obj = VarArray (name_of_id x, None)
 
@@ -77,10 +77,24 @@ let field_name (f : R.nat) : string =
 let obj_field (x : R.nat) (f : R.nat) : obj =
   InstVar (obj_of_id x, VarArray (field_name f, None))
 
-(* オブジェクトブロックのクラス名 *)
+(* 形式側のクラス番号と、実装側の宣言の対応（ハーネスの規約）。
+
+   形式化はオブジェクトと配列を同じ [Sobj] で確保する（配列＝添字が動的な
+   オブジェクト）。実装側は表現が別（[ObjVal] と [LocsVec]）なので、
+   **クラス番号で読み分ける**ことにする。
+     クラス 0 → object class C0（フィールド f0, f1）
+     クラス 1 → int[array_len] の配列
+   クラス番号 1 のブロックは new int[n] … delete int[n] の 3 文へ写す。 *)
+let array_class = 1
+let array_len = 4
+
 let class_name (c : R.nat) : string =
   let rec go = function R.O -> 0 | R.S n -> 1 + go n in
   "C" ^ string_of_int (go c)
+
+let is_array_class (c : R.nat) : bool =
+  let rec go = function R.O -> 0 | R.S n -> 1 + go n in
+  go c = array_class
 
 let modop_of_formal = function
   | R.MAdd -> ModAdd | R.MSub -> ModSub | R.MXor -> ModXor
@@ -93,6 +107,25 @@ let rec stm_of_formal (s : R.stm) : stm =
   | R.Soswap (x, y) -> Swap (obj_of_id x, obj_of_id y)
   | R.Sfassign (x, f, o, e) ->
      Assign (obj_field x f, modop_of_formal o, exp_of_formal e)
+  | R.Saassign (x, ei, o, e) ->
+     Assign (VarArray (name_of_id x, Some (exp_of_formal ei)),
+             modop_of_formal o, exp_of_formal e)
+  | R.Saswap (x, e1, y, e2) ->
+     Swap (VarArray (name_of_id x, Some (exp_of_formal e1)),
+           VarArray (name_of_id y, Some (exp_of_formal e2)))
+  | R.Scopy (x, y) ->
+     CopyReference (ObjectType "C0", obj_of_id x, obj_of_id y)
+  | R.Suncopy (x, y) ->
+     UncopyReference (ObjectType "C0", obj_of_id x, obj_of_id y)
+  | R.Socall (x, m, args) ->
+     ObjectCall (obj_of_id x, "m" ^ string_of_int (int_of_nat m),
+                 List.map (fun a -> Id (name_of_id a)) args)
+  | R.Souncall (x, m, args) ->
+     ObjectUncall (obj_of_id x, "m" ^ string_of_int (int_of_nat m),
+                   List.map (fun a -> Id (name_of_id a)) args)
+  | R.Sobj (cl, x, s') when is_array_class cl ->
+     (* 配列はブロック構文が無いので new … delete の 3 文に開く *)
+     failwith "array blocks are expanded by stms_of_formal"
   | R.Sobj (cl, x, s') ->
      ObjectBlock (class_name cl, name_of_id x, stms_of_formal s')
   | R.Sseq _ -> failwith "sequences are flattened by stms_of_formal"
@@ -119,6 +152,11 @@ and int_of_nat (n : R.nat) : int =
 and stms_of_formal (s : R.stm) : stm list =
   match s with
   | R.Sseq (s1, s2) -> stms_of_formal s1 @ stms_of_formal s2
+  | R.Sobj (cl, x, s') when is_array_class cl ->
+     let ty = ("int", Const array_len) in
+     [ ArrayConstruction (ty, obj_of_id x) ]
+     @ stms_of_formal s'
+     @ [ ArrayDestruction (ty, obj_of_id x) ]
   | s -> [ stm_of_formal s ]
 
 (* ---- 両エンジンの実行 ------------------------------------------------ *)
@@ -129,7 +167,19 @@ and stms_of_formal (s : R.stm) : stm list =
 let object_classes : cDecl list =
   [ CDecl ("C0", None,
            [ Decl (IntegerType, "f0"); Decl (IntegerType, "f1") ],
-           [ MDecl ("noop", [], [ Skip ]) ]) ]
+           [ MDecl ("noop", [], [ Skip ]) ]);
+    (* 動的束縛のテスト用の階層。C3 は m0 を上書きし、C4 は継承する *)
+    CDecl ("C2", None, [],
+           [ MDecl ("m0", [ Decl (IntegerType, "v3") ],
+                    [ Assign (VarArray ("v3", None), ModAdd, Const 5) ]) ]);
+    CDecl ("C3", Some "C2", [],
+           [ MDecl ("m0", [ Decl (IntegerType, "v3") ],
+                    [ Assign (VarArray ("v3", None), ModAdd, Const 7) ]) ]);
+    CDecl ("C4", Some "C2", [], [ MDecl ("noop", [], [ Skip ]) ]) ]
+
+(* 配列変数は実装側では宣言が要る（形式側のストアは全域なので不要） *)
+let array_fields : decl list =
+  [ Decl (IntegerArrayType, "v20"); Decl (IntegerArrayType, "v21") ]
 
 let zero_state : R.state =
   { R.vs = (fun _ -> R.Z0); R.os = (fun _ -> None); R.hn = R.O;
@@ -148,7 +198,9 @@ let run_verified ?(env = empty_menv) (s : R.stm) (vars : int list) : int list op
 (* 同じプログラムをこの処理系で走らせる *)
 let run_interpreter_stms ?(methods = []) (stms : stm list) (vars : int list)
     : int list option =
-  let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
+  let fields =
+    List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars
+    @ array_fields in
   let main = MDecl ("main", [], stms) in
   let prog = Prog (CDecl ("Program", None, fields, main :: methods)
                    :: object_classes) in
@@ -168,7 +220,9 @@ let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list opt
 
 (* 実装が投げたエラーメッセージ（成功したら None） *)
 let interpreter_error (stms : stm list) (vars : int list) : string option =
-  let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
+  let fields =
+    List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars
+    @ array_fields in
   let prog =
     Prog (CDecl ("Program", None, fields, [ MDecl ("main", [], stms) ])
           :: object_classes) in
@@ -383,6 +437,92 @@ let p_object_swap =
           R.Sobj (nat_of_int 0, v 6,
                   R.Sseq (R.Soswap (v 5, v 6), R.Soswap (v 5, v 6))))
 
+(* ---- 配列 -----------------------------------------------------------
+
+   形式化は配列を「添字が動的なオブジェクト」として同じヒープに載せる。
+   ハーネスの規約でクラス番号 1 を int[4] の配列に読み替える（上の
+   is_array_class）。長さと範囲検査は形式化の対象外で、実装側の動的検査に
+   任されている（coq/README.md 参照）。 *)
+
+let arr = v 20
+
+(* new int[4] v20  v20[0] += 3  v0 += v20[0]  v20[0] -= 3  delete *)
+let p_array =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 0, R.MAdd, c 3),
+                  R.Sseq (R.Sassign (v 0, R.MAdd, R.Idx (arr, c 0)),
+                          R.Saassign (arr, c 0, R.MSub, c 3))))
+
+(* 2 つのセルを使って入れ替え、読み出してから消す *)
+let p_array_swap =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 0, R.MAdd, c 2),
+                  R.Sseq (R.Saassign (arr, c 1, R.MAdd, c 9),
+                          R.Sseq (R.Saswap (arr, c 0, arr, c 1),
+                                  R.Sseq (R.Sassign (v 0, R.MAdd, R.Idx (arr, c 0)),
+                                          R.Sseq (R.Saassign (arr, c 0, R.MSub, c 9),
+                                                  R.Saassign (arr, c 1, R.MSub, c 2)))))))
+
+(* 消し忘れたセルがある（両方で落ちるはず） *)
+let p_array_dirty =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 2, R.MAdd, c 4),
+                  R.Sassign (v 0, R.MAdd, R.Idx (arr, c 2))))
+
+(* 添字が動的（v0 の値で決まる） *)
+let p_array_dynamic_index =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 2),
+          R.Sobj (nat_of_int 1, arr,
+                  R.Sseq (R.Saassign (arr, R.Var (v 0), R.MAdd, c 6),
+                          R.Sseq (R.Sassign (v 1, R.MAdd, R.Idx (arr, R.Var (v 0))),
+                                  R.Saassign (arr, R.Var (v 0), R.MSub, c 6)))))
+
+(* 範囲外アクセス。形式化はヒープを全域関数で持つので長さの概念が無く、
+   実装だけが落ちる。これは「バグ」ではなく形式化の対象外の明示。 *)
+let p_array_oob_stms = stms_of_formal
+  (R.Sobj (nat_of_int 1, arr,
+           R.Sseq (R.Saassign (arr, c 10, R.MAdd, c 1),
+                   R.Saassign (arr, c 10, R.MSub, c 1))))
+
+let p_array_out_of_bounds =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 10, R.MAdd, c 1),
+                  R.Saassign (arr, c 10, R.MSub, c 1)))
+
+(* ---- 動的束縛 --------------------------------------------------------
+
+   受け手の実行時クラスでメソッドを選ぶ。C3 は m0 を上書き（+7）、
+   C4 は C2 から継承（+5）。 *)
+
+let self = v 50
+let bump n =
+  R.MDecl ([ self; v 3 ], R.Sassign (v 3, R.MAdd, c n))
+
+let menv_dispatch : R.menv =
+  { R.procs = (fun _ -> None);
+    R.classes = (fun cl ->
+      match int_of_nat cl with
+      | 2 -> Some (R.CDecl (None,
+                            fun m -> if int_of_nat m = 0 then Some (bump 5) else None))
+      | 3 -> Some (R.CDecl (Some (nat_of_int 2),
+                            fun m -> if int_of_nat m = 0 then Some (bump 7) else None))
+      | 4 -> Some (R.CDecl (Some (nat_of_int 2), fun _ -> None))
+      | _ -> None) }
+
+(* construct C3 v5  call v5::m0(v0)  destruct v5  →  v0 = 7（上書き） *)
+let p_dispatch_override =
+  R.Sobj (nat_of_int 3, v 5, R.Socall (v 5, nat_of_int 0, [ v 0 ]))
+
+(* construct C4 v5 …  →  v0 = 5（継承） *)
+let p_dispatch_inherited =
+  R.Sobj (nat_of_int 4, v 5, R.Socall (v 5, nat_of_int 0, [ v 0 ]))
+
+(* call してから uncall すると戻る *)
+let p_dispatch_uncall =
+  R.Sobj (nat_of_int 3, v 5,
+          R.Sseq (R.Socall (v 5, nat_of_int 0, [ v 0 ]),
+                  R.Souncall (v 5, nat_of_int 0, [ v 0 ])))
+
 let suite = "test suite for the extracted verified interpreter" >::: [
       agree "arithmetic" p_arith [ 0; 1 ];
       agree "swap" p_swap [ 0; 1 ];
@@ -453,6 +593,42 @@ let suite = "test suite for the extracted verified interpreter" >::: [
         assert_equal ~printer (Some [ 3 ]) (run_verified p_object [ 0 ]);
         assert_equal ~printer (Some [ 5 ]) (run_verified p_object_nested [ 0 ]);
         assert_equal ~printer None (run_verified p_object_dirty [ 0 ]));
+
+      (* 配列（形式化ではオブジェクト＋動的添字） *)
+      agree "array cell written and cleared" p_array [ 0 ];
+      agree "array element swap" p_array_swap [ 0 ];
+      agree "array left with a dirty cell" p_array_dirty [ 0 ];
+      agree "array with a dynamic index" p_array_dynamic_index [ 0; 1 ];
+
+      "the verified interpreter runs arrays" >:: (fun _ ->
+        assert_equal ~printer (Some [ 3 ]) (run_verified p_array [ 0 ]);
+        assert_equal ~printer (Some [ 9 ]) (run_verified p_array_swap [ 0 ]);
+        assert_equal ~printer (Some [ 2; 6 ])
+          (run_verified p_array_dynamic_index [ 0; 1 ]);
+        assert_equal ~printer None (run_verified p_array_dirty [ 0 ]));
+
+      (* 形式化の対象外：配列の長さと範囲検査は実装の動的検査に任されている。
+         「一致しない」ことをテストで固定しておく（黙って一致したことにしない）*)
+      "array bounds are outside the formalization" >:: (fun _ ->
+        assert_equal ~printer None (run_interpreter_stms p_array_oob_stms [ 0 ]);
+        assert_bool "the semantics has no notion of length"
+          (run_verified p_array_out_of_bounds [ 0 ] <> None));
+
+      (* 動的束縛 *)
+      agree ~env:menv_dispatch "dynamic dispatch (override)"
+        p_dispatch_override [ 0 ];
+      agree ~env:menv_dispatch "dynamic dispatch (inherited)"
+        p_dispatch_inherited [ 0 ];
+      agree ~env:menv_dispatch "dynamic dispatch call then uncall"
+        p_dispatch_uncall [ 0 ];
+
+      "the verified interpreter dispatches on the run-time class" >:: (fun _ ->
+        assert_equal ~printer (Some [ 7 ])
+          (run_verified ~env:menv_dispatch p_dispatch_override [ 0 ]);
+        assert_equal ~printer (Some [ 5 ])
+          (run_verified ~env:menv_dispatch p_dispatch_inherited [ 0 ]);
+        assert_equal ~printer (Some [ 0 ])
+          (run_verified ~env:menv_dispatch p_dispatch_uncall [ 0 ]));
 
       (* ゼロクリアを忘れたオブジェクトブロックは意味論どおり落ちる *)
       "an object block that leaves a field dirty is rejected" >:: (fun _ ->
