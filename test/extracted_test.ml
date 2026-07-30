@@ -129,6 +129,16 @@ let run_interpreter_stms ?(methods = []) (stms : stm list) (vars : int list)
 let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list option =
   run_interpreter_stms ~methods (stms_of_formal s) vars
 
+(* 実装が投げたエラーメッセージ（成功したら None） *)
+let interpreter_error (stms : stm list) (vars : int list) : string option =
+  let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
+  let prog =
+    Prog [ CDecl ("Program", None, fields, [ MDecl ("main", [], stms) ]) ] in
+  match Eval.eval_prog prog with
+  | _ -> None
+  | exception Util.Runtime_error m -> Some m
+  | exception Failure m -> Some m
+
 let printer = function
   | None -> "None"
   | Some l -> "[" ^ String.concat "; " (List.map string_of_int l) ^ "]"
@@ -336,16 +346,25 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       agree_sugar "for (descending) matches its desugaring" o_for_down r_for_down [ 0 ];
       agree_sugar "switch matches its desugaring" o_switch r_switch [ 0; 1 ];
 
-      (* 糖衣のほうが厳しい場面：どちらも「実装が検査を省いている」ことによる *)
-      "switch with duplicated exit values: the interpreter accepts, the        semantics rejects" >:: (fun _ ->
-        assert_equal ~printer (Some [ 2; 10 ])
-          (run_interpreter_stms o_switch_dup [ 0; 1 ]);
-        assert_equal ~printer None (run_verified r_switch_dup [ 0; 1 ]));
+      (* 実装が検査を省いていた 2 か所。実装側に検査を足したので、
+         いまは意味論と同じく落ちる（どちらも None）。 *)
+      agree_sugar "switch with duplicated exit values is rejected"
+        o_switch_dup r_switch_dup [ 0; 1 ];
+      agree_sugar "for whose body changes the loop variable is rejected"
+        o_for_bad r_for_bad [ 0 ];
 
-      "for whose body changes the loop variable: the interpreter accepts, the        semantics diverges" >:: (fun _ ->
-        assert_bool "the interpreter should finish"
-          (run_interpreter_stms o_for_bad [ 0 ] <> None);
-        assert_equal ~printer None (run_verified r_for_bad [ 0 ]));
+      (* 「どちらも None」が偶然の一致でないこと：実装は理由つきで落ちる *)
+      "the interpreter explains why it rejects them" >:: (fun _ ->
+        (match interpreter_error o_switch_dup [ 0; 1 ] with
+         | None -> assert_failure "the switch should have been rejected"
+         | Some m ->
+            assert_bool ("unexpected message: " ^ m)
+              (Diagnostics.contains ~needle:"not taken" m));
+        (match interpreter_error o_for_bad [ 0 ] with
+         | None -> assert_failure "the for should have been rejected"
+         | Some m ->
+            assert_bool ("unexpected message: " ^ m)
+              (Diagnostics.contains ~needle:"must not change" m)));
 
       (* 形式化の範囲外は None を返す（黙って間違えない） *)
       "statements outside the fragment are rejected" >:: (fun _ ->

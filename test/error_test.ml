@@ -129,6 +129,16 @@ let suite = "test suite for runtime error paths" >::: [
   case "for loop variable is modified in the body" "must not change"
     (prog "  for i in (0..2) do\n   i += 1\n  end\n");
 
+  (* ループ変数の不変性は最初の 1 周だけでなく毎周検査する。ここを見逃すと
+     次の周回で書き換えを上書きしてしまい、逆向きの実行が同じ道をたどらない *)
+  case "for loop variable is modified from the second iteration on"
+    "must not change"
+    (prog "  for i in (1..3) do\n   if i = 2 then\n    i += 5\n   else\n    skip\n   fi i = 7\n  end\n");
+
+  (* 範囲式も体で変わってはならない（逆は for i in (e2..e1)） *)
+  case "for range is modified in the body" "range of this for statement"
+    (prog "  x += 3\n  for i in (1..x) do\n   x += 1\n  end\n");
+
   (* ---- switch ------------------------------------------------------ *)
   (* break で閉じていない case へ分岐すると、break を探して case 列を
      走り抜けてしまう *)
@@ -137,6 +147,10 @@ let suite = "test suite for runtime error paths" >::: [
 
   case "switch exit value selects another branch" "assertion is incorrect"
     (prog "  x += 1\n  switch x\n   case 1 x += 1 esac 5 break\n   default skip break\n  hctiws x\n");
+
+  (* 出口の値が枝を識別できなければ、逆向きの実行が枝を選び直せない *)
+  case "switch exit values do not distinguish the branches" "was not taken"
+    (prog "  x += 2\n  switch x\n   case 1 y += 10 esac 10 break\n   case 2 y += 10 esac 10 break\n   default skip break\n  hctiws y\n");
 
   (* ---- 型の食い違い -------------------------------------------------- *)
   case "object used as an integer operand" "Integer value expected"

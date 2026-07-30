@@ -406,24 +406,34 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:Assertion should be true in this statement")
 
         case For(x, e1, e2, body):
-            def for_con(st_, n1_exp, n2_exp):
-                n1 = match_int(eval_exp(n1_exp, env2, st_), "for range must be integer")
-                n2 = match_int(eval_exp(n2_exp, env2, st_), "for range must be integer")
-                if n1 == n2:
-                    return {k: v for k, v in st_.items() if k != lookup_envs(x, env2)}
-                v = n1 + 1 if n1 < n2 else n1 - 1
-                st2 = ext_st(st_, lookup_envs(x, env2), IntVal(v))
-                st3 = eval_state(body, env2, map_, st2)
-                return for_con(st3, Const(v), Const(n2))
+            # 範囲は入口で一度だけ評価し、体がループ変数 x と範囲式 e1/e2 を
+            # 変えないことを毎周検査する。この 2 つが可逆性の前提で（逆は
+            # for x in (e2..e1) do 逆体 end）、どちらかが崩れると逆向きの実行
+            # が同じ道をたどらない。形式化は coq/roopl.v の for_up / for_down。
+            def int_of(e, st_):
+                return match_int(eval_exp(e, env, st_), "for range must be integer")
 
+            n1 = int_of(e1, st)
+            n2 = int_of(e2, st)
+            d = 1 if n1 < n2 else -1
             l = max_locs(st) + 1
             env2 = ext_envs(env, x, l)
-            st2 = ext_st(st, l, eval_exp(e1, env, st))
-            st3 = eval_state(body, env2, map_, st2)
-            if lookup_val(x, env2, st2) == lookup_val(x, env2, st3):
-                return for_con(st3, e1, e2)
-            else:
-                raise StmError(pretty_stms([stm], 0) + f"\nERROR:Variable {x} must not change in this for statement")
+
+            def for_con(i, st_):
+                while True:
+                    st2 = ext_st(st_, l, IntVal(i))
+                    st3 = eval_state(body, env2, map_, st2)
+                    # 体はループ変数を変えてはならない（毎周検査する）
+                    if lookup_val(x, env2, st2) != lookup_val(x, env2, st3):
+                        raise StmError(pretty_stms([stm], 0) + f"\nERROR:Variable {x} must not change in this for statement")
+                    # 体は範囲の値も変えてはならない
+                    if int_of(e1, st3) != n1 or int_of(e2, st3) != n2:
+                        raise StmError(pretty_stms([stm], 0) + "\nERROR:The range of this for statement must not change in its body")
+                    if i == n2:
+                        return {k: v for k, v in st3.items() if k != l}
+                    i, st_ = i + d, st3
+
+            return for_con(n1, st)
 
         case Switch(obj1, cases, default_stml, obj2):
             return _eval_switch(stm, obj1, cases, default_stml, obj2, env, map_, st, lval_val, isTrue, isFalse)
@@ -655,7 +665,17 @@ def _eval_switch(stm, obj1, cases, default_stml, obj2, env, map_, st, lval_val, 
         if len(cs) == 1 and not isMatch(obj1, q1, env, st):
             return eval_state(default_s, env, map_, st)
 
-        return eval_cases(obj1, rest, default_s, obj2, env, map_, st)
+        st2 = eval_cases(obj1, rest, default_s, obj2, env, map_, st)
+        # 通らなかった枝の出口表明は偽でなければならない。さもないと出口の値が
+        # 枝を識別できず、逆向きの実行が枝を選び直せない（形式化では
+        # coq/roopl.v の rev_switch が入れ子の条件分岐の else 側として
+        # E_if_f でこれを検査している）。
+        if (len(q2) == 1 and not isMatch(obj1, q1, env, st)
+                and isMatch(obj2, q2, env, st2)):
+            raise StmError(
+                pretty_stms([stm], 0) + "\nERROR:assertion is incorrect:the exit value " +
+                pretty_exp(q2[0]) + " of a case that was not taken must not match in this switch statement")
+        return st2
 
     return eval_cases(obj1, cases, default_stml, obj2, env, map_, st)
 

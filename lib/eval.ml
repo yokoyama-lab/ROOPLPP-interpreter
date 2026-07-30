@@ -320,26 +320,34 @@ let rec eval_state stml env map st0 =
        else
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Assertion should be true in this statement")
     (*FOR CONST: for x in (e1..e2) do stml end *)
+    (* 範囲は入口で一度だけ評価し、体がループ変数 x と範囲式 e1/e2 を変えない
+       ことを毎周検査する。この 2 つが可逆性の前提で（逆は for x in (e2..e1)
+       do 逆体 end）、どちらかが崩れると逆向きの実行が同じ道をたどらない。
+       形式化は coq/roopl.v の for_up / for_down（局所ブロック＋二重ガードの
+       ループへの糖衣）。 *)
     | For(x, e1, e2, stml) ->
-       let rec for_con (x, (e1, e2), stml) env map st =                         (*意味関数F*)
-         let n1 = match eval_exp e1 env st with IntVal(n) -> n | _ -> failwith "ERROR:for range must be integer" in
-         let n2 = match eval_exp e2 env st with IntVal(n) -> n | _ -> failwith "ERROR:for range must be integer" in
-         if n1 = n2 then List.remove_assoc (lookup_envs x env) st               (* ストアからロケーションxを取り除く *)
-         else
-           let v = if n1 < n2 then (n1 + 1)
-                   else (n1 - 1)
-           in
-           let st2 = ext_st st (lookup_envs x env) (IntVal v) in  (* μ[γ(x) -> n1 + 1 or n1 - 1 *)
-           let st3 = eval_state stml env map st2 in               (* stml1回実行 *)
-           for_con (x, (Const v, Const n2), stml) env map st3     (* 再帰 *)
+       let int_of e st' = match eval_exp e env st' with
+         | IntVal(n) -> n
+         | _ -> failwith "ERROR:for range must be integer"
        in
+       let n1 = int_of e1 st in                                   (* 範囲の始点 *)
+       let n2 = int_of e2 st in                                   (* 範囲の終点 *)
+       let d = if n1 < n2 then 1 else -1 in                        (* 進む向き *)
        let locs = max_locs st + 1 in                            (* 未使用のロケーションを取得 *)
        let env2 = ext_envs env x locs in                          (* γ[x->l] *)
-       let st2 = ext_st st locs (eval_exp e1 env st) in           (* μ[l->n1 *)
-       let st3 = eval_state stml env2 map st2 in                  (*stml1回実行*)
-       if (lookup_val x env2 st2) = (lookup_val x env2 st3) then
-         for_con (x, (e1, e2), stml) env2 map st3                 (*意味関数Fへ*)
-       else fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
+       let rec for_con i st =
+         let st2 = ext_st st locs (IntVal i) in                    (* μ[l->i] *)
+         let st3 = eval_state stml env2 map st2 in                 (* stml1回実行 *)
+         (* 体はループ変数を変えてはならない（毎周検査する） *)
+         if (lookup_val x env2 st2) <> (lookup_val x env2 st3) then
+           fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable "^ x ^ " must not change in this for statement")
+         (* 体は範囲の値も変えてはならない *)
+         else if int_of e1 st3 <> n1 || int_of e2 st3 <> n2 then
+           fail_stm (pretty_stms [stm] 0 ^ "\nERROR:The range of this for statement must not change in its body")
+         else if i = n2 then List.remove_assoc locs st3            (* ストアからロケーションxを取り除く *)
+         else for_con (i + d) st3                                  (* 再帰 *)
+       in
+       for_con n1 st
     (*追加部分SWITCH*)
     | Switch(obj1, cases, stml, obj2) ->
        let rec eval_cases obj1 cs s obj2 env map st =
@@ -407,7 +415,16 @@ let rec eval_state stml env map st0 =
            eval_case2 obj1 q1 sq obj2 1 env map st
          else if List.length cs = 1 && not (isMatch obj1 q1 env st) then
            eval_state s env map st
-         else eval_cases obj1 tl s obj2 env map st
+         else
+           let st2 = eval_cases obj1 tl s obj2 env map st in
+           (* 通らなかった枝の出口表明は偽でなければならない。さもないと出口の
+              値が枝を識別できず、逆向きの実行が枝を選び直せない（形式化では
+              coq/roopl.v の rev_switch が入れ子の条件分岐の else 側として
+              E_if_f でこれを検査している）。 *)
+           if List.length q'1 = 1 && not (isMatch obj1 q1 env st)
+              && isMatch obj2 q'1 env st2 then
+             fail_stm (pretty_stms [stm] 0 ^ "\nERROR:assertion is incorrect:the exit value " ^ pretty_exp (List.hd q'1) ^ " of a case that was not taken must not match in this switch statement")
+           else st2
        in
        eval_cases obj1 cases stml obj2 env map st
     | Conditional(e1, stml1, stml2, e2) ->           (* if e1 then s1 else s2 fi e2 *)

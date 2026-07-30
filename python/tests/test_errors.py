@@ -53,6 +53,17 @@ CASES = [
      "class C\n int v\n method notMain()\n  v += 1\n"),
     ("for loop variable modified", "must not change",
      prog("  for i in (0..2) do\n   i += 1\n  end\n")),
+    # ループ変数の不変性は最初の 1 周だけでなく毎周検査する
+    ("for loop variable changed from the second iteration on", "must not change",
+     prog("  for i in (1..3) do\n   if i = 2 then\n    i += 5\n   else\n    skip\n"
+          "   fi i = 7\n  end\n")),
+    # 範囲式も体で変わってはならない（逆は for i in (e2..e1)）
+    ("for range changed in the body", "range of this for statement",
+     prog("  x += 3\n  for i in (1..x) do\n   x += 1\n  end\n")),
+    # 出口の値が枝を識別できなければ、逆向きの実行が枝を選び直せない
+    ("switch exit values do not distinguish the branches", "was not taken",
+     prog("  x += 2\n  switch x\n   case 1 y += 10 esac 10 break\n"
+          "   case 2 y += 10 esac 10 break\n   default skip break\n  hctiws y\n")),
     ("array where an integer is expected", "expected array value",
      prog("  x += a[0]\n")),
 ]
