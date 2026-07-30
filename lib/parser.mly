@@ -9,10 +9,18 @@ let parse_error _ = ()
 
 (* 文に位置を付ける。n は規則右辺の何番目の記号か（ocamlyacc の規約）。
    位置は診断（実行時エラーの行）専用で、意味論には影響しない。 *)
-let at_pos n s =
-  let p = Parsing.rhs_start_pos n in
-  Positioned ({ line = p.Lexing.pos_lnum;
-                col = p.Lexing.pos_cnum - p.Lexing.pos_bol }, s)
+let span ns ne =
+  let s = Parsing.rhs_start_pos ns and t = Parsing.rhs_end_pos ne in
+  { line = s.Lexing.pos_lnum;
+    col = s.Lexing.pos_cnum - s.Lexing.pos_bol;
+    end_line = t.Lexing.pos_lnum;
+    end_col = t.Lexing.pos_cnum - t.Lexing.pos_bol }
+
+let at_pos n s = Positioned (span n n, s)
+
+(* 式にも位置を付ける。失敗しうる形（配列要素・二項演算）だけを包めば、
+   エラーのキャレットは出せる。定数と nil は落ちないので包まない。 *)
+let at_epos ns ne e = EPos (span ns ne, e)
 
 let rec anyId2obj = function
   | VarArray(x, None)   -> Var x
@@ -131,26 +139,26 @@ main:
 // 式
 exp:
   | CONST        { Const $1             } // 定数
-  | anyId        { anyId2obj $1         } // 変数 or 配列要素
+  | anyId        { at_epos 1 1 (anyId2obj $1) } // 変数 or 配列要素
   | NIL          { Nil                  } // nil
-  | exp MUL exp  { Binary(Mul,  $1, $3) } // e1 * e2
-  | exp DIV exp  { Binary(Div,  $1, $3) } // e1 / e2
-  | exp MOD exp  { Binary(Mod,  $1, $3) } // e1 % e2
-  | exp ADD exp  { Binary(Add,  $1, $3) } // e1 + e2
-  | exp SUB exp  { Binary(Sub,  $1, $3) } // e1 - e2
-  | exp LT exp   { Binary(Lt,   $1, $3) } // e1 < e2
-  | exp LE exp   { Binary(Le,   $1, $3) } // e1 <= e2
-  | exp GT exp   { Binary(Gt,   $1, $3) } // e1 > e2
-  | exp GE exp   { Binary(Ge,   $1, $3) } // e1 >= e2
-  | exp EQ exp   { Binary(Eq,   $1, $3) } // e1 = e2
-  | exp NE exp   { Binary(Ne,   $1, $3) } // e1 != e2
-  | exp BAND exp { Binary(Band, $1, $3) } // e1 & e2
-  | exp XOR exp  { Binary(Xor,  $1, $3) } // e1 ^ e2
-  | exp BOR exp  { Binary(Bor,  $1, $3) } // e1 | e2
-  | exp AND exp  { Binary(And,  $1, $3) } // e1 && e2
-  | exp OR exp   { Binary(Or,   $1, $3) } // e1 && e2
+  | exp MUL exp { at_epos 1 3 (Binary(Mul, $1, $3)) } // e1 * e2
+  | exp DIV exp { at_epos 1 3 (Binary(Div, $1, $3)) } // e1 / e2
+  | exp MOD exp { at_epos 1 3 (Binary(Mod, $1, $3)) } // e1 % e2
+  | exp ADD exp { at_epos 1 3 (Binary(Add, $1, $3)) } // e1 + e2
+  | exp SUB exp { at_epos 1 3 (Binary(Sub, $1, $3)) } // e1 - e2
+  | exp LT exp { at_epos 1 3 (Binary(Lt, $1, $3)) } // e1 < e2
+  | exp LE exp { at_epos 1 3 (Binary(Le, $1, $3)) } // e1 <= e2
+  | exp GT exp { at_epos 1 3 (Binary(Gt, $1, $3)) } // e1 > e2
+  | exp GE exp { at_epos 1 3 (Binary(Ge, $1, $3)) } // e1 >= e2
+  | exp EQ exp { at_epos 1 3 (Binary(Eq, $1, $3)) } // e1 = e2
+  | exp NE exp { at_epos 1 3 (Binary(Ne, $1, $3)) } // e1 != e2
+  | exp BAND exp { at_epos 1 3 (Binary(Band, $1, $3)) } // e1 & e2
+  | exp XOR exp { at_epos 1 3 (Binary(Xor, $1, $3)) } // e1 ^ e2
+  | exp BOR exp { at_epos 1 3 (Binary(Bor, $1, $3)) } // e1 | e2
+  | exp AND exp { at_epos 1 3 (Binary(And, $1, $3)) } // e1 && e2
+  | exp OR exp { at_epos 1 3 (Binary(Or, $1, $3)) } // e1 && e2
   | LPAREN exp RPAREN { $2 }              // ( e )
-  | SUB exp %prec UNARY { Binary(Sub, Const 0, $2) } // -e
+  | SUB exp %prec UNARY { at_epos 1 2 (Binary(Sub, Const 0, $2)) } // -e
 //  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
 
 modop:

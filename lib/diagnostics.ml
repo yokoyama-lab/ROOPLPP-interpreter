@@ -17,6 +17,10 @@ let where_marker = "WHERE:"
 let at_marker = "AT:"
 let at_line n = "\n" ^ at_marker ^ string_of_int n
 
+(**式の範囲つきの位置マーカ（行:列:終了行:終了列）*)
+let at_span (l, c, el, ec) =
+  Printf.sprintf "\n%s%d:%d:%d:%d" at_marker l c el ec
+
 (* ------------------------------------------------------------------ *)
 (* 文字列ユーティリティ                                                 *)
 (* ------------------------------------------------------------------ *)
@@ -79,20 +83,27 @@ let normalize s =
 (**eval.ml が投げた生メッセージを (トレース, 本体メッセージ, 変数の値) に分ける。
    トレースは外側の文・式から内側の式へ向かう順に並ぶ。
    変数の値は WHERE: 行（eval.ml の文ラッパが付ける）から取り出す。 *)
-(**生メッセージから、構文解析器由来の正確な行番号を取り出す*)
-let exact_line raw =
+(**生メッセージから、構文解析器由来の位置を取り出す。
+   "AT:<行>"（文）と "AT:<行>:<列>:<終了行>:<終了列>"（式）の両方を読む。 *)
+let exact_pos raw =
   List.fold_left
     (fun acc l ->
       let l = String.trim l in
       match index_of ~needle:at_marker l with
       | Some 0 ->
-         (match int_of_string_opt
-                  (String.sub l (String.length at_marker)
-                     (String.length l - String.length at_marker) |> String.trim) with
-          | Some n -> Some n
-          | None -> acc)
+         let body =
+           String.sub l (String.length at_marker)
+             (String.length l - String.length at_marker) |> String.trim
+         in
+         (match List.map int_of_string_opt (String.split_on_char ':' body) with
+          | [ Some n ] -> Some (n, None)
+          | [ Some n; Some c; Some el; Some ec ] -> Some (n, Some (c, el, ec))
+          | _ -> acc)
       | _ -> acc)
     None (split_lines raw)
+
+(**行番号だけが要るとき*)
+let exact_line raw = Option.map fst (exact_pos raw)
 
 let split_runtime_message raw =
   let ls = split_lines raw in
@@ -230,8 +241,8 @@ let source_excerpt src line =
     done;
     !acc
 
-(**キャレット付きの抜粋（構文エラー用。位置情報があるとき）*)
-let source_excerpt_caret src line col =
+(**キャレット付きの抜粋（位置情報があるとき）。[len] はキャレットの幅。 *)
+let source_excerpt_caret ?(len = 1) src line col =
   let ls = Array.of_list (split_lines src) in
   if line <= 0 || line > Array.length ls then []
   else
@@ -239,7 +250,8 @@ let source_excerpt_caret src line col =
     let before = if line > 1 then [ excerpt_line ~width ~marked:false (line - 1) ls.(line - 2) ] else [] in
     let here = excerpt_line ~width ~marked:true line ls.(line - 1) in
     let caret =
-      Printf.sprintf "  %s %*s | %s^" " " width "" (String.make (max 0 col) ' ')
+      Printf.sprintf "  %s %*s | %s%s" " " width ""
+        (String.make (max 0 col) ' ') (String.make (max 1 len) '^')
     in
     let after =
       if line < Array.length ls
@@ -319,14 +331,27 @@ let format_runtime_error ?src ?file raw =
   let head = [ "ROOPL++ execution error"; "  message: " ^ message ] in
   let file_line = match file with Some f -> [ "  file: " ^ f ] | None -> [] in
   let loc, excerpt =
-    match exact_line raw with
+    match exact_pos raw with
     (* 構文解析器が付けた位置があればそれを使う（推定は要らない） *)
-    | Some n ->
-       ([ Printf.sprintf "  line: %d" n ],
+    | Some (n, span) ->
+       let loc =
+         match span with
+         | Some (c, el, ec) when el = n ->
+            [ Printf.sprintf "  line: %d, columns %d-%d" n c ec ]
+         | _ -> [ Printf.sprintf "  line: %d" n ]
+       in
+       (loc,
         (match src with
          | None -> []
          | Some src ->
-            (match source_excerpt src n with [] -> [] | e -> "" :: "Source:" :: e)))
+            let e =
+              match span with
+              (* 同じ行に収まる式なら、その範囲にキャレットを引く *)
+              | Some (c, el, ec) when el = n ->
+                 source_excerpt_caret ~len:(max 1 (ec - c)) src n c
+              | _ -> source_excerpt src n
+            in
+            (match e with [] -> [] | e -> "" :: "Source:" :: e)))
     | None ->
     match src with
     | None -> ([], [])
@@ -447,6 +472,7 @@ let rec describe ?(depth = 2) ~visited st v =
 
 (**式に現れる識別子*)
 let rec ids_of_exp = function
+  | EPos (_, e) -> ids_of_exp e
   | Const _ | Nil -> []
   | Var x -> [ x ]
   | ArrayElement (x, e) -> x :: ids_of_exp e

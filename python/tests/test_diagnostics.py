@@ -222,3 +222,40 @@ def test_position_marker_does_not_leak() -> None:
     out = run_and_format(SRC_AMBIGUOUS)
     assert out is not None
     assert "AT:" not in out
+
+
+SRC_OOB_RUN = "\n".join([
+    "class Program",
+    "    int[] a",
+    "    int total",
+    "    method main()",
+    "        new int[4] a",
+    "        for i in (0..4) do",
+    "            total += a[i]",
+    "        end",
+])
+
+SRC_DIV = "\n".join([
+    "class Program",
+    "    int x",
+    "    int y",
+    "    method main()",
+    "        x += 1 / y",
+])
+
+
+@pytest.mark.unit
+def test_caret_under_the_failing_subexpression() -> None:
+    """式にも位置があるので、落ちた部分式にキャレットを引ける。"""
+    out = run_and_format(SRC_OOB_RUN)
+    assert out is not None
+    assert "line: 7, columns 21-25" in out
+    assert "^^^^" in out
+
+
+@pytest.mark.unit
+def test_caret_covers_the_subexpression_not_the_statement() -> None:
+    out = run_and_format(SRC_DIV)
+    assert out is not None
+    assert "^^^^^" in out          # 1 / y の 5 文字
+    assert "^^^^^^^^^^" not in out  # 文全体ではない

@@ -39,6 +39,10 @@ type modOp =
   | ModSub (**-=*)
   | ModXor (**^=*)
 
+(**位置（診断用。意味論には影響しない）。文にも式にも付く。
+   列は 0 起点で、[end_col] は最後の文字の次を指す（キャレットの幅に使う）*)
+type pos = { line : int; col : int; end_line : int; end_col : int }
+
 (**式*)
 type exp =
   | Const of int (**整数*)
@@ -47,6 +51,7 @@ type exp =
   | Nil (**Nil*)
   | Binary of binOp * exp * exp (**二項演算*)
   | Dot of exp * exp (**ドット演算子*)
+  | EPos of pos * exp (**位置情報つきの式（構文解析器が付ける）*)
 
 (**変数*)
 type obj =
@@ -73,9 +78,6 @@ type break =
   | Break
   | NoBreak (**breakなし*)
 
-(**文の位置（診断用。意味論には影響しない）*)
-type pos = { line : int; col : int }
-
 (**文*)
 type stm =
   | Skip (**Skip*)
@@ -101,6 +103,16 @@ type stm =
   | Print of string (**print("")*)
   | Positioned of pos * stm (**位置情報つきの文（構文解析器が付ける）*)
 
+(**式の位置情報の殻を剥がす*)
+let rec strip_epos = function
+  | EPos(_, e) -> strip_epos e
+  | e -> e
+
+(**いちばん外側の式の位置を取り出す*)
+let epos_of = function
+  | EPos(p, _) -> Some p
+  | _ -> None
+
 (**位置情報の殻を剥がす。意味論・整形・反転はすべて剥がした文を見る*)
 let rec strip_pos = function
   | Positioned(_, s) -> strip_pos s
@@ -125,20 +137,63 @@ type prog = Prog of cDecl list (**class .. class*)
 
 (**位置情報をすべて取り除く。位置は同じプログラムでもソースの見た目で変わる
    ので、AST を構造として比べるときはこれを通す（整形→再パースの往復検査など）。 *)
+let rec erase_pos_exp e =
+  match e with
+  | EPos(_, e0) -> erase_pos_exp e0
+  | ArrayElement(x, e0) -> ArrayElement(x, erase_pos_exp e0)
+  | Binary(o, e1, e2) -> Binary(o, erase_pos_exp e1, erase_pos_exp e2)
+  | Dot(e1, e2) -> Dot(erase_pos_exp e1, erase_pos_exp e2)
+  | e -> e
+
+let erase_pos_obj o =
+  let rec go = function
+    | VarArray(x, ie) -> VarArray(x, Option.map erase_pos_exp ie)
+    | InstVar(o1, o2) -> InstVar(go o1, go o2)
+  in go o
+
+let erase_pos_arg = function
+  | Id x -> Id x
+  | Exp e -> Exp (erase_pos_exp e)
+
 let rec erase_pos_stm s =
   match s with
   | Positioned(_, s0) -> erase_pos_stm s0
+  | Assign(o, op, e) -> Assign(erase_pos_obj o, op, erase_pos_exp e)
+  | Swap(o1, o2) -> Swap(erase_pos_obj o1, erase_pos_obj o2)
   | Conditional(e1, s1, s2, e2) ->
-     Conditional(e1, erase_pos_stms s1, erase_pos_stms s2, e2)
-  | Loop(e1, s1, s2, e2) -> Loop(e1, erase_pos_stms s1, erase_pos_stms s2, e2)
-  | For(x, e1, e2, ss) -> For(x, e1, e2, erase_pos_stms ss)
+     Conditional(erase_pos_exp e1, erase_pos_stms s1, erase_pos_stms s2,
+                 erase_pos_exp e2)
+  | Loop(e1, s1, s2, e2) ->
+     Loop(erase_pos_exp e1, erase_pos_stms s1, erase_pos_stms s2, erase_pos_exp e2)
+  | For(x, e1, e2, ss) ->
+     For(x, erase_pos_exp e1, erase_pos_exp e2, erase_pos_stms ss)
   | Switch(o1, cases, ss, o2) ->
-     Switch(o1,
-            List.map (fun (h, ss1, t) -> (h, erase_pos_stms ss1, t)) cases,
-            erase_pos_stms ss, o2)
+     Switch(erase_pos_obj o1,
+            List.map (fun ((c, es1), ss1, (p, es2, b)) ->
+                ((c, List.map erase_pos_exp es1), erase_pos_stms ss1,
+                 (p, List.map erase_pos_exp es2, b))) cases,
+            erase_pos_stms ss, erase_pos_obj o2)
   | ObjectBlock(t, x, ss) -> ObjectBlock(t, x, erase_pos_stms ss)
-  | LocalBlock(t, x, e1, ss, e2) -> LocalBlock(t, x, e1, erase_pos_stms ss, e2)
-  | s -> s
+  | LocalBlock(t, x, e1, ss, e2) ->
+     LocalBlock(t, x, erase_pos_exp e1, erase_pos_stms ss, erase_pos_exp e2)
+  | LocalCall(m, args) -> LocalCall(m, List.map erase_pos_arg args)
+  | LocalUncall(m, args) -> LocalUncall(m, List.map erase_pos_arg args)
+  | ObjectCall(o, m, args) ->
+     ObjectCall(erase_pos_obj o, m, List.map erase_pos_arg args)
+  | ObjectUncall(o, m, args) ->
+     ObjectUncall(erase_pos_obj o, m, List.map erase_pos_arg args)
+  | ObjectConstruction(t, o) -> ObjectConstruction(t, erase_pos_obj o)
+  | ObjectDestruction(t, o) -> ObjectDestruction(t, erase_pos_obj o)
+  | CopyReference(d, o1, o2) -> CopyReference(d, erase_pos_obj o1, erase_pos_obj o2)
+  | UncopyReference(d, o1, o2) ->
+     UncopyReference(d, erase_pos_obj o1, erase_pos_obj o2)
+  | ArrayConstruction((t, e), o) ->
+     ArrayConstruction((t, erase_pos_exp e), erase_pos_obj o)
+  | ArrayDestruction((t, e), o) ->
+     ArrayDestruction((t, erase_pos_exp e), erase_pos_obj o)
+  | Show e -> Show (erase_pos_exp e)
+  | Skip -> Skip
+  | Print str -> Print str
 
 and erase_pos_stms l = List.map erase_pos_stm l
 

@@ -69,7 +69,18 @@ class Parser:
         TT.LE: BinOp.Le, TT.GE: BinOp.Ge,
     }
 
+    def _span(self, start_tok) -> Pos:
+        """start_tok から直前に読んだトークンまでの範囲。
+
+        列は 0 起点に直す（字句解析器は 1 起点。OCaml 側 parser.mly の span と
+        同じ表現にするため）。
+        """
+        prev = self.tokens[self.pos - 1] if self.pos > 0 else start_tok
+        return Pos(start_tok.line, start_tok.col - 1,
+                   prev.line, max(prev.end_col, prev.col) - 1)
+
     def parse_exp(self, min_prec: int = 0) -> Exp:
+        start = self.peek()
         left = self._parse_prefix()
         while True:
             tt = self.peek().type
@@ -86,7 +97,8 @@ class Parser:
             # For non-associative operators, use prec+1 for right side
             # For left-associative operators, use prec+1 too
             right = self.parse_exp(prec + 1)
-            left = Binary(op, left, right)
+            # 失敗しうる形（二項演算）には位置を付ける
+            left = EPos(self._span(start), Binary(op, left, right))
         return left
 
     def _parse_prefix(self) -> Exp:
@@ -106,15 +118,16 @@ class Parser:
             self.advance()
             # Unary minus: -e becomes Binary(Sub, Const(0), e)
             e = self.parse_exp(10)  # UNARY precedence
-            return Binary(BinOp.Sub, Const(0), e)
+            return EPos(self._span(t), Binary(BinOp.Sub, Const(0), e))
         if t.type == TT.ID:
             return self._anyid_as_exp()
         raise ParseError(t, f"unexpected token {t.type.name} in expression")
 
     def _anyid_as_exp(self) -> Exp:
         """Parse anyId and convert to expression via anyId2obj."""
+        start = self.peek()
         obj = self.parse_anyid()
-        return _anyid2obj(obj)
+        return EPos(self._span(start), _anyid2obj(obj))
 
     # --- anyId parsing (used in both expression and statement context) ---
 
@@ -212,9 +225,8 @@ class Parser:
 
     def _parse_stm_at(self) -> Stm:
         t = self.peek()
-        line = getattr(t, "line", 0) or 0
-        col = getattr(t, "col", 0) or 0
-        return Positioned(Pos(line, col), self.parse_stm())
+        stm = self.parse_stm()
+        return Positioned(self._span(t), stm)
 
     def _at_stm_start(self) -> bool:
         """Check if current token can start a statement."""

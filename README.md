@@ -97,11 +97,12 @@ ROOPL++ zero-clear check: 3 of 3 value(s) are NOT zero-cleared:
 ROOPL++ execution error
   message: Array index a[4] is out of bounds
   file: example/foo.rplpp
-  line: 11
+  line: 11, columns 21-25
 
 Source:
     10 |         for i in (0..4) do
   > 11 |             total += a[i]
+       |                      ^^^^
     12 |         end
 
 Trace (outermost first):
@@ -115,10 +116,10 @@ Fix hints:
   - `new int[n] xs` allocates xs[0] .. xs[n-1] only; ...
 ```
 
-行番号は**構文解析器が文ごとに付けた位置**から出る（`Positioned` ノード。同じ文字列の文が
-複数行にあっても落ちた行を一意に言える）。位置を持たない文だけ、従来どおり
-「pretty 表示した文とソース行の照合」で推定する。整形は `lib/diagnostics.ml`、テストは
-`test/diagnostics_test.ml`。
+位置は**構文解析器が付ける**（文は `Positioned`、式は `EPos`）。同じ文字列の文が複数行に
+あっても落ちた行を一意に言え、失敗した部分式にはキャレットを引く。位置を持たない文だけ、
+従来どおり「pretty 表示した文とソース行の照合」で推定する。整形は `lib/diagnostics.ml`、
+テストは `test/diagnostics_test.ml`。
 
 ## 言語の概要
 

@@ -58,6 +58,25 @@ let src_ambiguous =
       "            x += 1 / y";
       "        fi x = 1" ]
 
+(* 式の中で落ちる：a[4] は範囲外（7 行目、21〜25 桁） *)
+let src_oob_run =
+  s [ "class Program";
+      "    int[] a";
+      "    int total";
+      "    method main()";
+      "        new int[4] a";
+      "        for i in (0..4) do";
+      "            total += a[i]";
+      "        end" ]
+
+(* 式の中で落ちる：1 / y のゼロ除算 *)
+let src_div =
+  s [ "class Program";
+      "    int x";
+      "    int y";
+      "    method main()";
+      "        x += 1 / y" ]
+
 (* 入れ子（for の中の if の中）で落ちる。落ちるのは 8 行目 *)
 let src_nested =
   s [ "class Program";
@@ -91,6 +110,27 @@ let suite = "test suite for diagnostics.ml" >::: [
         | Some out ->
            assert_bool ("expected line 8 in:\n" ^ out)
              (contains_sub ~needle:"line: 8" out));
+
+      (* 式にも位置があるので、落ちた部分式にキャレットを引ける *)
+      "a failure inside an expression gets a caret under it" >:: (fun _ ->
+        match run_and_format src_oob_run with
+        | None -> assert_failure "expected a runtime error"
+        | Some out ->
+           assert_bool ("expected a column range in:\n" ^ out)
+             (contains_sub ~needle:"line: 7, columns 21-25" out);
+           (* キャレットは a[i] の 4 文字分 *)
+           assert_bool ("expected a caret span in:\n" ^ out)
+             (contains_sub ~needle:"^^^^" out));
+
+      "the caret covers the failing sub-expression, not the whole statement"
+      >:: (fun _ ->
+        match run_and_format src_div with
+        | None -> assert_failure "expected a runtime error"
+        | Some out ->
+           assert_bool ("expected 1 / y to be underlined in:\n" ^ out)
+             (contains_sub ~needle:"^^^^^" out);
+           assert_bool ("did not expect the whole line underlined in:\n" ^ out)
+             (not (contains_sub ~needle:"^^^^^^^^^^" out)));
 
       "the position marker does not leak into the message" >:: (fun _ ->
         match run_and_format src_ambiguous with

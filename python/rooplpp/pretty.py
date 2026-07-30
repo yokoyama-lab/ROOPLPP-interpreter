@@ -34,6 +34,8 @@ def pretty_modop(op: ModOp) -> str:
 
 def pretty_exp(exp: Exp) -> str:
     match exp:
+        # 位置情報は出力しない
+        case EPos(_, e): return pretty_exp(e)
         case Const(n): return str(n)
         case Var(name): return name
         case ArrayElement(name, idx): return f"{name}[{pretty_exp(idx)}]"
@@ -47,8 +49,11 @@ def pretty_exp(exp: Exp) -> str:
 
 
 def _paren_binary(exp: Exp) -> str:
-    """二項演算の被演算子だけ括弧で囲む（添字 e[..] や Dot は不要）。"""
-    if isinstance(exp, Binary):
+    """二項演算の被演算子だけ括弧で囲む（添字 e[..] や Dot は不要）。
+
+    位置情報の殻は括弧の判定に影響しない。
+    """
+    if isinstance(strip_epos(exp), Binary):
         return "(" + pretty_exp(exp) + ")"
     return pretty_exp(exp)
 

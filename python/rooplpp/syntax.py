@@ -76,8 +76,27 @@ class ModOp(Enum):
 
 
 # --- Expressions ---
+@dataclass(frozen=True)
+class Pos:
+    """位置（診断用。意味論には影響しない）。文にも式にも付く。
+
+    列は 0 起点で、end_col は最後の文字の次を指す（キャレットの幅に使う）。
+    """
+    line: int
+    col: int
+    end_line: int = 0
+    end_col: int = 0
+
+
 class Exp:
     pass
+
+
+@dataclass(frozen=True)
+class EPos(Exp):
+    """位置情報つきの式（構文解析器が付ける）。"""
+    pos: Pos
+    exp: Exp
 
 @dataclass(frozen=True)
 class Const(Exp):
@@ -153,13 +172,6 @@ class Break(Enum):
 # --- Statements ---
 class Stm:
     pass
-
-
-@dataclass(frozen=True)
-class Pos:
-    """文の位置（診断用。意味論には影響しない）。"""
-    line: int
-    col: int
 
 
 @dataclass(frozen=True)
@@ -325,6 +337,36 @@ class Prog:
 
 # --- 位置情報の除去 -------------------------------------------------------
 
+def strip_epos(e: Exp) -> Exp:
+    """式の位置情報の殻を剥がす。"""
+    while isinstance(e, EPos):
+        e = e.exp
+    return e
+
+
+def erase_pos_exp(e: Exp) -> Exp:
+    e = strip_epos(e)
+    if isinstance(e, ArrayElement):
+        return ArrayElement(e.name, erase_pos_exp(e.index))
+    if isinstance(e, Binary):
+        return Binary(e.op, erase_pos_exp(e.left), erase_pos_exp(e.right))
+    if isinstance(e, Dot):
+        return Dot(erase_pos_exp(e.left), erase_pos_exp(e.right))
+    return e
+
+
+def erase_pos_obj(o):
+    if isinstance(o, VarArray):
+        return VarArray(o.name, None if o.index is None else erase_pos_exp(o.index))
+    if isinstance(o, InstVar):
+        return InstVar(erase_pos_obj(o.obj), erase_pos_obj(o.field))
+    return o
+
+
+def erase_pos_arg(a):
+    return ExpArg(erase_pos_exp(a.exp)) if isinstance(a, ExpArg) else a
+
+
 def strip_pos(s: Stm) -> Stm:
     """位置情報の殻を剥がす（いちばん外側だけ）。"""
     while isinstance(s, Positioned):
@@ -340,22 +382,57 @@ def pos_of(s: Stm) -> Optional[Pos]:
 def erase_pos_stm(s: Stm) -> Stm:
     """位置情報をすべて取り除く。AST を構造として比べるときに使う。"""
     s = strip_pos(s)
+    if isinstance(s, Assign):
+        return Assign(erase_pos_obj(s.obj), s.op, erase_pos_exp(s.exp))
+    if isinstance(s, Swap):
+        return Swap(erase_pos_obj(s.left), erase_pos_obj(s.right))
     if isinstance(s, Conditional):
-        return Conditional(s.test, erase_pos_stms(s.then_branch),
-                           erase_pos_stms(s.else_branch), s.fi)
+        return Conditional(erase_pos_exp(s.test), erase_pos_stms(s.then_branch),
+                           erase_pos_stms(s.else_branch), erase_pos_exp(s.fi))
     if isinstance(s, Loop):
-        return Loop(s.from_exp, erase_pos_stms(s.do_body),
-                    erase_pos_stms(s.loop_body), s.until)
+        return Loop(erase_pos_exp(s.from_exp), erase_pos_stms(s.do_body),
+                    erase_pos_stms(s.loop_body), erase_pos_exp(s.until))
     if isinstance(s, For):
-        return For(s.var, s.start, s.end, erase_pos_stms(s.body))
+        return For(s.var, erase_pos_exp(s.start), erase_pos_exp(s.end),
+                   erase_pos_stms(s.body))
     if isinstance(s, Switch):
-        return Switch(s.obj1,
-                      [(h, erase_pos_stms(body), t) for (h, body, t) in s.cases],
-                      erase_pos_stms(s.default), s.obj2)
+        return Switch(erase_pos_obj(s.obj1),
+                      [((c, [erase_pos_exp(e) for e in es1]),
+                        erase_pos_stms(body),
+                        (p, [erase_pos_exp(e) for e in es2], b))
+                       for ((c, es1), body, (p, es2, b)) in s.cases],
+                      erase_pos_stms(s.default), erase_pos_obj(s.obj2))
     if isinstance(s, ObjectBlock):
         return ObjectBlock(s.type_id, s.name, erase_pos_stms(s.body))
     if isinstance(s, LocalBlock):
-        return LocalBlock(s.dtype, s.name, s.init, erase_pos_stms(s.body), s.final)
+        return LocalBlock(s.dtype, s.name, erase_pos_exp(s.init),
+                          erase_pos_stms(s.body), erase_pos_exp(s.final))
+    if isinstance(s, LocalCall):
+        return LocalCall(s.method, [erase_pos_arg(a) for a in s.args])
+    if isinstance(s, LocalUncall):
+        return LocalUncall(s.method, [erase_pos_arg(a) for a in s.args])
+    if isinstance(s, ObjectCall):
+        return ObjectCall(erase_pos_obj(s.obj), s.method,
+                          [erase_pos_arg(a) for a in s.args])
+    if isinstance(s, ObjectUncall):
+        return ObjectUncall(erase_pos_obj(s.obj), s.method,
+                            [erase_pos_arg(a) for a in s.args])
+    if isinstance(s, ObjectConstruction):
+        return ObjectConstruction(s.type_id, erase_pos_obj(s.obj))
+    if isinstance(s, ObjectDestruction):
+        return ObjectDestruction(s.type_id, erase_pos_obj(s.obj))
+    if isinstance(s, CopyReference):
+        return CopyReference(s.dtype, erase_pos_obj(s.obj1), erase_pos_obj(s.obj2))
+    if isinstance(s, UncopyReference):
+        return UncopyReference(s.dtype, erase_pos_obj(s.obj1), erase_pos_obj(s.obj2))
+    if isinstance(s, ArrayConstruction):
+        return ArrayConstruction(s.type_id, erase_pos_exp(s.size),
+                                 erase_pos_obj(s.obj))
+    if isinstance(s, ArrayDestruction):
+        return ArrayDestruction(s.type_id, erase_pos_exp(s.size),
+                                erase_pos_obj(s.obj))
+    if isinstance(s, Show):
+        return Show(erase_pos_exp(s.exp))
     return s
 
 

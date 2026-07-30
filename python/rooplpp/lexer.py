@@ -87,6 +87,8 @@ class Token:
     value: object  # int for CONST, str for ID/STRING, None otherwise
     line: int
     col: int
+    # このトークンの次の桁（1 起点。位置の範囲を作るのに使う）
+    end_col: int = 0
 
 
 def _unescape(s: str) -> str:
@@ -140,7 +142,8 @@ def tokenize(source: str) -> list[Token]:
                     j += 1
                 j += 1
             j += 1  # include closing quote
-            tokens.append(Token(TT.STRING, _unescape(source[i:j]), line, col))
+            tokens.append(Token(TT.STRING, _unescape(source[i:j]), line, col,
+                                col + (j - i)))
             i = j
             continue
 
@@ -149,7 +152,8 @@ def tokenize(source: str) -> list[Token]:
             j = i
             while j < len(source) and source[j].isdigit():
                 j += 1
-            tokens.append(Token(TT.CONST, int(source[i:j]), line, col))
+            tokens.append(Token(TT.CONST, int(source[i:j]), line, col,
+                                col + (j - i)))
             i = j
             continue
 
@@ -160,7 +164,8 @@ def tokenize(source: str) -> list[Token]:
                 j += 1
             word = source[i:j]
             tt = KEYWORDS.get(word, TT.ID)
-            tokens.append(Token(tt, word if tt == TT.ID else None, line, col))
+            tokens.append(Token(tt, word if tt == TT.ID else None, line, col,
+                                col + (j - i)))
             i = j
             continue
 
@@ -168,7 +173,7 @@ def tokenize(source: str) -> list[Token]:
         matched = False
         for op, tt in OPERATORS:
             if source[i:i+len(op)] == op:
-                tokens.append(Token(tt, None, line, col))
+                tokens.append(Token(tt, None, line, col, col + len(op)))
                 i += len(op)
                 matched = True
                 break
@@ -177,12 +182,13 @@ def tokenize(source: str) -> list[Token]:
 
         # Single-character operators
         if source[i] in SINGLE_OPS:
-            tokens.append(Token(SINGLE_OPS[source[i]], None, line, col))
+            tokens.append(Token(SINGLE_OPS[source[i]], None, line, col, col + 1))
             i += 1
             continue
 
         raise SyntaxError(
             f"unknown token '{source[i]}' at line {line}, column {col}")
 
-    tokens.append(Token(TT.EOF, None, line, i - line_start + 1))
+    eof_col = i - line_start + 1
+    tokens.append(Token(TT.EOF, None, line, eof_col, eof_col))
     return tokens

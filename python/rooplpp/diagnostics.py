@@ -10,7 +10,7 @@ from .syntax import (
     Assign, ArrayConstruction, ArrayDestruction, ArrayElement, Binary, Const,
     CopyReference, Conditional, Dot, For, LocalBlock, LocalCall, LocalUncall,
     Loop, Nil, ObjectBlock, ObjectCall, ObjectConstruction, ObjectDestruction,
-    ObjectUncall, Positioned, Print, Show, Skip, Swap, Switch,
+    ObjectUncall, EPos, Positioned, Print, Show, Skip, Swap, Switch,
     UncopyReference, Var, VarArray, InstVar, IdArg, ExpArg,
 )
 from .value import IntVal, LocsVal, LocsVec, ObjVal
@@ -22,6 +22,11 @@ AT_MARKER = "AT:"
 
 def at_line(n: int) -> str:
     return "\n" + AT_MARKER + str(n)
+
+
+def at_span(span: tuple[int, int, int, int]) -> str:
+    """式の範囲つきの位置マーカ（行:列:終了行:終了列）"""
+    return "\n%s%d:%d:%d:%d" % (AT_MARKER, *span)
 
 
 # ------------------------------------------------------------------
@@ -64,17 +69,32 @@ def _contains_at_boundary(needle: str, hay: str) -> bool:
 # 実行時エラーメッセージの分解
 # ------------------------------------------------------------------
 
-def exact_line(raw: str) -> int | None:
-    """生メッセージから、構文解析器由来の正確な行番号を取り出す"""
+def exact_pos(raw: str):
+    """生メッセージから構文解析器由来の位置を取り出す。
+
+    "AT:<行>"（文）と "AT:<行>:<列>:<終了行>:<終了列>"（式）の両方を読む。
+    戻り値は (行, None) か (行, (列, 終了行, 終了列))。
+    """
     found = None
     for ln in raw.split("\n"):
         ln = ln.strip()
-        if ln.startswith(AT_MARKER):
-            try:
-                found = int(ln[len(AT_MARKER):].strip())
-            except ValueError:
-                pass
+        if not ln.startswith(AT_MARKER):
+            continue
+        parts = ln[len(AT_MARKER):].strip().split(":")
+        try:
+            nums = [int(p) for p in parts]
+        except ValueError:
+            continue
+        if len(nums) == 1:
+            found = (nums[0], None)
+        elif len(nums) == 4:
+            found = (nums[0], (nums[1], nums[2], nums[3]))
     return found
+
+
+def exact_line(raw: str) -> int | None:
+    p = exact_pos(raw)
+    return None if p is None else p[0]
 
 
 def split_runtime_message(raw: str) -> tuple[list[str], str, list[str]]:
@@ -190,7 +210,7 @@ def source_excerpt(src: str, line: int) -> list[str]:
     ]
 
 
-def source_excerpt_caret(src: str, line: int, col: int) -> list[str]:
+def source_excerpt_caret(src: str, line: int, col: int, length: int = 1) -> list[str]:
     lines = src.split("\n")
     if line <= 0 or line > len(lines):
         return []
@@ -199,7 +219,8 @@ def source_excerpt_caret(src: str, line: int, col: int) -> list[str]:
     if line > 1:
         out.append(_excerpt_line(width, False, line - 1, lines[line - 2]))
     out.append(_excerpt_line(width, True, line, lines[line - 1]))
-    out.append("  %s %*s | %s^" % (" ", width, "", " " * max(0, col)))
+    out.append("  %s %*s | %s%s"
+               % (" ", width, "", " " * max(0, col), "^" * max(1, length)))
     if line < len(lines):
         out.append(_excerpt_line(width, False, line + 1, lines[line]))
     return out
@@ -258,12 +279,21 @@ def format_runtime_error(raw: str, src: str | None = None, file: str | None = No
     out = ["ROOPL++ execution error", "  message: " + message]
     if file:
         out.append("  file: " + file)
-    exact = exact_line(raw)
+    exact = exact_pos(raw)
     if exact is not None:
         # 構文解析器が付けた位置があればそれを使う（推定は要らない）
-        out.append("  line: %d" % exact)
+        line, span = exact
+        if span is not None and span[1] == line:
+            out.append("  line: %d, columns %d-%d" % (line, span[0], span[2]))
+        else:
+            out.append("  line: %d" % line)
         if src is not None:
-            ex = source_excerpt(src, exact)
+            if span is not None and span[1] == line:
+                # 同じ行に収まる式なら、その範囲にキャレットを引く
+                ex = source_excerpt_caret(src, line, span[0],
+                                          max(1, span[2] - span[0]))
+            else:
+                ex = source_excerpt(src, line)
             if ex:
                 out += ["", "Source:"] + ex
     elif src is not None:
@@ -395,6 +425,8 @@ def garbage_report(result, st, limit: int = 40) -> str:
 
 def ids_of_exp(e) -> list[str]:
     match e:
+        case EPos(_, e0):
+            return ids_of_exp(e0)
         case Const(_) | Nil():
             return []
         case Var(x):

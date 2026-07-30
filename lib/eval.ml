@@ -76,7 +76,7 @@ let comp_op f v1 v2 = IntVal(if f v1 v2 then 1 else 0)
 (**式expressionを評価するための関数：環境、ストアを受け取り、値を返す．*)
 let rec eval_exp exp env st =
   let rec lval_val y env =
-    match y with
+    match strip_epos y with
     | Var(x) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | ArrayElement(x, e) ->
        let x_index = match eval_exp e env st with
@@ -101,6 +101,11 @@ let rec eval_exp exp env st =
     | _ -> failwith "ERROR:not an l-value expression"
   in
   match exp with
+  (* 位置つきの式：中で落ちたらいちばん内側の位置を例外に載せる *)
+  | EPos(p, e) ->
+     (try eval_exp e env st with
+      | Failure m ->
+         raise (Util.Expr_error ((p.line, p.col, p.end_line, p.end_col), m)))
   (*CON*)
   | Const(n) -> IntVal(n)
   (*VAR*)
@@ -144,8 +149,11 @@ let rec eval_exp exp env st =
        | Le   -> comp_op (<=)
        | Ge   -> comp_op (>=)
      in
-     try f b (eval_exp e1 env st) (eval_exp e2 env st) with
-     | Failure e -> failwith (pretty_exp exp ^ "\n" ^ e ^ " in this expression")
+     (try f b (eval_exp e1 env st) (eval_exp e2 env st) with
+      | Failure e -> failwith (pretty_exp exp ^ "\n" ^ e ^ " in this expression")
+      (* 位置は内側のものを保ち、メッセージだけ積み増す *)
+      | Util.Expr_error (sp, e) ->
+         raise (Util.Expr_error (sp, pretty_exp exp ^ "\n" ^ e ^ " in this expression")))
 
 (**ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る*)
 let rec gen_locsvec n locs =
@@ -585,6 +593,11 @@ let rec eval_state stml env map st0 =
        raise (Util.Runtime_error
                 (pretty_stms [stm] 0 ^ "\n" ^ e
                  ^ Diagnostics.where_line stm env st ^ at))
+    (* 式の中で落ちた場合は、文ではなく式の範囲を位置として使う *)
+    | Util.Expr_error (sp, e) ->
+       raise (Util.Runtime_error
+                (pretty_stms [stm] 0 ^ "\n" ^ e
+                 ^ Diagnostics.where_line stm env st ^ Diagnostics.at_span sp))
     (* fail_stm で投げられたものは文は付いているが変数の値はまだない。
        いちばん内側のラッパ（＝その文自身）だけが値と位置を付ける。 *)
     | Util.Runtime_error e when not (Diagnostics.has_where e) ->

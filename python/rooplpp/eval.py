@@ -8,6 +8,18 @@ from . import printer as Printer
 from . import diagnostics as Diag
 
 
+class ExprError(RuntimeError):
+    """式の中で起きた失敗。位置 (行, 列, 終了行, 終了列) を運ぶ（Util.Expr_error）。
+
+    いちばん内側の位置つき式のラッパが付け、外側はメッセージだけを積み増して
+    位置は保つ。文のラッパがこれを受け取って StmError に格上げする。
+    """
+
+    def __init__(self, span: tuple[int, int, int, int], msg: str):
+        self.span = span
+        super().__init__(msg)
+
+
 class StmError(RuntimeError):
     """すでに「どの文で起きたか」が付いている実行時エラー（Util.Runtime_error に対応）。
 
@@ -109,7 +121,7 @@ def comp_op_eq(f, v1: Value, v2: Value) -> Value:
 def eval_exp(exp: Exp, env: Env, st: State) -> Value:
     def lval_val(y: Exp, env: Env):
         """Return (location, value) for an l-value expression."""
-        match y:
+        match strip_epos(y):
             case Var(x):
                 lv = lookup_envs(x, env)
                 return lv, lookup_st(lv, st)
@@ -133,6 +145,15 @@ def eval_exp(exp: Exp, env: Env, st: State) -> Value:
                 raise RuntimeError("ERROR:not an l-value expression")
 
     match exp:
+        # 位置つきの式：中で落ちたらいちばん内側の位置を例外に載せる
+        case EPos(p, e):
+            try:
+                return eval_exp(e, env, st)
+            except ExprError:
+                raise
+            except RuntimeError as err:
+                raise ExprError((p.line, p.col, p.end_line, p.end_col),
+                                str(err)) from None
         case Const(n):
             return IntVal(n)
         case Var(x):
@@ -173,6 +194,11 @@ def eval_exp(exp: Exp, env: Env, st: State) -> Value:
             }
             try:
                 return ops[b]()
+            except ExprError as e:
+                # 位置は内側のものを保ち、メッセージだけ積み増す
+                raise ExprError(
+                    e.span,
+                    pretty_exp(exp) + "\n" + str(e) + " in this expression") from None
             except RuntimeError as e:
                 raise RuntimeError(pretty_exp(exp) + "\n" + str(e) + " in this expression")
 
@@ -270,6 +296,12 @@ def eval_state(stml: list[Stm], env: Env, map_: list, st: State) -> State:
         at = Diag.at_line(p.line) if p is not None else ""
         try:
             st = _update(stm, env, map_, st)
+        # 式の中で落ちた場合は、文ではなく式の範囲を位置として使う
+        except ExprError as e:
+            raise StmError(
+                pretty_stms([stm], 0) + "\n" + str(e)
+                + Diag.where_line(stm, env, st) + Diag.at_span(e.span)
+            ) from None
         except StmError as e:
             # すでに文が付いている。いちばん内側のラッパだけが値と位置を足す。
             if Diag.has_where(str(e)):

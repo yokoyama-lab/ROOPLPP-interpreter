@@ -70,6 +70,8 @@ let pretty_modOp = function
    i * a + k / i になってしまう）。( e ) はパーサで捨てられ AST に残らない
    ため、常に括弧を付けても parse(pretty p) = p は保たれる。*)
 let rec pretty_exp = function
+  (* 位置情報は出力しない *)
+  | EPos(_, e) -> pretty_exp e
   | Const n -> string_of_int n
   | Var id -> id
   | ArrayElement(id, exp) -> id ^ "[" ^ pretty_exp exp ^ "]"
@@ -77,10 +79,12 @@ let rec pretty_exp = function
   | Binary(binOp, exp1, exp2) ->
      paren_binary exp1 ^ " " ^ pretty_binOp binOp ^ " " ^ paren_binary exp2
   | Dot(exp1, exp2) -> pretty_exp exp1 ^ "." ^ pretty_exp exp2
-(**被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）*)
-and paren_binary = function
-  | Binary _ as e -> "(" ^ pretty_exp e ^ ")"
-  | e -> pretty_exp e
+(**被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）。
+   位置情報の殻は括弧の判定に影響しない。 *)
+and paren_binary e =
+  match strip_epos e with
+  | Binary _ -> "(" ^ pretty_exp e ^ ")"
+  | _ -> pretty_exp e
 
 (**変数、配列、ドット演算子をプリントする関数*)
 let rec pretty_obj = function
