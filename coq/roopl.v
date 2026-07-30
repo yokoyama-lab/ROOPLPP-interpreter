@@ -1495,6 +1495,141 @@ Corollary wt_invert_invert : forall E S s, wt E S s -> wt E S (invert (invert s)
 Proof. intros E S s H; rewrite invert_invert; assumption. Qed.
 
 (* ------------------------------------------------------------------ *)
+(** * for と switch（インタプリタの追加構文）                            *)
+(* ------------------------------------------------------------------ *)
+
+(** このインタプリタ (lib/eval.ml) は ROOPL++ に [for] と [switch] を足して
+    いる。どちらも新しい原始構文ではなく、**既にある構文への糖衣**として
+    与えられる。ここではその糖衣を定義し、**反転が糖衣と可換であること**
+    ——すなわち for と switch もまた可逆であること——を証明する。
+
+    原始構文として足さないのは意味論を弱めるためではない。糖衣として書ける
+    ということ自体が「for は局所ブロックと二重ガードのループ、switch は
+    二重ガードの条件分岐の入れ子にすぎない」という主張であり、可逆性は
+    既に証明した [exec_invert] からそのまま従う。 *)
+
+(** ** for *)
+
+(** [for x in (e1..e2) do s end]：局所変数 [x] を [e1] に束ね、[x] が [e2] に
+    なるまで体を走らせる。体は [x] の値ごとに 1 回、両端を含めて走る。
+
+    昇順と降順を別の糖衣にしてあるのは、そうすると**反転がちょうど互いを
+    写す**からである（[invert_for_up]）。インタプリタは実行時に [e1] と
+    [e2] の大小で向きを選ぶので、表層の [for] はどちらかに対応する。 *)
+Definition for_up (x : id) (e1 e2 : exp) (s : stm) : stm :=
+  Slocal x e1
+    (Sloop (Bop Oeq (Var x) e1) s (Sassign x MAdd (Cst 1)) (Bop Oeq (Var x) e2))
+    e2.
+
+Definition for_down (x : id) (e1 e2 : exp) (s : stm) : stm :=
+  Slocal x e1
+    (Sloop (Bop Oeq (Var x) e1) s (Sassign x MSub (Cst 1)) (Bop Oeq (Var x) e2))
+    e2.
+
+(** 反転は昇順と降順をちょうど入れ替え、両端も入れ替える。
+    定義どおりに一致するので [reflexivity] で済む。 *)
+Lemma invert_for_up : forall x e1 e2 s,
+  invert (for_up x e1 e2 s) = for_down x e2 e1 (invert s).
+Proof. reflexivity. Qed.
+
+Lemma invert_for_down : forall x e1 e2 s,
+  invert (for_down x e1 e2 s) = for_up x e2 e1 (invert s).
+Proof. reflexivity. Qed.
+
+(** ゆえに [for] は可逆：昇順に走らせたものは、体を反転した降順の [for] で
+    ちょうど元の状態に戻る。 *)
+Corollary for_up_reversible : forall G x e1 e2 s a b,
+  exec G (for_up x e1 e2 s) a b -> exec G (for_down x e2 e1 (invert s)) b a.
+Proof.
+  intros G x e1 e2 s a b H.
+  rewrite <- invert_for_up; now apply exec_invert.
+Qed.
+
+Corollary for_down_reversible : forall G x e1 e2 s a b,
+  exec G (for_down x e1 e2 s) a b -> exec G (for_up x e2 e1 (invert s)) b a.
+Proof.
+  intros G x e1 e2 s a b H.
+  rewrite <- invert_for_down; now apply exec_invert.
+Qed.
+
+(** 型付けも部品から組み上がる（ループ変数は整数変数）。 *)
+Lemma wt_for_up : forall E S x e1 e2 s,
+  E x = Tint -> ~ In x (fv e1) -> ~ In x (fv e2) ->
+  wt_exp E e1 -> wt_exp E e2 -> wt E S s ->
+  wt E S (for_up x e1 e2 s).
+Proof.
+  intros E S x e1 e2 s Hx H1 H2 We1 We2 Ws.
+  apply WT_local; try assumption.
+  apply WT_loop; try assumption.
+  - apply WTe_bop; [ now apply WTe_var | assumption ].
+  - apply WT_assign; [ assumption | simpl; tauto | constructor ].
+  - apply WTe_bop; [ now apply WTe_var | assumption ].
+Qed.
+
+Lemma wt_for_down : forall E S x e1 e2 s,
+  E x = Tint -> ~ In x (fv e1) -> ~ In x (fv e2) ->
+  wt_exp E e1 -> wt_exp E e2 -> wt E S s ->
+  wt E S (for_down x e1 e2 s).
+Proof.
+  intros E S x e1 e2 s Hx H1 H2 We1 We2 Ws.
+  apply WT_local; try assumption.
+  apply WT_loop; try assumption.
+  - apply WTe_bop; [ now apply WTe_var | assumption ].
+  - apply WT_assign; [ assumption | simpl; tauto | constructor ].
+  - apply WTe_bop; [ now apply WTe_var | assumption ].
+Qed.
+
+(** ** switch *)
+
+(** [switch x  case v1 s1 esac w1  …  hctiws y]：入口では [x] の値で枝を選び、
+    出口では [y] の値で**どの枝を通ったかを思い出す**。これは二重ガードの
+    条件分岐を入れ子にしたものにほかならない。
+
+    枝が選べなかったときに走る文 [d]（インタプリタの [switch] 末尾の文列）を
+    最内の else に置く。出口の値 [w] が枝ごとに相異なることは、後続の枝を
+    通ったときに外側の出口表明が偽になるための条件で、規則 [E_if_f] が
+    実行時にそれを確かめている。 *)
+Fixpoint rev_switch (x : id) (cs : list (Z * stm * Z)) (d : stm) (y : id) : stm :=
+  match cs with
+  | [] => d
+  | (v, s, w) :: tl =>
+      Sif (Bop Oeq (Var x) (Cst v)) s (rev_switch x tl d y)
+          (Bop Oeq (Var y) (Cst w))
+  end.
+
+(** 枝の反転：入口の値と出口の値を入れ替え、体を反転する。 *)
+Definition swap_case (c : Z * stm * Z) : Z * stm * Z :=
+  let '(v, s, w) := c in (w, invert s, v).
+
+Lemma swap_case_involutive : forall c, swap_case (swap_case c) = c.
+Proof.
+  intros [[v s] w]; simpl; now rewrite invert_invert.
+Qed.
+
+(** 反転は switch の糖衣と可換：入口と出口の変数も入れ替わる。 *)
+Lemma invert_rev_switch : forall x cs d y,
+  invert (rev_switch x cs d y) = rev_switch y (map swap_case cs) (invert d) x.
+Proof.
+  intros x cs d y; induction cs as [ | [[v s] w] tl IH ]; simpl.
+  - reflexivity.
+  - now rewrite IH.
+Qed.
+
+(** ゆえに switch も可逆。 *)
+Corollary rev_switch_reversible : forall G x cs d y a b,
+  exec G (rev_switch x cs d y) a b ->
+  exec G (rev_switch y (map swap_case cs) (invert d) x) b a.
+Proof.
+  intros G x cs d y a b H.
+  rewrite <- invert_rev_switch; now apply exec_invert.
+Qed.
+
+(** 二度反転すると元に戻る（[invert_invert] の switch 版）。 *)
+Corollary rev_switch_invert_invert : forall x cs d y,
+  invert (invert (rev_switch x cs d y)) = rev_switch x cs d y.
+Proof. intros; now rewrite invert_invert. Qed.
+
+(* ------------------------------------------------------------------ *)
 (** * Sanity checks: the semantics is not vacuous                      *)
 (* ------------------------------------------------------------------ *)
 
@@ -1784,6 +1919,82 @@ Proof.
   intros a b H; inversion H; subst. simpl in *. intuition.
 Qed.
 
+(** for x in (1..3) do X += x end  は X を 6 にし、x は残らない。 *)
+Definition forprog : stm := for_up T (Cst 1) (Cst 3) (Sassign X MAdd (Var T)).
+
+Example ex_for :
+  exists b, exec empty_env forprog zero b /\ vs b X = 6 /\ vs b T = 0.
+Proof.
+  eexists. split.
+  - eapply E_local; [ simpl; tauto | simpl; tauto | | | apply steq_refl ].
+    + eapply E_loop.
+      * simpl; discriminate.
+      * apply E_assign; [ unfold X, T; simpl; intuition discriminate
+                        | apply steq_refl ].
+      * eapply L_step.
+        -- reflexivity.
+        -- apply E_assign; [ simpl; tauto | apply steq_refl ].
+        -- reflexivity.
+        -- apply E_assign; [ unfold X, T; simpl; intuition discriminate
+                           | apply steq_refl ].
+        -- eapply L_step.
+           ++ reflexivity.
+           ++ apply E_assign; [ simpl; tauto | apply steq_refl ].
+           ++ reflexivity.
+           ++ apply E_assign; [ unfold X, T; simpl; intuition discriminate
+                              | apply steq_refl ].
+           ++ apply L_done; [ simpl; discriminate | apply steq_refl ].
+    + reflexivity.
+  - split; reflexivity.
+Qed.
+
+(** その逆：体を反転した降順の for が元の状態へ戻す。 *)
+Example ex_for_back :
+  exists b, exec empty_env
+              (for_down T (Cst 3) (Cst 1) (invert (Sassign X MAdd (Var T))))
+              b zero.
+Proof.
+  destruct ex_for as [ b [ Hb _ ] ]. exists b.
+  now apply for_up_reversible.
+Qed.
+
+(** switch X  case 1 → Y += 10 esac 10 | case 2 → Y += 20 esac 20  hctiws Y。
+    X = 2 なので二番目の枝を通る。外側の枝の出口表明 (Y = 10) が偽である
+    ことが、「一番目の枝は通らなかった」という情報を残す。 *)
+Definition swcases : list (Z * stm * Z) :=
+  (1, Sassign Y MAdd (Cst 10), 10) :: (2, Sassign Y MAdd (Cst 20), 20) :: nil.
+
+Definition swbody : stm := rev_switch X swcases Sskip Y.
+
+Definition swprog : stm := Sseq (Sassign X MAdd (Cst 2)) swbody.
+
+Example ex_switch :
+  exists b, exec empty_env swprog zero b /\ vs b X = 2 /\ vs b Y = 20.
+Proof.
+  eexists. split.
+  - eapply E_seq.
+    + apply E_assign; [ simpl; tauto | apply steq_refl ].
+    + apply E_if_f.
+      * reflexivity.
+      * apply E_if_t.
+        -- simpl; discriminate.
+        -- apply E_assign; [ simpl; tauto | apply steq_refl ].
+        -- simpl; discriminate.
+      * reflexivity.
+  - split; reflexivity.
+Qed.
+
+(** その逆：入口と出口の変数を入れ替え、枝ごとに入口の値と出口の値を
+    入れ替えた switch が、どんな実行も元へ戻す。 *)
+Example ex_switch_back : forall a b,
+  exec empty_env swbody a b ->
+  exec empty_env (rev_switch Y (map swap_case swcases) Sskip X) b a.
+Proof.
+  intros a b H.
+  (* [invert Sskip] は [Sskip] に簡約されるが、evar 越しには合わないので明示する *)
+  apply (rev_switch_reversible empty_env X swcases Sskip Y a b H).
+Qed.
+
 (* ------------------------------------------------------------------ *)
 (** * Axiom check                                                      *)
 (* ------------------------------------------------------------------ *)
@@ -1797,3 +2008,7 @@ Print Assumptions exec_round_trip.
 Print Assumptions wt_invert.
 Print Assumptions run_sound.
 Print Assumptions run_injective.
+Print Assumptions for_up_reversible.
+Print Assumptions rev_switch_reversible.
+Print Assumptions ex_for.
+Print Assumptions ex_switch.

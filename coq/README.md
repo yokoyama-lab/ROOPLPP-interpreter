@@ -31,13 +31,60 @@ Rocq 9.1.1 で確認。
 | **`run_sound`** | `run fuel G s a = Some b → exec s a b` — **抽出した実行可能インタプリタが意味論に対して健全** |
 | `run_injective` / `run_invert` | その系（`run` の結果は単射・逆は逆向きに走る） |
 | **`wt_invert`** | `wt E S s → wt E S (invert s)` — **反転で型付けが保存される**（Haulund 2017 の定理） |
+| `invert_for_up` / `invert_for_down` | `for` の反転はちょうど昇順と降順を入れ替える |
+| `for_up_reversible` / `for_down_reversible` | **`for` は可逆** |
+| `invert_rev_switch` | `switch` の反転は入口と出口を入れ替えた `switch` |
+| `rev_switch_reversible` | **`switch` は可逆** |
 
 補助定理として `exec_loopx_eq`（実行は状態の点ごとの等しさを保つ），`loopx_exit`（ループ末尾は
 出口表明を満たす）を経由する。`exec_invert` / `exec_det` はいずれも `exec` と補助関係 `loopx`
 に対する**相互帰納法**（`Combined Scheme`）で証明している。
 
-**公理はゼロ**。9 定理すべてについて `Print Assumptions` が `Closed under the global context`
+**公理はゼロ**。`Print Assumptions` はすべて `Closed under the global context`
 を返す（ビルド時に表示される）。
+
+## `for` と `switch`（インタプリタの追加構文）
+
+このインタプリタは ROOPL++ に `for` と `switch` を足している。形式化では
+**原始構文ではなく既存構文への糖衣**として与える。糖衣として書けること自体が
+「`for` は局所ブロック＋二重ガードのループ、`switch` は二重ガードの条件分岐の
+入れ子にすぎない」という主張で、可逆性は `exec_invert` からそのまま従う。
+
+```coq
+Definition for_up (x : id) (e1 e2 : exp) (s : stm) : stm :=
+  Slocal x e1
+    (Sloop (Bop Oeq (Var x) e1) s (Sassign x MAdd (Cst 1)) (Bop Oeq (Var x) e2))
+    e2.
+(* for_down は MSub 版 *)
+
+Fixpoint rev_switch (x : id) (cs : list (Z * stm * Z)) (d : stm) (y : id) : stm :=
+  match cs with
+  | [] => d
+  | (v, s, w) :: tl =>
+      Sif (Bop Oeq (Var x) (Cst v)) s (rev_switch x tl d y) (Bop Oeq (Var y) (Cst w))
+  end.
+```
+
+昇順と降順を別の糖衣にしてあるのは、**反転がちょうど互いを写す**からで、
+`invert_for_up` は `reflexivity` で閉じる。インタプリタは実行時に両端の大小で
+向きを選ぶので、表層の `for` はどちらかに対応する。
+
+### 実装との食い違い（差分テストで固定した）
+
+糖衣は `make extract` で OCaml へ取り出してあり、`test/extracted_test.ml` が
+**実装の `For`/`Switch` と糖衣を突き合わせる**。正常な場合は一致するが、
+**実装が検査を省いている 2 か所**で食い違い、それをテストとして固定してある。
+
+| 場面 | 実装 | 意味論（糖衣） |
+|---|---|---|
+| 出口の値が枝どうしで重複する `switch` | 通る | 落ちる |
+| 体がループ変数を書き換える `for` | 完走する | 停止しない |
+
+どちらも**落ちる／停止しない側が正しい**。前者は出口の値が枝を識別できず、
+逆向きの実行が枝を選び直せない。後者は `lib/eval.ml` がループ変数の不変性を
+**最初の 1 周でしか検査していない**ため（2 周目以降の書き換えを見逃し、しかも
+次の周回で値を上書きしてしまう）。範囲式 `e1`/`e2` が体で変わらないことも
+同じく検査されていない。
 
 型システムは整数・オブジェクト・配列の 3 種（クラス名は区別しない）。`construct` は
 オブジェクトと配列のどちらのセル列も確保できる。`wt_invert` は「反転は型を一切変えない

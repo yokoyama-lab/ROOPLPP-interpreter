@@ -205,3 +205,11 @@ val run : nat -> menv -> stm -> state -> state option
 
 val run_loop :
   nat -> menv -> exp -> stm -> stm -> exp -> state -> state option
+
+val for_up : id -> exp -> exp -> stm -> stm
+
+val for_down : id -> exp -> exp -> stm -> stm
+
+val rev_switch : id -> ((z*stm)*z) list -> stm -> id -> stm
+
+val swap_case : ((z*stm)*z) -> (z*stm)*z

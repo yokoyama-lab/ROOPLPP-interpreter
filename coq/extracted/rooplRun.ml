@@ -696,3 +696,31 @@ and run_loop fuel g e1 s1 s2 e2 a =
             else None
           | None -> None)
     else Some a
+
+(** val for_up : id -> exp -> exp -> stm -> stm **)
+
+let for_up x e1 e2 s =
+  Slocal (x, e1, (Sloop ((Bop (Oeq, (Var x), e1)), s, (Sassign (x, MAdd, (Cst
+    (Zpos XH)))), (Bop (Oeq, (Var x), e2)))), e2)
+
+(** val for_down : id -> exp -> exp -> stm -> stm **)
+
+let for_down x e1 e2 s =
+  Slocal (x, e1, (Sloop ((Bop (Oeq, (Var x), e1)), s, (Sassign (x, MSub, (Cst
+    (Zpos XH)))), (Bop (Oeq, (Var x), e2)))), e2)
+
+(** val rev_switch : id -> ((z*stm)*z) list -> stm -> id -> stm **)
+
+let rec rev_switch x cs d y =
+  match cs with
+  | [] -> d
+  | p::tl ->
+    let p0,w = p in
+    let v,s = p0 in
+    Sif ((Bop (Oeq, (Var x), (Cst v))), s, (rev_switch x tl d y), (Bop (Oeq,
+    (Var y), (Cst w))))
+
+(** val swap_case : ((z*stm)*z) -> (z*stm)*z **)
+
+let swap_case = function
+| p,w -> let v,s = p in (w,(invert s)),v

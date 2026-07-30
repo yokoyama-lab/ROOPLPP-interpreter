@@ -110,9 +110,10 @@ let run_verified ?(env = empty_menv) (s : R.stm) (vars : int list) : int list op
   | Some st -> Some (List.map (fun v -> int_of_z (st.R.vs (nat_of_int v))) vars)
 
 (* 同じプログラムをこの処理系で走らせる *)
-let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list option =
+let run_interpreter_stms ?(methods = []) (stms : stm list) (vars : int list)
+    : int list option =
   let fields = List.map (fun v -> Decl (IntegerType, "v" ^ string_of_int v)) vars in
-  let main = MDecl ("main", [], stms_of_formal s) in
+  let main = MDecl ("main", [], stms) in
   let prog = Prog [ CDecl ("Program", None, fields, main :: methods) ] in
   match (try Some (Eval.eval_prog prog) with
          | Util.Runtime_error _ | Failure _ -> None) with
@@ -124,6 +125,9 @@ let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list opt
                | Some (Value.IntVal n) -> n
                | _ -> assert_failure ("missing variable v" ^ string_of_int v))
              vars)
+
+let run_interpreter ?(methods = []) (s : R.stm) (vars : int list) : int list option =
+  run_interpreter_stms ~methods (stms_of_formal s) vars
 
 let printer = function
   | None -> "None"
@@ -211,6 +215,87 @@ let p_call = R.Scall (nat_of_int 0, [ v 0 ])
 let p_call_uncall = R.Sseq (R.Scall (nat_of_int 0, [ v 0 ]),
                             R.Suncall (nat_of_int 0, [ v 0 ]))
 
+(* ---- for / switch：実装の追加構文と、形式化での糖衣を突き合わせる ------
+
+   coq/roopl.v は for と switch を原始構文ではなく既存構文への糖衣として
+   与えている（for_up / for_down / rev_switch）。ここでは実装側の
+   For / Switch と、抽出したその糖衣とが同じ計算をすることを確かめる。
+   一致しない場合（実装の側が検査を省いている場合）も、どう食い違うかを
+   テストとして固定しておく。 *)
+
+let ovar n = VarArray ("v" ^ string_of_int n, None)
+let oid n = "v" ^ string_of_int n
+
+(* 実装側と形式側を、それぞれ別に組み立てて突き合わせる *)
+let agree_sugar name (stms : stm list) (s : R.stm) (vars : int list) =
+  name >:: (fun _ ->
+    assert_equal ~printer (run_interpreter_stms stms vars) (run_verified s vars))
+
+(* for v2 in (1..3) do v0 += v2 end  →  v0 = 6 *)
+let for_body_o = [ Assign (ovar 0, ModAdd, Var (oid 2)) ]
+let for_body_r = R.Sassign (v 0, R.MAdd, var 2)
+
+let o_for_up = [ For (oid 2, Const 1, Const 3, for_body_o) ]
+let r_for_up = R.for_up (v 2) (c 1) (c 3) for_body_r
+
+(* 降順 for v2 in (3..1) *)
+let o_for_down = [ For (oid 2, Const 3, Const 1, for_body_o) ]
+let r_for_down = R.for_down (v 2) (c 3) (c 1) for_body_r
+
+(* switch v0  case 1: v1 += 10 esac 10 break | case 2: v1 += 20 esac 20 break
+   （v0 = 2 なので二番目の枝を通る） *)
+let o_switch =
+  [ Assign (ovar 0, ModAdd, Const 2);
+    Switch (ovar 0,
+            [ ((Case, [ Const 1 ]), [ Assign (ovar 1, ModAdd, Const 10) ],
+               (Esac, [ Const 10 ], Break));
+              ((Case, [ Const 2 ]), [ Assign (ovar 1, ModAdd, Const 20) ],
+               (Esac, [ Const 20 ], Break)) ],
+            [], ovar 1) ]
+
+let r_switch_cases =
+  [ ((z_of_int 1, R.Sassign (v 1, R.MAdd, c 10)), z_of_int 10);
+    ((z_of_int 2, R.Sassign (v 1, R.MAdd, c 20)), z_of_int 20) ]
+
+let r_switch =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 2),
+          R.rev_switch (v 0) r_switch_cases R.Sskip (v 1))
+
+(* 出口の値が枝どうしで重複している switch。実装は通してしまうが、
+   糖衣は「通らなかった枝の出口表明が偽であること」を検査するので落ちる。
+   出口の値が枝を識別できなければ逆向きの実行が枝を選び直せないので、
+   落ちる側が正しい。 *)
+let o_switch_dup =
+  [ Assign (ovar 0, ModAdd, Const 2);
+    Switch (ovar 0,
+            [ ((Case, [ Const 1 ]), [ Assign (ovar 1, ModAdd, Const 10) ],
+               (Esac, [ Const 10 ], Break));
+              ((Case, [ Const 2 ]), [ Assign (ovar 1, ModAdd, Const 10) ],
+               (Esac, [ Const 10 ], Break)) ],
+            [], ovar 1) ]
+
+let r_switch_dup =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 2),
+          R.rev_switch (v 0)
+            [ ((z_of_int 1, R.Sassign (v 1, R.MAdd, c 10)), z_of_int 10);
+              ((z_of_int 2, R.Sassign (v 1, R.MAdd, c 10)), z_of_int 10) ]
+            R.Sskip (v 1))
+
+(* 体がループ変数を書き換える for。実装はループ変数の不変性を
+   「最初の 1 周」でしか検査しないので、2 周目以降の書き換えを見逃して
+   完走する。糖衣（＝意味論）ではループが止まらない。 *)
+let bad_for_body_o =
+  [ Conditional (Binary (Eq, Var (oid 2), Const 2),
+                 [ Assign (ovar 2, ModAdd, Const 5) ], [],
+                 Binary (Eq, Var (oid 2), Const 7)) ]
+
+let bad_for_body_r =
+  R.Sif (R.Bop (R.Oeq, var 2, c 2), R.Sassign (v 2, R.MAdd, c 5), R.Sskip,
+         R.Bop (R.Oeq, var 2, c 7))
+
+let o_for_bad = [ For (oid 2, Const 1, Const 3, bad_for_body_o) ]
+let r_for_bad = R.for_up (v 2) (c 1) (c 3) bad_for_body_r
+
 let suite = "test suite for the extracted verified interpreter" >::: [
       agree "arithmetic" p_arith [ 0; 1 ];
       agree "swap" p_swap [ 0; 1 ];
@@ -229,7 +314,11 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       "the verified interpreter actually computes" >:: (fun _ ->
         assert_equal ~printer (Some [ 3; 6 ]) (run_verified p_arith [ 0; 1 ]);
         assert_equal ~printer (Some [ 5 ]) (run_verified p_loop [ 0 ]);
-        assert_equal ~printer (Some [ 10 ]) (run_verified p_nested [ 0 ]));
+        assert_equal ~printer (Some [ 10 ]) (run_verified p_nested [ 0 ]);
+        (* 糖衣も実際に計算している（両方 None での「一致」を防ぐ） *)
+        assert_equal ~printer (Some [ 6 ]) (run_verified r_for_up [ 0 ]);
+        assert_equal ~printer (Some [ 6 ]) (run_verified r_for_down [ 0 ]);
+        assert_equal ~printer (Some [ 2; 20 ]) (run_verified r_switch [ 0; 1 ]));
 
       (* 可逆性: 逆プログラムを走らせると元に戻る（run_invert / run_injective） *)
       "running the inverse undoes the program" >:: (fun _ ->
@@ -241,6 +330,22 @@ let suite = "test suite for the extracted verified interpreter" >::: [
             | Some st2 ->
                assert_equal ~printer:string_of_int 0 (int_of_z (st2.R.vs (v 0)));
                assert_equal ~printer:string_of_int 0 (int_of_z (st2.R.vs (v 1)))));
+
+      (* for / switch は糖衣として形式化されている（coq/roopl.v） *)
+      agree_sugar "for (ascending) matches its desugaring" o_for_up r_for_up [ 0 ];
+      agree_sugar "for (descending) matches its desugaring" o_for_down r_for_down [ 0 ];
+      agree_sugar "switch matches its desugaring" o_switch r_switch [ 0; 1 ];
+
+      (* 糖衣のほうが厳しい場面：どちらも「実装が検査を省いている」ことによる *)
+      "switch with duplicated exit values: the interpreter accepts, the        semantics rejects" >:: (fun _ ->
+        assert_equal ~printer (Some [ 2; 10 ])
+          (run_interpreter_stms o_switch_dup [ 0; 1 ]);
+        assert_equal ~printer None (run_verified r_switch_dup [ 0; 1 ]));
+
+      "for whose body changes the loop variable: the interpreter accepts, the        semantics diverges" >:: (fun _ ->
+        assert_bool "the interpreter should finish"
+          (run_interpreter_stms o_for_bad [ 0 ] <> None);
+        assert_equal ~printer None (run_verified r_for_bad [ 0 ]));
 
       (* 形式化の範囲外は None を返す（黙って間違えない） *)
       "statements outside the fragment are rejected" >:: (fun _ ->

@@ -15,4 +15,6 @@ Extract Inductive prod => "(*)" [ "(,)" ].
 Extract Inductive sumbool => "bool" [ "true" "false" ].
 
 (* Z と nat は Coq の表現のまま出す（int へ写すと桁溢れで健全性が壊れる）。 *)
-Extraction "rooplRun.ml" run invert.
+(* for / switch の糖衣も取り出す。差分テスト (test/extracted_test.ml) が
+   「実装の for/switch」と「形式化での糖衣」を突き合わせるのに使う。 *)
+Extraction "rooplRun.ml" run invert for_up for_down rev_switch swap_case.
