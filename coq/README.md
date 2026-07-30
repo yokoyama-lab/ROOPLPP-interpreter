@@ -1,7 +1,7 @@
 # ROOPL++ の可逆性の機械検証（Rocq）
 
 このインタプリタが実装している **ROOPL++**（Cservenka 2018）について，可逆性を Rocq で
-機械検証したもの。`roopl.v`（大ステップ意味論，1799 行）と `roopl_small.v`（小ステップ意味論，1613 行）。
+機械検証したもの。`roopl.v`（大ステップ意味論，1799 行）と `roopl_small.v`（小ステップ意味論，2032 行）。
 外部ライブラリ依存なし。
 
 ROOPL / ROOPL++ には紙の操作的意味論と型システム（Haulund 2017, Cservenka 2018）があり，
@@ -57,7 +57,13 @@ Inductive mstm :=
 | Mseql | Mseqr | Mift | Miff | Mlp1 | Mlp2   (* 入れ子の位置 *)
 | Mloc (x) (e1) (m) (e2) (v)                 (* 局所ブロックの中（退避値つき）*)
 | Mobj (cl) (x) (m) (h)                      (* オブジェクトブロックの中（入口の高さつき）*)
+| Mcall (s) (m)                              (* 手続き呼出しの中 *)
+| Mocall (l) (cl) (h) (s) (m)                (* メソッド呼出しの中（受け手つき）*)
 ```
+
+メソッド呼出しは本体を環境から引くので、`roopl_small.v` の小ステップ部分は
+節（`Section`）でひとつの環境 `G` のもとにまとめてある（節を閉じると
+`step G …` になる）。
 
 | 定理 | 主張 |
 |---|---|
@@ -69,10 +75,12 @@ Inductive mstm :=
 | `atom_inj` | その帰結：原子文の局所可逆性は大ステップの `exec_inj` から出る |
 | `loc_in_inj` / `loc_out_inj` | 局所ブロックの出入りの単射性（退避値も一意に決まる） |
 | `obj_in_inj` / `obj_out_inj` | オブジェクトブロックの出入りの単射性（零消去された対象が復元できる） |
+| `core_rename` / `core_invert` | 実引数への束縛と反転は核の外へ出ない |
+| `dispatch_core` | 動的束縛で選ばれた本体も核に収まる |
 | `step_eq` / `steps_eq` | ステップは状態の `==` を尊重する |
 | `exec_steps` | 大ステップ → 小ステップ：`exec s a b` なら `(•s, a) →* (s•, b')` で `b == b'` |
 | `steps_exec` | 小ステップ → 大ステップ：`(•s, a) →* (s•, b)` なら `exec s a b` |
-| **`exec_iff_steps`** | **二つの意味論の同値**（`core s` のとき） |
+| **`exec_iff_steps`** | **二つの意味論の同値**（`core s` と `core_env` のとき） |
 
 **`step_inj` の証明の中に可逆言語の要点が現れる。** 衝突しそうな場面が
 すべて**言語の表明**で分かれる：
@@ -88,7 +96,8 @@ Inductive mstm :=
 **`show`/`print`**・**フィールド代入 `x.f op= e`**・**配列代入 `x[e] op= e`**・
 **配列要素の入れ替え `x[e1] <=> y[e2]`**・**オブジェクト変数の swap**・
 **`copy`/`uncopy`**・並び・条件分岐・ループ。
-**局所ブロック `local`** も対応済み。配置に文脈構成子
+**局所ブロック `local`**・**オブジェクトブロック**・**メソッド呼出し**も
+対応済みで、`core` は言語の全構文をカバーする。まず局所ブロックは、配置に文脈構成子
 
 ```coq
 | Mloc (x : id) (e1 : exp) (m : mstm) (e2 : exp) (v : Z)
@@ -112,7 +121,35 @@ Inductive mstm :=
 一意に復元できる）を成り立たせる。ヒープをスタックとして扱う（`construct`／`destruct`
 がブロック構造）設計なので、確保位置は状態の関数として決まる。
 
-**メソッド呼出し `call`／`uncall`** は未対応。
+**メソッド呼出し**（手続き `call`／`uncall` と動的束縛つきの
+`x::m(...)`／`uncall x::m(...)`）も対応済み。配置は
+
+```coq
+| Mcall  (s : stm) (m : mstm)                              (* 手続き *)
+| Mocall (l : loc) (cl : cid) (h : nat) (s : stm) (m : mstm)  (* メソッド *)
+```
+
+で、**呼出し文そのものを配置が覚えている**（これで出口の戻り先が一意に決まり、
+後方決定性が保たれる）。本体は環境から引いた `rename (mk_ren ps args) body`
+（`uncall` はその `invert`）で、**入口と出口で同じ本体が引かれる**ことが
+`procs G` が関数であることと `dispatch_det`（動的束縛の一意性）から従う。
+
+動的束縛つきの呼出しでは、さらに **受け手の位置 `l`・その動的クラス `cl`・
+入口でのヒープの高さ `h` を配置に退避**し、出口で `os a x = Some l`・
+`hc a l = cl`・`hn a = h` を表明として確かめる。これは大ステップの `E_ocall`
+が要求する「受け手は呼出し中に動かない・ヒープの高さが釣り合う」に対応する。
+
+呼出し先の本体が核に収まっていることは環境の側の条件
+
+```coq
+Definition core_env : Prop :=
+  (forall m ps body, procs G m = Some (MDecl ps body) -> core body)
+  /\ (forall c p ms m ps body,
+        classes G c = Some (CDecl p ms) -> ms m = Some (MDecl ps body) -> core body).
+```
+
+として述べ、対応定理（`exec_steps` / `steps_exec` / `exec_iff_steps`）の仮定に
+置く。`core_env` が空虚でないことは例 `penv_core` で確かめている。
 
 原子文を足すのが安く済んだのは、**「小ステップ一歩 ＝ 大ステップ一歩」**という
 橋（`atom_exec` / `exec_atom`）を通したから。これで文ごとの局所可逆性補題を
@@ -128,7 +165,8 @@ Inductive mstm :=
   **再帰定義** `stepsn`（帰納型ではなく `Fixpoint`）にしてあるので、分解が
   `destruct` だけで済む。文脈ごとの分解補題 `seql_split` / `seqr_split` /
   `ift_split` / `iff_split` / `lp1_split` / `lp2_split` / `loc_split` /
-  `obj_split` が「列は文脈の中で進み、
+  `obj_split` / `call_split` / `uncall_split` / `ocall_split` /
+  `ouncall_split` が「列は文脈の中で進み、
   出るときに表明を満たす」ことを取り出し、`stepsn_program`（プログラムが列全体で
   不変）が「どの部分文だったか」の同定に効く。
 

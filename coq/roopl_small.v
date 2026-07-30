@@ -48,7 +48,13 @@ Inductive mstm :=
 | Mlp2  (e1 : exp) (s1 : stm) (m : mstm) (e2 : exp)        (**r ループの s2 の中 *)
 | Mloc  (x : id) (e1 : exp) (m : mstm) (e2 : exp) (v : Z)
    (**r 局所ブロックの中。[v] は外側の [x] の値（出るときに戻す） *)
-| Mobj  (cl : cid) (x : id) (m : mstm) (h : nat).
+| Mobj  (cl : cid) (x : id) (m : mstm) (h : nat)
+   (**r オブジェクトブロックの中。[h] は入口でのヒープの高さ *)
+| Mcall (s : stm) (m : mstm)
+   (**r 手続き呼出しの中。[s] は元の呼出し文（戻り先を一意にする） *)
+| Mocall (l : loc) (cl : cid) (h : nat) (s : stm) (m : mstm).
+   (**r メソッド呼出しの中。受け手の位置 [l]・その動的クラス [cl]・
+        入口でのヒープの高さ [h] を退避する *)
    (**r オブジェクトブロックの中。[h] は入口でのヒープの高さ（＝確保した
         対象の位置）。局所ブロックが外側の値を退避するのと同じ役割 *)
 
@@ -64,6 +70,8 @@ Fixpoint erase (m : mstm) : stm :=
   | Mlp2 e1 s1 m e2 => Sloop e1 s1 (erase m) e2
   | Mloc x e1 m e2 _ => Slocal x e1 (erase m) e2
   | Mobj cl x m _ => Sobj cl x (erase m)
+  | Mcall s _ => s
+  | Mocall _ _ _ s _ => s
   end.
 
 
@@ -71,6 +79,12 @@ Fixpoint erase (m : mstm) : stm :=
 (* ------------------------------------------------------------------ *)
 (** * 小ステップ関係                                                    *)
 (* ------------------------------------------------------------------ *)
+
+(** メソッド呼出しは呼出し先の本体を環境から引くので、以降の定義・定理は
+    ひとつの環境 [G] のもとで述べる（節を閉じると [step G ...] になる）。 *)
+Section SmallStep.
+
+Variable G : menv.
 
 (** 配置は (トークン付きの文, 状態)。対ではなく 4 引数の関係にしてあるのは、
     対の添字だと induction/inversion が構成子の形を割り出せないため。 *)
@@ -201,7 +215,63 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
     (forall f, hp a h f = 0) ->
     hc a h = cl ->
     b == dealloc a x ->
-    step (Mobj cl x (Mpost s) h) a (Mpost (Sobj cl x s)) b.
+    step (Mobj cl x (Mpost s) h) a (Mpost (Sobj cl x s)) b
+
+(* 手続き呼出し：本体を環境から引き、仮引数を実引数へ置き換えて配置の中で走らせる。
+   配置が呼出し文そのものを覚えているので、出口の戻り先が一意に決まる。 *)
+| S_call_in : forall m ps body args a,
+    procs G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    step (Mpre (Scall m args)) a
+         (Mcall (Scall m args) (Mpre (rename (mk_ren ps args) body))) a
+| S_call : forall s m m' a a',
+    step m a m' a' ->
+    step (Mcall s m) a (Mcall s m') a'
+| S_call_out : forall m ps body args a,
+    procs G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    step (Mcall (Scall m args) (Mpost (rename (mk_ren ps args) body))) a
+         (Mpost (Scall m args)) a
+| S_uncall_in : forall m ps body args a,
+    procs G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    step (Mpre (Suncall m args)) a
+         (Mcall (Suncall m args) (Mpre (invert (rename (mk_ren ps args) body)))) a
+| S_uncall_out : forall m ps body args a,
+    procs G m = Some (MDecl ps body) ->
+    length ps = length args ->
+    step (Mcall (Suncall m args) (Mpost (invert (rename (mk_ren ps args) body)))) a
+         (Mpost (Suncall m args)) a
+
+(* メソッド呼出し：受け手の動的クラスから本体を選ぶ（動的束縛）。
+   受け手が呼出し中に動かないこと・ヒープ高さが釣り合うことは、
+   入口の情報を配置に退避して出口で確かめる。 *)
+| S_ocall_in : forall x m args a l d,
+    os a x = Some l -> (l < hn a)%nat ->
+    dispatch (classes G) (hc a l) m d ->
+    step (Mpre (Socall x m args)) a
+         (Mocall l (hc a l) (hn a) (Socall x m args)
+                 (Mpre (call_body d x args))) a
+| S_ocall : forall l cl h s m m' a a',
+    step m a m' a' ->
+    step (Mocall l cl h s m) a (Mocall l cl h s m') a'
+| S_ocall_out : forall x m args a l cl h d,
+    os a x = Some l -> (l < hn a)%nat -> hc a l = cl -> hn a = h ->
+    dispatch (classes G) cl m d ->
+    step (Mocall l cl h (Socall x m args) (Mpost (call_body d x args))) a
+         (Mpost (Socall x m args)) a
+| S_ouncall_in : forall x m args a l d,
+    os a x = Some l -> (l < hn a)%nat ->
+    dispatch (classes G) (hc a l) m d ->
+    step (Mpre (Souncall x m args)) a
+         (Mocall l (hc a l) (hn a) (Souncall x m args)
+                 (Mpre (invert (call_body d x args)))) a
+| S_ouncall_out : forall x m args a l cl h d,
+    os a x = Some l -> (l < hn a)%nat -> hc a l = cl -> hn a = h ->
+    dispatch (classes G) cl m d ->
+    step (Mocall l cl h (Souncall x m args)
+                 (Mpost (invert (call_body d x args)))) a
+         (Mpost (Souncall x m args)) a.
 
 (** 多ステップ *)
 Inductive steps : mstm -> state -> mstm -> state -> Prop :=
@@ -249,10 +319,10 @@ Definition dummy_env : menv := MEnv (fun _ => None) (fun _ => None).
 
 (** [• s] から [s •] への一歩は、原子文の大ステップ一歩そのもの
     （並び・分岐・ループは文脈へ入るので、この形にはならない）。 *)
-Lemma atom_exec : forall G s a b,
-  step (Mpre s) a (Mpost s) b -> exec G s a b.
+Lemma atom_exec : forall G' s a b,
+  step (Mpre s) a (Mpost s) b -> exec G' s a b.
 Proof.
-  intros G s a b H; inversion H; subst.
+  intros G' s a b H; inversion H; subst.
   - apply E_skip; assumption.
   - apply E_assign; assumption.
   - apply E_swap; assumption.
@@ -266,10 +336,10 @@ Proof.
 Qed.
 
 (** その逆。原子文の大ステップ一歩は小ステップ一歩でもある。 *)
-Lemma exec_atom : forall G s a b,
-  atomic s -> exec G s a b -> step (Mpre s) a (Mpost s) b.
+Lemma exec_atom : forall G' s a b,
+  atomic s -> exec G' s a b -> step (Mpre s) a (Mpost s) b.
 Proof.
-  intros G s a b Hat H; inversion Hat; subst; inversion H; subst;
+  intros G' s a b Hat H; inversion Hat; subst; inversion H; subst;
     econstructor; eassumption.
 Qed.
 
@@ -306,6 +376,20 @@ Proof.
              destruct (IH mm' aa' HS) as [ Em Ea ]; subst;
              split; [ reflexivity | assumption ]
          end).
+  (* 呼出し：本体は環境から一意に引かれ、動的束縛も dispatch_det で一意 *)
+  all: repeat match goal with
+       | [ HA : os ?aa ?xx = Some ?l1, HB : os ?aa ?xx = Some ?l2 |- _ ] =>
+           tryif constr_eq l1 l2 then fail else
+             (assert (l1 = l2) by congruence; subst)
+       | [ HA : procs G ?mm = Some (MDecl ?p1 ?b1),
+           HB : procs G ?mm = Some (MDecl ?p2 ?b2) |- _ ] =>
+           tryif constr_eq p1 p2 then fail else
+             (assert (p1 = p2 /\ b1 = b2) as [ ? ? ] by (split; congruence); subst)
+       | [ HA : dispatch ?T ?c ?mm ?d1, HB : dispatch ?T ?c ?mm ?d2 |- _ ] =>
+           tryif constr_eq d1 d2 then fail else
+             (assert (d1 = d2) by (eapply dispatch_det; eassumption); subst)
+       end.
+  all: try (split; [ reflexivity | apply steq_refl ]).
   (* 残るのは新しい原子文のケース：まず位置を os から同定し、
      結果が同じ状態に == であることから合流させる *)
   all: lazymatch goal with
@@ -659,6 +743,21 @@ Proof.
            split; [ reflexivity | ];
            eapply loc_in_inj; [ eassumption | eassumption | congruence ]
        end).
+  (* 呼出し：本体は環境から一意に引かれ、動的束縛も dispatch_det で一意。
+     状態は動かないので、配置の一致だけ言えばよい *)
+  all: repeat match goal with
+       | [ HA : os ?aa ?xx = Some ?l1, HB : os ?aa ?xx = Some ?l2 |- _ ] =>
+           tryif constr_eq l1 l2 then fail else
+             (assert (l1 = l2) by congruence; subst)
+       | [ HA : procs G ?mm = Some (MDecl ?p1 ?b1),
+           HB : procs G ?mm = Some (MDecl ?p2 ?b2) |- _ ] =>
+           tryif constr_eq p1 p2 then fail else
+             (assert (p1 = p2 /\ b1 = b2) as [ ? ? ] by (split; congruence); subst)
+       | [ HA : dispatch ?T ?c ?mm ?d1, HB : dispatch ?T ?c ?mm ?d2 |- _ ] =>
+           tryif constr_eq d1 d2 then fail else
+             (assert (d1 = d2) by (eapply dispatch_det; eassumption); subst)
+       end.
+  all: try (split; [ reflexivity | apply steq_refl ]).
   (* オブジェクトブロックの出口：退避した高さの一致を先に示す *)
   all: try (match goal with
        | [ Hh1 : hn ?aa = S ?hh, Hb1 : ?b == dealloc ?aa ?xx,
@@ -846,6 +945,56 @@ Proof.
       * rewrite <- (steq_hc a a2 h Ha); [ assumption | lia ].
       * apply steq_refl.
     + eapply steq_trans; [ eassumption | now apply dealloc_steq ].
+  - (* 手続き呼出しに入る *)
+    exists a2; split; [ | assumption ].
+    eapply S_call_in; eassumption.
+  - (* 呼出しの本体の中 *)
+    destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_call | assumption ].
+  - (* 手続き呼出しを出る *)
+    exists a2; split; [ | assumption ].
+    eapply S_call_out; eassumption.
+  - (* uncall に入る *)
+    exists a2; split; [ | assumption ].
+    eapply S_uncall_in; eassumption.
+  - (* uncall を出る *)
+    exists a2; split; [ | assumption ].
+    eapply S_uncall_out; eassumption.
+  - (* メソッド呼出しに入る *)
+    assert (Hl : (l < hn a2)%nat) by (rewrite <- (steq_hn a a2 Ha); assumption).
+    assert (Hcl : hc a2 l = hc a l)
+      by (rewrite <- (steq_hc a a2 l Ha); [ reflexivity | assumption ]).
+    exists a2; split; [ | assumption ].
+    rewrite (steq_hn a a2 Ha), <- Hcl.  (* 配置が持つ退避情報を合わせる *)
+    eapply S_ocall_in; [ | eassumption | ].
+    + rewrite <- (steq_os a a2 x Ha); assumption.
+    + rewrite Hcl; assumption.
+  - (* メソッド呼出しの本体の中 *)
+    destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
+    exists a2'; split; [ now apply S_ocall | assumption ].
+  - (* メソッド呼出しを出る *)
+    exists a2; split; [ | assumption ].
+    eapply S_ocall_out; [ | | | | eassumption ].
+    + rewrite <- (steq_os a a2 x Ha); assumption.
+    + rewrite <- (steq_hn a a2 Ha); assumption.
+    + rewrite <- (steq_hc a a2 l Ha); assumption.
+    + rewrite <- (steq_hn a a2 Ha); assumption.
+  - (* ouncall に入る *)
+    assert (Hl : (l < hn a2)%nat) by (rewrite <- (steq_hn a a2 Ha); assumption).
+    assert (Hcl : hc a2 l = hc a l)
+      by (rewrite <- (steq_hc a a2 l Ha); [ reflexivity | assumption ]).
+    exists a2; split; [ | assumption ].
+    rewrite (steq_hn a a2 Ha), <- Hcl.
+    eapply S_ouncall_in; [ | eassumption | ].
+    + rewrite <- (steq_os a a2 x Ha); assumption.
+    + rewrite Hcl; assumption.
+  - (* ouncall を出る *)
+    exists a2; split; [ | assumption ].
+    eapply S_ouncall_out; [ | | | | eassumption ].
+    + rewrite <- (steq_os a a2 x Ha); assumption.
+    + rewrite <- (steq_hn a a2 Ha); assumption.
+    + rewrite <- (steq_hc a a2 l Ha); assumption.
+    + rewrite <- (steq_hn a a2 Ha); assumption.
 Qed.
 
 Theorem steps_eq : forall m a m' a',
@@ -909,6 +1058,20 @@ Proof.
   eapply steps_step; [ apply S_obj; eassumption | assumption ].
 Qed.
 
+Lemma steps_call : forall s m a m' a',
+  steps m a m' a' -> steps (Mcall s m) a (Mcall s m') a'.
+Proof.
+  intros s m a m' a' H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_call; eassumption | assumption ].
+Qed.
+
+Lemma steps_ocall : forall l cl h s m a m' a',
+  steps m a m' a' -> steps (Mocall l cl h s m) a (Mocall l cl h s m') a'.
+Proof.
+  intros l cl h s m a m' a' H; induction H; [ apply steps_refl | ].
+  eapply steps_step; [ apply S_ocall; eassumption | assumption ].
+Qed.
+
 Lemma steps_lp2 : forall e1 s1 m a m' a' e2,
   steps m a m' a' -> steps (Mlp2 e1 s1 m e2) a (Mlp2 e1 s1 m' e2) a'.
 Proof.
@@ -936,20 +1099,54 @@ Inductive core : stm -> Prop :=
 | C_if : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sif e1 s1 s2 e2)
 | C_loop : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sloop e1 s1 s2 e2)
 | C_local : forall x e1 s e2, core s -> core (Slocal x e1 s e2)
-| C_obj : forall cl x s, core s -> core (Sobj cl x s).
+| C_obj : forall cl x s, core s -> core (Sobj cl x s)
+| C_call : forall m args, core (Scall m args)
+| C_uncall : forall m args, core (Suncall m args)
+| C_ocall : forall x m args, core (Socall x m args)
+| C_ouncall : forall x m args, core (Souncall x m args).
 
 Ltac not_core := intros; match goal with [ H : core _ |- _ ] => inversion H end.
 
+(** 呼出しの本体は環境から引かれるので、本体が核に収まっていることは
+    環境の側の条件として述べる。 *)
+Definition core_env : Prop :=
+  (forall m ps body, procs G m = Some (MDecl ps body) -> core body)
+  /\ (forall c p ms m ps body,
+        classes G c = Some (CDecl p ms) ->
+        ms m = Some (MDecl ps body) -> core body).
+
+(** 実引数への束縛（改名）と反転は核の外へ出ない。 *)
+Lemma core_rename : forall r s, core s -> core (rename r s).
+Proof.
+  intros r s H; induction H; simpl; constructor; assumption.
+Qed.
+
+Lemma core_invert : forall s, core s -> core (invert s).
+Proof.
+  intros s H; induction H; simpl; constructor; assumption.
+Qed.
+
+(** 動的束縛で選ばれた本体も核に収まる。 *)
+Lemma dispatch_core : forall c m ps body,
+  core_env -> dispatch (classes G) c m (MDecl ps body) -> core body.
+Proof.
+  intros c m ps body [ _ Hcl ] H.
+  remember (MDecl ps body) as d eqn:Ed.
+  induction H as [ c p ms m0 d Hc Hm | c q ms m0 d Hc Hm Hd IH ]; subst.
+  - eapply Hcl; eassumption.
+  - now apply IH.
+Qed.
+
 (** 大ステップで [a] から [b] へ行けるなら、小ステップでも [• s] から [s •] へ
     有限回で到達する（終状態は点ごとに等しい）。 *)
-Theorem exec_steps : forall G,
+Theorem exec_steps : core_env ->
   (forall s a b, exec G s a b -> core s ->
      exists b', steps (Mpre s) a (Mpost s) b' /\ b == b')
   /\ (forall e1 s1 s2 e2 a b, loopx G e1 s1 s2 e2 a b -> core s1 -> core s2 ->
      exists b', steps (Mlp1 e1 (Mpost s1) s2 e2) a
                       (Mpost (Sloop e1 s1 s2 e2)) b' /\ b == b').
 Proof.
-  intro G; apply exec_loopx_min.
+  intro Henv; apply exec_loopx_min.
   - (* skip *)
     intros a b Hab _. exists a; split.
     + apply steps_one, S_skip, steq_refl.
@@ -962,12 +1159,12 @@ Proof.
   - (* field assign *)
     intros x f o e a b l H1 H2 H3 H4 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Sfassign x f o e);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sfassign x f o e);
       [ constructor | eapply E_fassign; eassumption ].
   - (* array assign *)
     intros x ei o e a b l H1 H2 H3 H4 H5 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Saassign x ei o e);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Saassign x ei o e);
       [ constructor | eapply E_aassign; eassumption ].
   - (* swap *)
     intros x y a b Hb _.
@@ -977,22 +1174,22 @@ Proof.
   - (* array swap *)
     intros x e1 y e2 a b l1 l2 H1 H2 H3 H4 H5 H6 H7 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Saswap x e1 y e2);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Saswap x e1 y e2);
       [ constructor | eapply E_aswap; eassumption ].
   - (* object swap *)
     intros x y a b H1 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Soswap x y);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Soswap x y);
       [ constructor | eapply E_oswap; eassumption ].
   - (* copy *)
     intros x y a b H1 H2 H3 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Scopy x y);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Scopy x y);
       [ constructor | eapply E_copy; eassumption ].
   - (* uncopy *)
     intros x y a b H1 H2 H3 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Suncopy x y);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Suncopy x y);
       [ constructor | eapply E_uncopy; eassumption ].
   - (* seq *)
     intros s1 s2 a b c H1 IH1 H2 IH2 Hc; inversion Hc; subst.
@@ -1044,7 +1241,7 @@ Proof.
   - (* show *)
     intros e a b H1 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G := dummy_env) (s := Sshow e);
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sshow e);
       [ constructor | eapply E_show; eassumption ].
   - (* object block *)
     intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc Hcore; inversion Hcore; subst.
@@ -1063,10 +1260,47 @@ Proof.
            rewrite <- (steq_hc b b' (hn a) Hb); [ reflexivity | lia ].
         -- apply steq_refl.
     + eapply steq_trans; [ eassumption | now apply dealloc_steq ].
-  - (* call *) not_core.
-  - (* uncall *) not_core.
-  - (* object call *) not_core.
-  - (* object uncall *) not_core.
+  - (* call *)
+    intros m ps body args a b Hp Hl Hx IH Hc.
+    destruct (IH (core_rename _ _ (proj1 Henv _ _ _ Hp))) as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ eapply S_call_in; eassumption | ].
+    eapply steps_trans; [ apply steps_call; eassumption | ].
+    apply steps_one; eapply S_call_out; eassumption.
+  - (* uncall *)
+    intros m ps body args a b Hp Hl Hx IH Hc.
+    destruct (IH (core_invert _ (core_rename _ _ (proj1 Henv _ _ _ Hp))))
+      as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ eapply S_uncall_in; eassumption | ].
+    eapply steps_trans; [ apply steps_call; eassumption | ].
+    apply steps_one; eapply S_uncall_out; eassumption.
+  - (* object call *)
+    intros x m args a b l d Hox Hl Hd Hx IH Hbx Hbc Hbn Hc.
+    destruct d as [ ps body ].
+    destruct (IH (core_rename _ _ (dispatch_core _ _ _ _ Henv Hd)))
+      as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ eapply S_ocall_in; eassumption | ].
+    eapply steps_trans; [ apply steps_ocall; eassumption | ].
+    apply steps_one; eapply S_ocall_out; [ | | | | eassumption ].
+    + rewrite <- (steq_os b b' x Hb); assumption.
+    + rewrite <- (steq_hn b b' Hb), Hbn; assumption.
+    + rewrite <- (steq_hc b b' l Hb); [ assumption | rewrite Hbn; assumption ].
+    + rewrite <- (steq_hn b b' Hb); assumption.
+  - (* object uncall *)
+    intros x m args a b l d Hox Hl Hd Hx IH Hbx Hbc Hbn Hc.
+    destruct d as [ ps body ].
+    destruct (IH (core_invert _ (core_rename _ _
+                    (dispatch_core _ _ _ _ Henv Hd)))) as [ b' [ Hs Hb ] ].
+    exists b'; split; [ | assumption ].
+    eapply steps_step; [ eapply S_ouncall_in; eassumption | ].
+    eapply steps_trans; [ apply steps_ocall; eassumption | ].
+    apply steps_one; eapply S_ouncall_out; [ | | | | eassumption ].
+    + rewrite <- (steq_os b b' x Hb); assumption.
+    + rewrite <- (steq_hn b b' Hb), Hbn; assumption.
+    + rewrite <- (steq_hc b b' l Hb); [ assumption | rewrite Hbn; assumption ].
+    + rewrite <- (steq_hn b b' Hb); assumption.
   - (* loop tail: done *)
     intros e1 s1 s2 e2 a b H1 Hab _ _.
     exists a; split.
@@ -1305,15 +1539,116 @@ Proof.
       * lia.
 Qed.
 
+(** 呼出しの分解。配置が呼出し文を覚えているので、出口で本体が
+    「環境から引かれたその本体」であったことまで取り出せる。 *)
+Lemma call_split : forall n m args mm a c,
+  stepsn n (Mcall (Scall m args) mm) a (Mpost (Scall m args)) c ->
+  exists n1 ps body,
+    procs G m = Some (MDecl ps body) /\ length ps = length args
+    /\ stepsn n1 mm a (Mpost (rename (mk_ren ps args) body)) c /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros m args mm a c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + (* 本体の中で一歩進む *)
+      destruct (IH _ _ _ _ _ HR) as [ q1 [ ps [ body [ Hp [ Hl [ P1 L1 ] ] ] ] ] ].
+      exists (S q1), ps, body; split; [ | split; [ | split ] ].
+      * assumption.
+      * assumption.
+      * exists m', a2; split; assumption.
+      * lia.
+    + (* 抜ける *)
+      destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ]; subst.
+      exists 0%nat, ps, body; split; [ | split; [ | split ] ].
+      * assumption.
+      * assumption.
+      * split; reflexivity.
+      * lia.
+Qed.
+
+Lemma uncall_split : forall n m args mm a c,
+  stepsn n (Mcall (Suncall m args) mm) a (Mpost (Suncall m args)) c ->
+  exists n1 ps body,
+    procs G m = Some (MDecl ps body) /\ length ps = length args
+    /\ stepsn n1 mm a (Mpost (invert (rename (mk_ren ps args) body))) c
+    /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros m args mm a c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ HR) as [ q1 [ ps [ body [ Hp [ Hl [ P1 L1 ] ] ] ] ] ].
+      exists (S q1), ps, body; split; [ | split; [ | split ] ].
+      * assumption.
+      * assumption.
+      * exists m', a2; split; assumption.
+      * lia.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ]; subst.
+      exists 0%nat, ps, body; split; [ | split; [ | split ] ].
+      * assumption.
+      * assumption.
+      * split; reflexivity.
+      * lia.
+Qed.
+
+Lemma ocall_split : forall n x m args l cl h mm a c,
+  stepsn n (Mocall l cl h (Socall x m args) mm) a (Mpost (Socall x m args)) c ->
+  exists n1 d,
+    os c x = Some l /\ (l < hn c)%nat /\ hc c l = cl /\ hn c = h
+    /\ dispatch (classes G) cl m d
+    /\ stepsn n1 mm a (Mpost (call_body d x args)) c /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros x m args l cl h mm a c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ d [ Ho [ Hl [ Hcl [ Hh [ Hd [ P1 L1 ] ] ] ] ] ] ] ].
+      exists (S q1), d.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ];
+        try assumption.
+      * exists m', a2; split; assumption.
+      * lia.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ]; subst.
+      exists 0%nat, d.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ];
+        try (assumption || reflexivity).
+      * split; reflexivity.
+      * lia.
+Qed.
+
+Lemma ouncall_split : forall n x m args l cl h mm a c,
+  stepsn n (Mocall l cl h (Souncall x m args) mm) a (Mpost (Souncall x m args)) c ->
+  exists n1 d,
+    os c x = Some l /\ (l < hn c)%nat /\ hc c l = cl /\ hn c = h
+    /\ dispatch (classes G) cl m d
+    /\ stepsn n1 mm a (Mpost (invert (call_body d x args))) c /\ (n1 < n)%nat.
+Proof.
+  induction n as [ | k IH ]; intros x m args l cl h mm a c H.
+  - destruct H as [ Hm _ ]; discriminate.
+  - destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+    + destruct (IH _ _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ d [ Ho [ Hl [ Hcl [ Hh [ Hd [ P1 L1 ] ] ] ] ] ] ] ].
+      exists (S q1), d.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ];
+        try assumption.
+      * exists m', a2; split; assumption.
+      * lia.
+    + destruct (post_stuck _ _ _ _ _ HR) as [ Em Ea ]; subst.
+      exists 0%nat, d.
+      split; [ | split; [ | split; [ | split; [ | split; [ | split ] ] ] ] ];
+        try (assumption || reflexivity).
+      * split; reflexivity.
+      * lia.
+Qed.
+
 (* --- 本体：多ステップから大ステップを組み立てる --- *)
 
-Lemma steps_exec_aux : forall G n,
+Lemma steps_exec_aux : core_env -> forall n,
   (forall s a b, stepsn n (Mpre s) a (Mpost s) b -> core s -> exec G s a b)
   /\ (forall e1 s1 s2 e2 b c,
         stepsn n (Mlp1 e1 (Mpost s1) s2 e2) b (Mpost (Sloop e1 s1 s2 e2)) c ->
         core s1 -> core s2 -> loopx G e1 s1 s2 e2 b c).
 Proof.
-  intro G.
+  intro Henv.
   induction n as [ n IH ] using (well_founded_induction lt_wf); split.
   - (* 文 *)
     intros s a b H Hc; destruct Hc.
@@ -1417,6 +1752,51 @@ Proof.
       eapply exec_eq with (G := G);
         [ apply (proj1 (IH q1 Hb)); eassumption
         | eassumption | apply steq_refl ].
+    + (* 手続き呼出し *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (call_split _ _ _ _ _ _ HR)
+        as [ q1 [ ps0 [ body0 [ Hp0 [ Hl0 [ P1 L1 ] ] ] ] ] ].
+      assert (Eq : ps0 = ps /\ body0 = body) by (split; congruence).
+      destruct Eq as [ Ep Eb ]; subst.
+      eapply E_call; [ eassumption | assumption | ].
+      apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
+      apply core_rename; eapply (proj1 Henv); eassumption.
+    + (* uncall *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (uncall_split _ _ _ _ _ _ HR)
+        as [ q1 [ ps0 [ body0 [ Hp0 [ Hl0 [ P1 L1 ] ] ] ] ] ].
+      assert (Eq : ps0 = ps /\ body0 = body) by (split; congruence).
+      destruct Eq as [ Ep Eb ]; subst.
+      eapply E_uncall; [ eassumption | assumption | ].
+      apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
+      apply core_invert, core_rename; eapply (proj1 Henv); eassumption.
+    + (* メソッド呼出し *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (ocall_split _ _ _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ d0 [ Ho [ Hl [ Hcl [ Hh [ Hd0 [ P1 L1 ] ] ] ] ] ] ] ].
+      assert (Ed : d0 = d) by (eapply dispatch_det; eassumption); subst d0.
+      destruct d as [ ps body ].
+      eapply E_ocall with (l := l) (d := MDecl ps body);
+        [ eassumption | eassumption | eassumption | | assumption
+        | assumption | assumption ].
+      apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
+      simpl; apply core_rename; eapply dispatch_core; eassumption.
+    + (* メソッドの uncall *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
+      destruct (ouncall_split _ _ _ _ _ _ _ _ _ _ HR)
+        as [ q1 [ d0 [ Ho [ Hl [ Hcl [ Hh [ Hd0 [ P1 L1 ] ] ] ] ] ] ] ].
+      assert (Ed : d0 = d) by (eapply dispatch_det; eassumption); subst d0.
+      destruct d as [ ps body ].
+      eapply E_ouncall with (l := l) (d := MDecl ps body);
+        [ eassumption | eassumption | eassumption | | assumption
+        | assumption | assumption ].
+      apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
+      apply core_invert; simpl; apply core_rename;
+        eapply dispatch_core; eassumption.
   - (* ループの残り *)
     intros e1 s1 s2 e2 b c H Hs1 Hs2.
     destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
@@ -1442,25 +1822,27 @@ Qed.
 
 (** **小ステップから大ステップへ**。[exec_steps] と合わせて、核の断片では
     二つの意味論が同じ関係を定めていることになる。 *)
-Theorem steps_exec : forall G s a b,
+Theorem steps_exec : core_env -> forall s a b,
   core s -> steps (Mpre s) a (Mpost s) b -> exec G s a b.
 Proof.
-  intros G s a b Hc H.
+  intros Henv s a b Hc H.
   destruct (steps_stepsn _ _ _ _ H) as [ n Hn ].
-  eapply (proj1 (steps_exec_aux G n)); eassumption.
+  eapply (proj1 (steps_exec_aux Henv n)); eassumption.
 Qed.
 
 (** 二つの意味論の同値（終状態は点ごとの等しさまで）。 *)
-Theorem exec_iff_steps : forall G s a b,
+Theorem exec_iff_steps : core_env -> forall s a b,
   core s ->
   (exec G s a b <-> exists b', steps (Mpre s) a (Mpost s) b' /\ b == b').
 Proof.
-  intros G s a b Hc; split; intro H.
-  - now apply (proj1 (exec_steps G)).
+  intros Henv s a b Hc; split; intro H.
+  - now apply (proj1 (exec_steps Henv)).
   - destruct H as [ b' [ Hs Hb ] ].
     eapply exec_eq; [ eapply steps_exec; eassumption | apply steq_refl | ].
     now apply steq_sym.
 Qed.
+
+End SmallStep.
 
 (* ------------------------------------------------------------------ *)
 (** * 空虚でないことの確認                                              *)
@@ -1476,7 +1858,7 @@ Definition prog0 : stm :=
   Sseq (Sassign X MAdd (Cst 3)) (Sswap X Y).
 
 Example ex_small_run :
-  exists b, steps (Mpre prog0) zero0 (Mpost prog0) b
+  exists b, steps dummy_env (Mpre prog0) zero0 (Mpost prog0) b
             /\ vs b X = 0 /\ vs b Y = 3.
 Proof.
   eexists. split.
@@ -1496,7 +1878,7 @@ Definition prog1 : stm :=
         (Bop Oeq (Var X) (Cst 2)).
 
 Example ex_small_loop :
-  exists b, steps (Mpre prog1) zero0 (Mpost prog1) b /\ vs b X = 2.
+  exists b, steps dummy_env (Mpre prog1) zero0 (Mpost prog1) b /\ vs b X = 2.
 Proof.
   eexists. split.
   - eapply steps_step; [ apply S_lp_in; simpl; discriminate | ].
@@ -1518,7 +1900,8 @@ Qed.
 
 (** 原子文も動く: v0 += 3 ; show(v0) *)
 Example ex_small_atomic :
-  exists b, steps (Mpre (Sseq (Sassign X MAdd (Cst 3)) (Sshow (Var X))))
+  exists b, steps dummy_env
+              (Mpre (Sseq (Sassign X MAdd (Cst 3)) (Sshow (Var X))))
                   zero0
                   (Mpost (Sseq (Sassign X MAdd (Cst 3)) (Sshow (Var X)))) b
             /\ vs b X = 3.
@@ -1540,7 +1923,7 @@ Definition prog2 : stm :=
   Slocal T0 (Cst 3) (Sassign X MAdd (Var T0)) (Cst 3).
 
 Example ex_small_local :
-  exists b, steps (Mpre prog2) zero0 (Mpost prog2) b
+  exists b, steps dummy_env (Mpre prog2) zero0 (Mpost prog2) b
             /\ vs b X = 3 /\ vs b T0 = 0.
 Proof.
   eexists. split.
@@ -1565,7 +1948,7 @@ Definition prog3 : stm :=
                   (Sfassign P F0 MSub (Cst 5))).
 
 Example ex_small_obj :
-  exists b, steps (Mpre prog3) zero0 (Mpost prog3) b
+  exists b, steps dummy_env (Mpre prog3) zero0 (Mpost prog3) b
             /\ hn b = 0%nat /\ os b P = None.
 Proof.
   eexists. split.
@@ -1587,6 +1970,41 @@ Proof.
     + reflexivity.
     + apply steq_refl.
   - split; reflexivity.
+Qed.
+
+(** 手続き呼出し：仮引数 y を実引数 v0 へ束縛して本体を走らせる。 *)
+Definition M0 : mid := 0%nat.
+
+Definition penv : menv :=
+  MEnv (fun m => if Nat.eqb m M0
+                 then Some (MDecl (Y :: nil) (Sassign Y MAdd (Cst 5)))
+                 else None)
+       (fun _ => None).
+
+(** 環境の側の条件（本体が核に収まる）も満たしている。 *)
+Example penv_core : core_env penv.
+Proof.
+  split.
+  - intros m ps body Hp; unfold penv, procs in Hp; simpl in Hp.
+    destruct (Nat.eqb m M0); [ | discriminate ].
+    injection Hp as _ Hb; subst; constructor.
+  - intros c p ms m ps body Hc; discriminate.
+Qed.
+
+Definition prog4 : stm := Scall M0 (X :: nil).
+
+Example ex_small_call :
+  exists b, steps penv (Mpre prog4) zero0 (Mpost prog4) b /\ vs b X = 5.
+Proof.
+  eexists. split.
+  - eapply steps_step; [ eapply S_call_in; reflexivity | ].
+    eapply steps_step.
+    { apply S_call; apply S_assign; [ simpl; tauto | apply steq_refl ]. }
+    eapply steps_step; [ | apply steps_refl ].
+    (* 本体は簡約されているので、戻り先の規則には引数を明示して渡す *)
+    eapply (S_call_out penv M0 (Y :: nil) (Sassign Y MAdd (Cst 5)) (X :: nil));
+      reflexivity.
+  - reflexivity.
 Qed.
 
 (* ------------------------------------------------------------------ *)
@@ -1611,3 +2029,4 @@ Print Assumptions step_preserves_program.
 Print Assumptions exec_steps.
 Print Assumptions steps_exec.
 Print Assumptions exec_iff_steps.
+Print Assumptions ex_small_call.
