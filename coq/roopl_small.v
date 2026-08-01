@@ -233,24 +233,24 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
     step (Mpre (Scall m args)) a
-         (Mcall (Scall m args) (Mpre (rename (mk_ren ps args) body))) a
+         (Mcall (Scall m args) (Mpre (bind_args ps args body))) a
 | S_call : forall s m m' a a',
     step m a m' a' ->
     step (Mcall s m) a (Mcall s m') a'
 | S_call_out : forall m ps body args a,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
-    step (Mcall (Scall m args) (Mpost (rename (mk_ren ps args) body))) a
+    step (Mcall (Scall m args) (Mpost (bind_args ps args body))) a
          (Mpost (Scall m args)) a
 | S_uncall_in : forall m ps body args a,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
     step (Mpre (Suncall m args)) a
-         (Mcall (Suncall m args) (Mpre (invert (rename (mk_ren ps args) body)))) a
+         (Mcall (Suncall m args) (Mpre (invert (bind_args ps args body)))) a
 | S_uncall_out : forall m ps body args a,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
-    step (Mcall (Suncall m args) (Mpost (invert (rename (mk_ren ps args) body)))) a
+    step (Mcall (Suncall m args) (Mpost (invert (bind_args ps args body)))) a
          (Mpost (Suncall m args)) a
 
 (* メソッド呼出し：受け手の動的クラスから本体を選ぶ（動的束縛）。
@@ -1161,6 +1161,20 @@ Proof.
   intros r s H; induction H; simpl; constructor; assumption.
 Qed.
 
+(** 値渡しの束ね（局所ブロック）も核の外へ出ない。 *)
+Lemma core_wrap_vals : forall ps args s, core s -> core (wrap_vals ps args s).
+Proof.
+  induction ps as [ | p ps' IH ]; intros args s Hs; simpl; [ assumption | ].
+  destruct args as [ | [ y | e ] as' ]; simpl.
+  - assumption.
+  - now apply IH.
+  - apply C_local; now apply IH.
+Qed.
+
+Lemma core_bind_args : forall ps args body,
+  core body -> core (bind_args ps args body).
+Proof. intros ps args body H; apply core_wrap_vals, core_rename; assumption. Qed.
+
 Lemma core_invert : forall s, core s -> core (invert s).
 Proof.
   intros s H; induction H; simpl; constructor; assumption.
@@ -1312,14 +1326,14 @@ Proof.
       [ constructor | eapply E_delete; eassumption ].
   - (* call *)
     intros m ps body args a b Hp Hl Hx IH Hc.
-    destruct (IH (core_rename _ _ (proj1 Henv _ _ _ Hp))) as [ b' [ Hs Hb ] ].
+    destruct (IH (core_bind_args _ _ _ (proj1 Henv _ _ _ Hp))) as [ b' [ Hs Hb ] ].
     exists b'; split; [ | assumption ].
     eapply steps_step; [ eapply S_call_in; eassumption | ].
     eapply steps_trans; [ apply steps_call; eassumption | ].
     apply steps_one; eapply S_call_out; eassumption.
   - (* uncall *)
     intros m ps body args a b Hp Hl Hx IH Hc.
-    destruct (IH (core_invert _ (core_rename _ _ (proj1 Henv _ _ _ Hp))))
+    destruct (IH (core_invert _ (core_bind_args _ _ _ (proj1 Henv _ _ _ Hp))))
       as [ b' [ Hs Hb ] ].
     exists b'; split; [ | assumption ].
     eapply steps_step; [ eapply S_uncall_in; eassumption | ].
@@ -1328,7 +1342,7 @@ Proof.
   - (* object call *)
     intros x m args a b l d Hox Hl Hd Hx IH Hbx Hbc Hbn Hc.
     destruct d as [ ps body ].
-    destruct (IH (core_rename _ _ (dispatch_core _ _ _ _ Henv Hd)))
+    destruct (IH (core_bind_args _ _ _ (dispatch_core _ _ _ _ Henv Hd)))
       as [ b' [ Hs Hb ] ].
     exists b'; split; [ | assumption ].
     eapply steps_step; [ eapply S_ocall_in; eassumption | ].
@@ -1341,7 +1355,7 @@ Proof.
   - (* object uncall *)
     intros x m args a b l d Hox Hl Hd Hx IH Hbx Hbc Hbn Hc.
     destruct d as [ ps body ].
-    destruct (IH (core_invert _ (core_rename _ _
+    destruct (IH (core_invert _ (core_bind_args _ _ _
                     (dispatch_core _ _ _ _ Henv Hd)))) as [ b' [ Hs Hb ] ].
     exists b'; split; [ | assumption ].
     eapply steps_step; [ eapply S_ouncall_in; eassumption | ].
@@ -1595,7 +1609,7 @@ Lemma call_split : forall n m args mm a c,
   stepsn n (Mcall (Scall m args) mm) a (Mpost (Scall m args)) c ->
   exists n1 ps body,
     procs G m = Some (MDecl ps body) /\ length ps = length args
-    /\ stepsn n1 mm a (Mpost (rename (mk_ren ps args) body)) c /\ (n1 < n)%nat.
+    /\ stepsn n1 mm a (Mpost (bind_args ps args body)) c /\ (n1 < n)%nat.
 Proof.
   induction n as [ | k IH ]; intros m args mm a c H.
   - destruct H as [ Hm _ ]; discriminate.
@@ -1620,7 +1634,7 @@ Lemma uncall_split : forall n m args mm a c,
   stepsn n (Mcall (Suncall m args) mm) a (Mpost (Suncall m args)) c ->
   exists n1 ps body,
     procs G m = Some (MDecl ps body) /\ length ps = length args
-    /\ stepsn n1 mm a (Mpost (invert (rename (mk_ren ps args) body))) c
+    /\ stepsn n1 mm a (Mpost (invert (bind_args ps args body))) c
     /\ (n1 < n)%nat.
 Proof.
   induction n as [ | k IH ]; intros m args mm a c H.
@@ -1821,7 +1835,7 @@ Proof.
       destruct Eq as [ Ep Eb ]; subst.
       eapply E_call; [ eassumption | assumption | ].
       apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
-      apply core_rename; eapply (proj1 Henv); eassumption.
+      apply core_bind_args; eapply (proj1 Henv); eassumption.
     + (* uncall *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
@@ -1831,7 +1845,7 @@ Proof.
       destruct Eq as [ Ep Eb ]; subst.
       eapply E_uncall; [ eassumption | assumption | ].
       apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
-      apply core_invert, core_rename; eapply (proj1 Henv); eassumption.
+      apply core_invert, core_bind_args; eapply (proj1 Henv); eassumption.
     + (* メソッド呼出し *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
@@ -1843,7 +1857,7 @@ Proof.
         [ eassumption | eassumption | eassumption | | assumption
         | assumption | assumption ].
       apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
-      simpl; apply core_rename; eapply dispatch_core; eassumption.
+      simpl; apply core_bind_args; eapply dispatch_core; eassumption.
     + (* メソッドの uncall *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst.
@@ -1855,7 +1869,7 @@ Proof.
         [ eassumption | eassumption | eassumption | | assumption
         | assumption | assumption ].
       apply (proj1 (IH q1 ltac:(lia))); [ eassumption | ].
-      apply core_invert; simpl; apply core_rename;
+      apply core_invert; simpl; apply core_bind_args;
         eapply dispatch_core; eassumption.
   - (* ループの残り *)
     intros e1 s1 s2 e2 b c H Hs1 Hs2.
@@ -2051,7 +2065,7 @@ Proof.
   - intros c p ms m ps body Hc; discriminate.
 Qed.
 
-Definition prog4 : stm := Scall M0 (X :: nil).
+Definition prog4 : stm := Scall M0 (Aref X :: nil).
 
 Example ex_small_call :
   exists b, steps penv (Mpre prog4) zero0 (Mpost prog4) b /\ vs b X = 5.
@@ -2062,7 +2076,7 @@ Proof.
     { apply S_call; apply S_assign; [ simpl; tauto | apply steq_refl ]. }
     eapply steps_step; [ | apply steps_refl ].
     (* 本体は簡約されているので、戻り先の規則には引数を明示して渡す *)
-    eapply (S_call_out penv M0 (Y :: nil) (Sassign Y MAdd (Cst 5)) (X :: nil));
+    eapply (S_call_out penv M0 (Y :: nil) (Sassign Y MAdd (Cst 5)) (Aref X :: nil));
       reflexivity.
   - reflexivity.
 Qed.

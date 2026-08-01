@@ -178,6 +178,10 @@ val mapp : modop -> z -> z -> z
 
 val minv : modop -> modop
 
+type arg =
+| Aref of id
+| Aval of exp
+
 type stm =
 | Sskip
 | Sassign of id * modop * exp
@@ -196,18 +200,24 @@ type stm =
 | Sobj of cid * id * stm
 | Snew of cid * id
 | Sdelete of cid * id
-| Scall of mid * id list
-| Suncall of mid * id list
-| Socall of id * mid * id list
-| Souncall of id * mid * id list
+| Scall of mid * arg list
+| Suncall of mid * arg list
+| Socall of id * mid * arg list
+| Souncall of id * mid * arg list
 
 val invert : stm -> stm
 
-val mk_ren : id list -> id list -> id -> id
+val ren_args : id list -> arg list -> id -> id
 
 val rename_exp : (id -> id) -> exp -> exp
 
+val rename_arg : (id -> id) -> arg -> arg
+
 val rename : (id -> id) -> stm -> stm
+
+val wrap_vals : id list -> arg list -> stm -> stm
+
+val bind_args : id list -> arg list -> stm -> stm
 
 type mdecl =
 | MDecl of id list * stm
@@ -217,7 +227,7 @@ type cdecl =
 
 type ctable = cid -> cdecl option
 
-val call_body : mdecl -> id -> id list -> stm
+val call_body : mdecl -> id -> arg list -> stm
 
 type menv = { procs : (mid -> mdecl option); classes : ctable }
 

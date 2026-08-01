@@ -119,10 +119,10 @@ let rec stm_of_formal (s : R.stm) : stm =
      UncopyReference (ObjectType "C0", obj_of_id x, obj_of_id y)
   | R.Socall (x, m, args) ->
      ObjectCall (obj_of_id x, "m" ^ string_of_int (int_of_nat m),
-                 List.map (fun a -> Id (name_of_id a)) args)
+                 List.map arg_of_formal args)
   | R.Souncall (x, m, args) ->
      ObjectUncall (obj_of_id x, "m" ^ string_of_int (int_of_nat m),
-                   List.map (fun a -> Id (name_of_id a)) args)
+                   List.map arg_of_formal args)
   | R.Sobj (cl, x, s') when is_array_class cl ->
      (* 配列はブロック構文が無いので new … delete の 3 文に開く *)
      failwith "array blocks are expanded by stms_of_formal"
@@ -141,12 +141,16 @@ let rec stm_of_formal (s : R.stm) : stm =
      LocalBlock (IntegerType, name_of_id x, exp_of_formal e1,
                  stms_of_formal s', exp_of_formal e2)
   | R.Scall (m, args) ->
-     LocalCall ("m" ^ string_of_int (int_of_nat m),
-                List.map (fun a -> Id (name_of_id a)) args)
+     LocalCall ("m" ^ string_of_int (int_of_nat m), List.map arg_of_formal args)
   | R.Suncall (m, args) ->
-     LocalUncall ("m" ^ string_of_int (int_of_nat m),
-                  List.map (fun a -> Id (name_of_id a)) args)
+     LocalUncall ("m" ^ string_of_int (int_of_nat m), List.map arg_of_formal args)
   | _ -> failwith "not in the integer fragment"
+
+(* 実引数：変数は参照渡し、式は値渡し *)
+and arg_of_formal (a : R.arg) : arg =
+  match a with
+  | R.Aref x -> Id (name_of_id x)
+  | R.Aval e -> Exp (exp_of_formal e)
 
 and int_of_nat (n : R.nat) : int =
   let rec go = function R.O -> 0 | R.S m -> 1 + go m in go n
@@ -318,9 +322,32 @@ let menv_bump : R.menv =
 let methods_bump =
   [ MDecl ("m0", [ Decl (IntegerType, "v3") ], [ Assign (VarArray ("v3", None), ModAdd, Const 1) ]) ]
 
-let p_call = R.Scall (nat_of_int 0, [ v 0 ])
-let p_call_uncall = R.Sseq (R.Scall (nat_of_int 0, [ v 0 ]),
-                            R.Suncall (nat_of_int 0, [ v 0 ]))
+let p_call = R.Scall (nat_of_int 0, [ R.Aref (v 0) ])
+let p_call_uncall = R.Sseq (R.Scall (nat_of_int 0, [ R.Aref (v 0) ]),
+                            R.Suncall (nat_of_int 0, [ R.Aref (v 0) ]))
+
+(* 値渡し：method m1(v3, v4)  v3 += v4  を call m1(v0, 3) と呼ぶ。
+   値渡しの仮引数は局所ブロックで包まれるので、本体が書き換えると落ちる。 *)
+let addto_body = R.Sassign (v 3, R.MAdd, R.Var (v 4))
+let menv_addto : R.menv =
+  { R.procs = (fun m -> if int_of_nat m = 1
+                        then Some (R.MDecl ([ v 3; v 4 ], addto_body)) else None);
+    R.classes = (fun _ -> None) }
+let methods_addto =
+  [ MDecl ("m1", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
+           [ Assign (VarArray ("v3", None), ModAdd, Var "v4") ]) ]
+
+let p_call_value = R.Scall (nat_of_int 1, [ R.Aref (v 0); R.Aval (c 3) ])
+
+(* 値渡しの仮引数を書き換える本体（両方で落ちるはず） *)
+let bad_body = R.Sassign (v 4, R.MAdd, c 1)
+let menv_bad : R.menv =
+  { R.procs = (fun m -> if int_of_nat m = 1
+                        then Some (R.MDecl ([ v 3; v 4 ], bad_body)) else None);
+    R.classes = (fun _ -> None) }
+let methods_bad =
+  [ MDecl ("m1", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
+           [ Assign (VarArray ("v4", None), ModAdd, Const 1) ]) ]
 
 (* ---- for / switch：実装の追加構文と、形式化での糖衣を突き合わせる ------
 
@@ -516,17 +543,17 @@ let menv_dispatch : R.menv =
 
 (* construct C3 v5  call v5::m0(v0)  destruct v5  →  v0 = 7（上書き） *)
 let p_dispatch_override =
-  R.Sobj (nat_of_int 3, v 5, R.Socall (v 5, nat_of_int 0, [ v 0 ]))
+  R.Sobj (nat_of_int 3, v 5, R.Socall (v 5, nat_of_int 0, [ R.Aref (v 0) ]))
 
 (* construct C4 v5 …  →  v0 = 5（継承） *)
 let p_dispatch_inherited =
-  R.Sobj (nat_of_int 4, v 5, R.Socall (v 5, nat_of_int 0, [ v 0 ]))
+  R.Sobj (nat_of_int 4, v 5, R.Socall (v 5, nat_of_int 0, [ R.Aref (v 0) ]))
 
 (* call してから uncall すると戻る *)
 let p_dispatch_uncall =
   R.Sobj (nat_of_int 3, v 5,
-          R.Sseq (R.Socall (v 5, nat_of_int 0, [ v 0 ]),
-                  R.Souncall (v 5, nat_of_int 0, [ v 0 ])))
+          R.Sseq (R.Socall (v 5, nat_of_int 0, [ R.Aref (v 0) ]),
+                  R.Souncall (v 5, nat_of_int 0, [ R.Aref (v 0) ])))
 
 (* ---- ブロックにしない new / delete ------------------------------------
 
@@ -560,6 +587,18 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       agree "nested loop and local block" p_nested [ 0 ];
       agree ~env:menv_bump ~methods:methods_bump "call" p_call [ 0 ];
       agree ~env:menv_bump ~methods:methods_bump "call then uncall" p_call_uncall [ 0 ];
+
+      (* 値渡しの引数 *)
+      agree ~env:menv_addto ~methods:methods_addto "call with a value argument"
+        p_call_value [ 0 ];
+      agree ~env:menv_bad ~methods:methods_bad
+        "a body that changes a value argument is rejected" p_call_value [ 0 ];
+
+      "value arguments are bound by a local block" >:: (fun _ ->
+        assert_equal ~printer (Some [ 3 ])
+          (run_verified ~env:menv_addto p_call_value [ 0 ]);
+        assert_equal ~printer None
+          (run_verified ~env:menv_bad p_call_value [ 0 ]));
 
       (* 検証済みインタプリタが実際に走っていること（全部 None なら無意味） *)
       "the verified interpreter actually computes" >:: (fun _ ->

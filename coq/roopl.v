@@ -268,6 +268,12 @@ Qed.
 (** * Statements and inversion                                         *)
 (* ------------------------------------------------------------------ *)
 
+(** メソッドの実引数。変数は参照渡し（本体の中の書き換えが呼出し側に見える）、
+    式は値渡し（本体が終わったとき同じ値に戻っていることを表明として要求する）。 *)
+Inductive arg :=
+| Aref (x : id)   (**r 変数：参照渡し *)
+| Aval (e : exp). (**r 式：値渡し *)
+
 Inductive stm :=
 | Sskip
 | Sassign (x : id) (o : modop) (e : exp)             (**r x op= e *)
@@ -286,10 +292,10 @@ Inductive stm :=
 | Sobj (cl : cid) (x : id) (s : stm)                  (**r construct C x s destruct x *)
 | Snew (cl : cid) (x : id)                            (**r new C x *)
 | Sdelete (cl : cid) (x : id)                         (**r delete C x *)
-| Scall (m : mid) (args : list id)
-| Suncall (m : mid) (args : list id)
-| Socall (x : id) (m : mid) (args : list id)    (**r call x::m(args) *)
-| Souncall (x : id) (m : mid) (args : list id). (**r uncall x::m(args) *)
+| Scall (m : mid) (args : list arg)
+| Suncall (m : mid) (args : list arg)
+| Socall (x : id) (m : mid) (args : list arg)    (**r call x::m(args) *)
+| Souncall (x : id) (m : mid) (args : list arg). (**r uncall x::m(args) *)
 
 Fixpoint invert (s : stm) : stm :=
   match s with
@@ -316,12 +322,12 @@ Fixpoint invert (s : stm) : stm :=
   | Souncall x m args => Socall x m args
   end.
 
-(** Call by reference: executing a method body means executing it with its
-    formal parameters renamed to the actual ones.  [mk_ren ps args] is that
-    renaming; names that are not parameters are left alone. *)
-Fixpoint mk_ren (ps args : list id) (x : id) : id :=
+(** 参照渡しの実引数への改名。仮引数でない名前はそのまま。値渡しの仮引数も
+    改名しない（下の [wrap_vals] が局所ブロックで束ねる）。 *)
+Fixpoint ren_args (ps : list id) (args : list arg) (x : id) : id :=
   match ps, args with
-  | p :: ps', a :: args' => if Nat.eqb p x then a else mk_ren ps' args' x
+  | p :: ps', Aref y :: as' => if Nat.eqb p x then y else ren_args ps' as' x
+  | _ :: ps', Aval _ :: as' => ren_args ps' as' x
   | _, _ => x
   end.
 
@@ -332,6 +338,12 @@ Fixpoint rename_exp (r : id -> id) (e : exp) : exp :=
   | Fld x f => Fld (r x) f
   | Idx x e => Idx (r x) (rename_exp r e)
   | Bop o e1 e2 => Bop o (rename_exp r e1) (rename_exp r e2)
+  end.
+
+Definition rename_arg (r : id -> id) (a : arg) : arg :=
+  match a with
+  | Aref x => Aref (r x)
+  | Aval e => Aval (rename_exp r e)
   end.
 
 Fixpoint rename (r : id -> id) (s : stm) : stm :=
@@ -356,11 +368,29 @@ Fixpoint rename (r : id -> id) (s : stm) : stm :=
   | Sobj c x s' => Sobj c (r x) (rename r s')
   | Snew c x => Snew c (r x)
   | Sdelete c x => Sdelete c (r x)
-  | Scall m args => Scall m (map r args)
-  | Suncall m args => Suncall m (map r args)
-  | Socall x m args => Socall (r x) m (map r args)
-  | Souncall x m args => Souncall (r x) m (map r args)
+  | Scall m args => Scall m (map (rename_arg r) args)
+  | Suncall m args => Suncall m (map (rename_arg r) args)
+  | Socall x m args => Socall (r x) m (map (rename_arg r) args)
+  | Souncall x m args => Souncall (r x) m (map (rename_arg r) args)
   end.
+
+(** 値渡しの仮引数は局所ブロックで束ねる。
+
+    [call m(e)]（仮引数 p）は
+      local p = e   本体   delocal p = e
+    と同じ意味で、**出口で値が戻っていることの表明**がそのまま
+    「値引数は書き換えてはならない」という可逆性の副条件になる。局所ブロックの
+    規則をそのまま使うので、可逆性・決定性は既に証明済みのものが効く。 *)
+Fixpoint wrap_vals (ps : list id) (args : list arg) (s : stm) : stm :=
+  match ps, args with
+  | p :: ps', Aval e :: as' => Slocal p e (wrap_vals ps' as' s) e
+  | _ :: ps', _ :: as' => wrap_vals ps' as' s
+  | _, _ => s
+  end.
+
+(** 実引数を仮引数に束ねた本体。参照渡しは改名、値渡しは局所ブロック。 *)
+Definition bind_args (ps : list id) (args : list arg) (body : stm) : stm :=
+  wrap_vals ps args (rename (ren_args ps args) body).
 
 (** Renaming commutes with inversion. *)
 Lemma invert_rename : forall r s, invert (rename r s) = rename r (invert s).
@@ -529,8 +559,8 @@ Proof.
 Qed.
 
 (** 呼出し先の本体：受け手 x と実引数を仮引数へ束縛する（参照渡し）。 *)
-Definition call_body (d : mdecl) (x : id) (args : list id) : stm :=
-  match d with MDecl ps body => rename (mk_ren ps (x :: args)) body end.
+Definition call_body (d : mdecl) (x : id) (args : list arg) : stm :=
+  match d with MDecl ps body => bind_args ps (Aref x :: args) body end.
 
 (** The environment a program runs in: free-standing methods and the class
     table. *)
@@ -623,12 +653,12 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
 | E_call : forall m ps body args a b,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
-    exec G (rename (mk_ren ps args) body) a b ->
+    exec G (bind_args ps args body) a b ->
     exec G (Scall m args) a b
 | E_uncall : forall m ps body args a b,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
-    exec G (invert (rename (mk_ren ps args) body)) a b ->
+    exec G (invert (bind_args ps args body)) a b ->
     exec G (Suncall m args) a b
 
 (* 動的束縛つきのメソッド呼出し。受け手が呼出し中に動かないこと
@@ -1526,7 +1556,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         match procs G m with
         | Some (MDecl ps body) =>
             if Nat.eqb (length ps) (length args)
-            then run k G (rename (mk_ren ps args) body) a nf
+            then run k G (bind_args ps args body) a nf
             else None
         | None => None
         end
@@ -1534,7 +1564,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         match procs G m with
         | Some (MDecl ps body) =>
             if Nat.eqb (length ps) (length args)
-            then run k G (invert (rename (mk_ren ps args) body)) a nf
+            then run k G (invert (bind_args ps args body)) a nf
             else None
         | None => None
         end
@@ -1990,6 +2020,10 @@ Inductive wt_exp (E : tenv) : exp -> Prop :=
 (** Method signatures: the types of the formal parameters. *)
 Definition sigenv := mid -> list ty.
 
+(** 実引数の型。値渡しは式なので常に整数。 *)
+Definition arg_ty (E : tenv) (a : arg) : ty :=
+  match a with Aref x => E x | Aval _ => Tint end.
+
 Inductive wt (E : tenv) (S : sigenv) : stm -> Prop :=
 | WT_skip : wt E S Sskip
 | WT_assign : forall x o e,
@@ -2034,9 +2068,9 @@ Inductive wt (E : tenv) (S : sigenv) : stm -> Prop :=
 | WT_ouncall : forall x m args,
     E x = Tobj -> wt E S (Souncall x m args)
 | WT_call : forall m args,
-    map E args = S m -> wt E S (Scall m args)
+    map (arg_ty E) args = S m -> wt E S (Scall m args)
 | WT_uncall : forall m args,
-    map E args = S m -> wt E S (Suncall m args).
+    map (arg_ty E) args = S m -> wt E S (Suncall m args).
 
 (** **Well-typedness is preserved by inversion** (Haulund 2017, ROOPL,
     Theorem "type preservation under inversion").  Inversion never changes a
@@ -2371,8 +2405,8 @@ Definition genv : menv :=
        (fun _ => None).
 
 Example ex_call_uncall :
-  exists b c, exec genv (Scall M0 [X]) zero b
-              /\ exec genv (Suncall M0 [X]) b c
+  exists b c, exec genv (Scall M0 [Aref X]) zero b
+              /\ exec genv (Suncall M0 [Aref X]) b c
               /\ vs b X = 1 /\ c == zero.
 Proof.
   eexists. eexists. split; [ | split; [ | split ] ].
@@ -2472,6 +2506,77 @@ Proof.
     + apply steq_refl.
   - split; reflexivity.
 Qed.
+
+(** 値渡しの引数。
+      method addto(int n, int k)  n += k
+    を `call addto(X, 3)` と呼ぶと、k は式 3 に束ねられる。値渡しの仮引数は
+    局所ブロックで包まれるので、**本体が k を書き換えたままだと出口の表明で
+    落ちる**（これが値引数の可逆性の条件）。 *)
+Definition M1 : mid := 1%nat.
+Definition P1 : id := 11%nat.
+
+Definition venv : menv :=
+  MEnv (fun m => if Nat.eqb m M1
+                 then Some (MDecl [P0; P1] (Sassign P0 MAdd (Var P1)))
+                 else None)
+       (fun _ => None).
+
+Example ex_call_value_arg :
+  exists b, exec venv (Scall M1 [Aref X; Aval (Cst 3)]) zero b
+         /\ vs b X = 3 /\ vs b P1 = 0.
+Proof.
+  eexists. split.
+  - eapply E_call; [ reflexivity | reflexivity | ].
+    simpl. eapply E_local; [ simpl; tauto | simpl; tauto | | | apply steq_refl ].
+    + apply E_assign; [ unfold X, P1; simpl; intuition discriminate
+                      | apply steq_refl ].
+    + reflexivity.
+  - split; reflexivity.
+Qed.
+
+(** 値渡しの仮引数を書き換える本体は、出口の表明で落ちて導出が存在しない。
+    値渡しがちょうど局所ブロックであることを、まず計算で確かめる。 *)
+Definition badenv : menv :=
+  MEnv (fun m => if Nat.eqb m M1
+                 then Some (MDecl [P0; P1] (Sassign P1 MAdd (Cst 1)))
+                 else None)
+       (fun _ => None).
+
+Example ex_bind_args_is_local :
+  bind_args [P0; P1] [Aref X; Aval (Cst 3)] (Sassign P1 MAdd (Cst 1))
+  = Slocal P1 (Cst 3) (Sassign P1 MAdd (Cst 1)) (Cst 3).
+Proof. reflexivity. Qed.
+
+Example ex_value_arg_must_not_change :
+  forall a b,
+    ~ exec badenv (Slocal P1 (Cst 3) (Sassign P1 MAdd (Cst 1)) (Cst 3)) a b.
+Proof.
+  intros a b H; inversion H; subst.
+  match goal with
+  | [ HA : exec badenv (Sassign _ _ _) _ _ |- _ ] => inversion HA; subst
+  end.
+  (* いま「出口表明 vs b P1 = 3」と「b は P1 を 4 にした状態」が同居する。
+     前者を後者で書き換えると 3 = 4 になって矛盾する。
+     （Ltac のパターンでは == 記法ではなく steq を書く必要がある） *)
+  match goal with
+  | [ HB : steq ?m (setv ?st P1 (mapp ?o ?u ?w)) |- _ ] =>
+      assert (Hval : vs m P1 = mapp o u w)
+        by (rewrite (steq_vs m (setv st P1 (mapp o u w)) P1 HB);
+            simpl; try rewrite Nat.eqb_refl; reflexivity)
+  end.
+  (* 出口表明は vs b P1 = 3、いま示した Hval は vs b P1 = 4。lia が潰す *)
+  simpl in *; lia.
+Qed.
+
+(** 抽出したインタプリタも値渡しを扱う。 *)
+Example ex_run_value_arg :
+  exists b nf, run 100 venv (Scall M1 [Aref X; Aval (Cst 3)]) zero 0%nat
+               = Some (b, nf) /\ vs b X = 3.
+Proof. eexists; eexists; split; [ reflexivity | reflexivity ]. Qed.
+
+Example ex_run_value_arg_changed :
+  run 100 badenv (Scall M1 [Aref X; Aval (Cst 3)]) zero 0%nat = None.
+Proof. reflexivity. Qed.
 
 (** ブロックにしない new / delete。ブロック形と同じ計算をする。 *)
 Definition newprog : stm :=
@@ -2662,6 +2767,8 @@ Print Assumptions ex_run_object.
 Print Assumptions ex_run_dispatch.
 Print Assumptions ex_new_delete.
 Print Assumptions ex_new_delete_back.
+Print Assumptions ex_call_value_arg.
+Print Assumptions ex_value_arg_must_not_change.
 Print Assumptions for_up_reversible.
 Print Assumptions rev_switch_reversible.
 Print Assumptions ex_for.

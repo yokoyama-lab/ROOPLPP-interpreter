@@ -37,6 +37,7 @@ Rocq 9.1.1 で確認。
 | `invert_rev_switch` | `switch` の反転は入口と出口を入れ替えた `switch` |
 | `rev_switch_reversible` | **`switch` は可逆** |
 | `E_new` / `E_delete` | ブロックにしない `new` / `delete`（オブジェクトブロックの前半・後半） |
+| `bind_args` | 実引数の束ね。参照渡しは改名、**値渡しは局所ブロック**（出口の表明が「値引数を書き換えてはならない」になる） |
 
 補助定理として `exec_loopx_eq`（実行は状態の点ごとの等しさを保つ），`loopx_exit`（ループ末尾は
 出口表明を満たす）を経由する。`exec_invert` / `exec_det` はいずれも `exec` と補助関係 `loopx`

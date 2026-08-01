@@ -574,6 +574,10 @@ let minv = function
 | MSub -> MAdd
 | MXor -> MXor
 
+type arg =
+| Aref of id
+| Aval of exp
+
 type stm =
 | Sskip
 | Sassign of id * modop * exp
@@ -592,10 +596,10 @@ type stm =
 | Sobj of cid * id * stm
 | Snew of cid * id
 | Sdelete of cid * id
-| Scall of mid * id list
-| Suncall of mid * id list
-| Socall of id * mid * id list
-| Souncall of id * mid * id list
+| Scall of mid * arg list
+| Suncall of mid * arg list
+| Socall of id * mid * arg list
+| Souncall of id * mid * arg list
 
 (** val invert : stm -> stm **)
 
@@ -618,15 +622,18 @@ let rec invert = function
 | Souncall (x, m, args) -> Socall (x, m, args)
 | x -> x
 
-(** val mk_ren : id list -> id list -> id -> id **)
+(** val ren_args : id list -> arg list -> id -> id **)
 
-let rec mk_ren ps args x =
+let rec ren_args ps args x =
   match ps with
   | [] -> x
   | p::ps' ->
     (match args with
      | [] -> x
-     | a::args' -> if Nat.eqb p x then a else mk_ren ps' args' x)
+     | a::as' ->
+       (match a with
+        | Aref y -> if Nat.eqb p x then y else ren_args ps' as' x
+        | Aval _ -> ren_args ps' as' x))
 
 (** val rename_exp : (id -> id) -> exp -> exp **)
 
@@ -636,6 +643,12 @@ let rec rename_exp r = function
 | Fld (x, f) -> Fld ((r x), f)
 | Idx (x, e0) -> Idx ((r x), (rename_exp r e0))
 | Bop (o, e1, e2) -> Bop (o, (rename_exp r e1), (rename_exp r e2))
+
+(** val rename_arg : (id -> id) -> arg -> arg **)
+
+let rename_arg r = function
+| Aref x -> Aref (r x)
+| Aval e -> Aval (rename_exp r e)
 
 (** val rename : (id -> id) -> stm -> stm **)
 
@@ -662,10 +675,28 @@ let rec rename r = function
 | Sobj (c, x, s') -> Sobj (c, (r x), (rename r s'))
 | Snew (c, x) -> Snew (c, (r x))
 | Sdelete (c, x) -> Sdelete (c, (r x))
-| Scall (m, args) -> Scall (m, (map r args))
-| Suncall (m, args) -> Suncall (m, (map r args))
-| Socall (x, m, args) -> Socall ((r x), m, (map r args))
-| Souncall (x, m, args) -> Souncall ((r x), m, (map r args))
+| Scall (m, args) -> Scall (m, (map (rename_arg r) args))
+| Suncall (m, args) -> Suncall (m, (map (rename_arg r) args))
+| Socall (x, m, args) -> Socall ((r x), m, (map (rename_arg r) args))
+| Souncall (x, m, args) -> Souncall ((r x), m, (map (rename_arg r) args))
+
+(** val wrap_vals : id list -> arg list -> stm -> stm **)
+
+let rec wrap_vals ps args s =
+  match ps with
+  | [] -> s
+  | p::ps' ->
+    (match args with
+     | [] -> s
+     | a::as' ->
+       (match a with
+        | Aref _ -> wrap_vals ps' as' s
+        | Aval e -> Slocal (p, e, (wrap_vals ps' as' s), e)))
+
+(** val bind_args : id list -> arg list -> stm -> stm **)
+
+let bind_args ps args body =
+  wrap_vals ps args (rename (ren_args ps args) body)
 
 type mdecl =
 | MDecl of id list * stm
@@ -675,10 +706,10 @@ type cdecl =
 
 type ctable = cid -> cdecl option
 
-(** val call_body : mdecl -> id -> id list -> stm **)
+(** val call_body : mdecl -> id -> arg list -> stm **)
 
 let call_body d x args =
-  let MDecl (ps, body) = d in rename (mk_ren ps (x::args)) body
+  let MDecl (ps, body) = d in bind_args ps ((Aref x)::args) body
 
 type menv = { procs : (mid -> mdecl option); classes : ctable }
 
@@ -850,7 +881,7 @@ let rec run fuel g s a nf =
         | Some m0 ->
           let MDecl (ps, body) = m0 in
           if Nat.eqb (length ps) (length args)
-          then run k g (rename (mk_ren ps args) body) a nf
+          then run k g (bind_args ps args body) a nf
           else None
         | None -> None)
      | Suncall (m, args) ->
@@ -858,7 +889,7 @@ let rec run fuel g s a nf =
         | Some m0 ->
           let MDecl (ps, body) = m0 in
           if Nat.eqb (length ps) (length args)
-          then run k g (invert (rename (mk_ren ps args) body)) a nf
+          then run k g (invert (bind_args ps args body)) a nf
           else None
         | None -> None)
      | Socall (x, m, args) ->
