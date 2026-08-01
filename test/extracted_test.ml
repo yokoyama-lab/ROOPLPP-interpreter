@@ -194,7 +194,14 @@ let zero_state : R.state =
   { R.vs = (fun _ -> R.Z0); R.os = (fun _ -> None); R.hn = R.O;
     R.hp = (fun _ _ -> R.Z0); R.hc = (fun _ -> R.O) }
 
-let empty_menv : R.menv = { R.procs = (fun _ -> None); R.classes = (fun _ -> None) }
+(* cells は「クラスあたりのセル数」。ハーネスの規約では
+   クラス 0 = object class C0（フィールド f0, f1）、クラス 1 = int[array_len]。 *)
+let cells_of (c : R.nat) : R.nat =
+  let rec go = function R.O -> 0 | R.S n -> 1 + go n in
+  nat_of_int (if go c = array_class then array_len else 2)
+
+let empty_menv : R.menv =
+  { R.procs = (fun _ -> None); R.classes = (fun _ -> None); R.cells = cells_of }
 
 (* 検証済みインタプリタで走らせ、指定した変数の値を読む *)
 (* run は状態と一緒に「書き込んだフィールド番号の上限」を返す。初期状態は
@@ -318,7 +325,7 @@ let bump_body = R.Sassign (v 3, R.MAdd, c 1)
 let menv_bump : R.menv =
   { R.procs = (fun m -> if int_of_nat m = 0 then Some (R.MDecl ([ v 3 ], bump_body))
                         else None);
-    R.classes = (fun _ -> None) }
+    R.classes = (fun _ -> None); R.cells = cells_of }
 let methods_bump =
   [ MDecl ("m0", [ Decl (IntegerType, "v3") ], [ Assign (VarArray ("v3", None), ModAdd, Const 1) ]) ]
 
@@ -332,7 +339,7 @@ let addto_body = R.Sassign (v 3, R.MAdd, R.Var (v 4))
 let menv_addto : R.menv =
   { R.procs = (fun m -> if int_of_nat m = 1
                         then Some (R.MDecl ([ v 3; v 4 ], addto_body)) else None);
-    R.classes = (fun _ -> None) }
+    R.classes = (fun _ -> None); R.cells = cells_of }
 let methods_addto =
   [ MDecl ("m1", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
            [ Assign (VarArray ("v3", None), ModAdd, Var "v4") ]) ]
@@ -344,7 +351,7 @@ let bad_body = R.Sassign (v 4, R.MAdd, c 1)
 let menv_bad : R.menv =
   { R.procs = (fun m -> if int_of_nat m = 1
                         then Some (R.MDecl ([ v 3; v 4 ], bad_body)) else None);
-    R.classes = (fun _ -> None) }
+    R.classes = (fun _ -> None); R.cells = cells_of }
 let methods_bad =
   [ MDecl ("m1", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
            [ Assign (VarArray ("v4", None), ModAdd, Const 1) ]) ]
@@ -539,7 +546,8 @@ let menv_dispatch : R.menv =
       | 3 -> Some (R.CDecl (Some (nat_of_int 2),
                             fun m -> if int_of_nat m = 0 then Some (bump 7) else None))
       | 4 -> Some (R.CDecl (Some (nat_of_int 2), fun _ -> None))
-      | _ -> None) }
+      | _ -> None);
+    R.cells = cells_of }
 
 (* construct C3 v5  call v5::m0(v0)  destruct v5  →  v0 = 7（上書き） *)
 let p_dispatch_override =
@@ -676,12 +684,12 @@ let suite = "test suite for the extracted verified interpreter" >::: [
           (run_verified p_array_dynamic_index [ 0; 1 ]);
         assert_equal ~printer None (run_verified p_array_dirty [ 0 ]));
 
-      (* 形式化の対象外：配列の長さと範囲検査は実装の動的検査に任されている。
-         「一致しない」ことをテストで固定しておく（黙って一致したことにしない）*)
-      "array bounds are outside the formalization" >:: (fun _ ->
-        assert_equal ~printer None (run_interpreter_stms p_array_oob_stms [ 0 ]);
-        assert_bool "the semantics has no notion of length"
-          (run_verified p_array_out_of_bounds [ 0 ] <> None));
+      (* 範囲外アクセスは意味論の側でも落ちる（長さはクラス表の cells から引く）*)
+      agree "array write out of bounds is rejected" p_array_out_of_bounds [ 0 ];
+
+      "the semantics knows the array length" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_array_out_of_bounds [ 0 ]);
+        assert_equal ~printer None (run_interpreter_stms p_array_oob_stms [ 0 ]));
 
       (* 動的束縛 *)
       agree ~env:menv_dispatch "dynamic dispatch (override)"

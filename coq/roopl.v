@@ -564,7 +564,12 @@ Definition call_body (d : mdecl) (x : id) (args : list arg) : stm :=
 
 (** The environment a program runs in: free-standing methods and the class
     table. *)
-Record menv := MEnv { procs : mid -> option mdecl; classes : ctable }.
+(** 実行環境。[cells c] はクラス [c] の対象が持つセルの数——オブジェクトなら
+    フィールド数、配列なら長さ。状態ではなく**クラス表から引く**ので、状態の
+    形（と [==] の合同）を変えずに範囲検査を入れられる。 *)
+Record menv := MEnv { procs : mid -> option mdecl;
+                      classes : ctable;
+                      cells : cid -> nat }.
 
 Inductive exec (G : menv) : stm -> state -> state -> Prop :=
 | E_skip : forall a b,
@@ -580,6 +585,8 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     exec G (Sfassign x f o e) a b
 | E_aassign : forall x ei o e a b l,
     os a x = Some l -> (l < hn a)%nat ->
+    (* 添字は確保したセル数の範囲になければならない *)
+    (Z.to_nat (eval ei a) < cells G (hc a l))%nat ->
     b == setf a l (Z.to_nat (eval ei a))
               (mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)) ->
     eval ei b = eval ei a ->
@@ -590,7 +597,9 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     exec G (Sswap x y) a b
 | E_aswap : forall x e1 y e2 a b l1 l2,
     os a x = Some l1 -> (l1 < hn a)%nat ->
+    (Z.to_nat (eval e1 a) < cells G (hc a l1))%nat ->
     os a y = Some l2 -> (l2 < hn a)%nat ->
+    (Z.to_nat (eval e2 a) < cells G (hc a l2))%nat ->
     b == setf (setf a l1 (Z.to_nat (eval e1 a)) (hp a l2 (Z.to_nat (eval e2 a))))
               l2 (Z.to_nat (eval e2 a)) (hp a l1 (Z.to_nat (eval e1 a))) ->
     eval e1 b = eval e1 a ->
@@ -715,10 +724,11 @@ Proof.
         [ assumption | apply setf_steq; assumption | assumption ].
     + rewrite <- (eval_steq e b b' Hb'), <- (eval_steq e a a' Ha); assumption.
   - (* array assign *)
-    intros x ei o e a b l Hl Hlt Hb Hei He a' b' Ha Hb'.
+    intros x ei o e a b l Hl Hlt Hbnd Hb Hei He a' b' Ha Hb'.
     eapply E_aassign with (l := l).
     + rewrite <- (steq_os a a' x Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (eval_steq ei a a' Ha), <- (steq_hc a a' l Ha Hlt); assumption.
     + rewrite <- (eval_steq ei a a' Ha), <- (eval_steq e a a' Ha),
               <- (steq_hp a a' l (Z.to_nat (eval ei a)) Ha Hlt).
       eapply steq_rewrite
@@ -735,12 +745,14 @@ Proof.
     eapply steq_rewrite with (b := b) (c := setv (setv a x (vs a y)) y (vs a x));
       [ assumption | apply setv_steq; apply setv_steq; assumption | assumption ].
   - (* array swap *)
-    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2 a' b' Ha Hb'.
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hb1 Hy Hy1 Hb2 Hb He1 He2 a' b' Ha Hb'.
     eapply E_aswap with (l1 := l1) (l2 := l2).
     + rewrite <- (steq_os a a' x Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (eval_steq e1 a a' Ha), <- (steq_hc a a' l1 Ha Hx1); assumption.
     + rewrite <- (steq_os a a' y Ha); assumption.
     + rewrite <- (steq_hn a a' Ha); assumption.
+    + rewrite <- (eval_steq e2 a a' Ha), <- (steq_hc a a' l2 Ha Hy1); assumption.
     + rewrite <- (eval_steq e1 a a' Ha), <- (eval_steq e2 a a' Ha),
               <- (steq_hp a a' l1 (Z.to_nat (eval e1 a)) Ha Hx1),
               <- (steq_hp a a' l2 (Z.to_nat (eval e2 a)) Ha Hy1).
@@ -943,8 +955,10 @@ Proof.
            simpl. now rewrite E.
       * hc_auto.
   - (* array assign *)
-    intros x ei o e a b l Hl Hlt Hb Hei He.
+    intros x ei o e a b l Hl Hlt Hbnd Hb Hei He.
     assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
+    assert (Hhc : hc b l = hc a l)
+      by (rewrite (steq_hc b _ l Hb) by (rewrite Hhn; assumption); reflexivity).
     assert (Hidx : Z.to_nat (eval ei b) = Z.to_nat (eval ei a)) by (now rewrite Hei).
     assert (Hf : hp b l (Z.to_nat (eval ei a))
                  = mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)).
@@ -953,6 +967,7 @@ Proof.
     eapply E_aassign with (l := l).
     + rewrite (steq_os b _ x Hb); simpl; assumption.
     + rewrite Hhn; assumption.
+    + rewrite Hidx, Hhc; assumption.
     + rewrite Hidx, Hf, He, mapp_minv.
       steq_split; simpl.
       * intro y; symmetry; rewrite (steq_vs b _ y Hb); reflexivity.
@@ -989,13 +1004,19 @@ Proof.
       rewrite (steq_hn b _ Hb); simpl; assumption.
     + hc_auto.
   - (* array swap *)
-    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2.
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hb1 Hy Hy1 Hb2 Hb He1 He2.
     assert (Hhn : hn b = hn a) by (rewrite (steq_hn b _ Hb); reflexivity).
+    assert (Hc1 : hc b l1 = hc a l1)
+      by (rewrite (steq_hc b _ l1 Hb) by (rewrite Hhn; assumption); reflexivity).
+    assert (Hc2 : hc b l2 = hc a l2)
+      by (rewrite (steq_hc b _ l2 Hb) by (rewrite Hhn; assumption); reflexivity).
     eapply E_aswap with (l1 := l1) (l2 := l2).
     + rewrite (steq_os b _ x Hb); simpl; assumption.
     + rewrite Hhn; assumption.
+    + rewrite He1, Hc1; assumption.
     + rewrite (steq_os b _ y Hb); simpl; assumption.
     + rewrite Hhn; assumption.
+    + rewrite He2, Hc2; assumption.
     + rewrite He1, He2. apply aswap_invol; assumption.
     + now rewrite He1.
     + now rewrite He2.
@@ -1216,12 +1237,13 @@ Proof.
     intros x f o e a b l Hl Hlt Hb He b' H; inversion H; subst.
     assert (l0 = l) by congruence; subst l0; eauto.
   - (* array assign *)
-    intros x ei o e a b l Hl Hlt Hb Hei He b' H; inversion H; subst.
+    intros x ei o e a b l Hl Hlt Hbnd Hb Hei He b' H; inversion H; subst.
     assert (l0 = l) by congruence; subst l0; eauto.
   - (* int swap *)
     intros x y a b Hb b' H; inversion H; subst; eauto.
   - (* array swap *)
-    intros x e1 y e2 a b l1 l2 Hx Hx1 Hy Hy1 Hb He1 He2 b' H; inversion H; subst.
+    intros x e1 y e2 a b l1 l2 Hx Hx1 Hb1 Hy Hy1 Hb2 Hb He1 He2 b' H;
+      inversion H; subst.
     assert (l0 = l1) by congruence; assert (l3 = l2) by congruence; subst; eauto.
   - (* object swap *)
     intros x y a b Hb b' H; inversion H; subst; eauto.
@@ -1458,8 +1480,8 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
     | Saassign x ei o e =>
         match os a x with
         | Some l =>
-            if Nat.ltb l (hn a) then
-              let i := Z.to_nat (eval ei a) in
+            let i := Z.to_nat (eval ei a) in
+            if andb (Nat.ltb l (hn a)) (Nat.ltb i (cells G (hc a l))) then
               let b := setf a l i (mapp o (hp a l i) (eval e a)) in
               if andb (Z.eqb (eval ei b) (eval ei a)) (Z.eqb (eval e b) (eval e a))
               then Some (b, Nat.max (S i) nf) else None
@@ -1469,9 +1491,10 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
     | Saswap x e1 y e2 =>
         match os a x, os a y with
         | Some l1, Some l2 =>
-            if andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a)) then
-              let i1 := Z.to_nat (eval e1 a) in
-              let i2 := Z.to_nat (eval e2 a) in
+            let i1 := Z.to_nat (eval e1 a) in
+            let i2 := Z.to_nat (eval e2 a) in
+            if andb (andb (Nat.ltb l1 (hn a)) (Nat.ltb i1 (cells G (hc a l1))))
+                    (andb (Nat.ltb l2 (hn a)) (Nat.ltb i2 (cells G (hc a l2)))) then
               let b := setf (setf a l1 i1 (hp a l2 i2)) l2 i2 (hp a l1 i1) in
               if andb (Z.eqb (eval e1 b) (eval e1 a)) (Z.eqb (eval e2 b) (eval e2 a))
               then Some (b, Nat.max (S i2) (Nat.max (S i1) nf)) else None
@@ -1659,15 +1682,16 @@ Proof.
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array assignment *)
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
-        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
-        destruct (andb _ _) eqn:He; try discriminate.
+        repeat (match type of H with
+                | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
+                end).
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array element swap *)
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
-        destruct (andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a))) eqn:Hl;
-          try discriminate.
-        destruct (andb (Z.eqb _ _) (Z.eqb _ _)) eqn:He; try discriminate.
+        repeat (match type of H with
+                | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
+                end).
         injection H as Heq Hn; subst.
         (* 上限は setf の適用順（外側が e2 の添字）に合わせてある *)
         apply above_setf, above_setf; assumption.
@@ -1788,29 +1812,33 @@ Proof.
         eapply E_fassign; [ eassumption | assumption | apply steq_refl | assumption ].
       * (* array assignment *)
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
-        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
-        destruct (andb _ _) eqn:He; try discriminate.
+        destruct (andb (Nat.ltb l (hn a)) _) eqn:Hl; try discriminate.
+        destruct (andb (Z.eqb _ _) _) eqn:He; try discriminate.
         injection H as Heq Hn; subst b.
-        apply Nat.ltb_lt in Hl.
+        apply andb_true_iff in Hl as [ Hl Hbnd ].
+        apply Nat.ltb_lt in Hl. apply Nat.ltb_lt in Hbnd.
         apply andb_true_iff in He as [ Hi Hv ].
         apply Z.eqb_eq in Hi. apply Z.eqb_eq in Hv.
         eapply E_aassign;
-          [ eassumption | assumption | apply steq_refl | assumption | assumption ].
+          [ eassumption | assumption | assumption | apply steq_refl
+          | assumption | assumption ].
       * (* swap *) injection H as Heq Hn; subst b. apply E_swap, steq_refl.
       * (* array element swap *)
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
-        destruct (andb (Nat.ltb l1 (hn a)) (Nat.ltb l2 (hn a))) eqn:Hl;
-          try discriminate.
+        destruct (andb (andb (Nat.ltb l1 (hn a)) _) _) eqn:Hl; try discriminate.
         destruct (andb (Z.eqb _ _) (Z.eqb _ _)) eqn:He; try discriminate.
         injection H as Heq Hn; subst b.
-        apply andb_true_iff in Hl as [ Hl1 Hl2 ].
+        apply andb_true_iff in Hl as [ Hla Hlb ].
+        apply andb_true_iff in Hla as [ Hl1 Hb1 ].
+        apply andb_true_iff in Hlb as [ Hl2 Hb2 ].
         apply Nat.ltb_lt in Hl1. apply Nat.ltb_lt in Hl2.
+        apply Nat.ltb_lt in Hb1. apply Nat.ltb_lt in Hb2.
         apply andb_true_iff in He as [ H1 H2 ].
         apply Z.eqb_eq in H1. apply Z.eqb_eq in H2.
         eapply E_aswap;
-          [ eassumption | assumption | eassumption | assumption
-          | apply steq_refl | assumption | assumption ].
+          [ eassumption | assumption | assumption | eassumption | assumption
+          | assumption | apply steq_refl | assumption | assumption ].
       * (* object swap *)
         injection H as Heq Hn; subst b. apply E_oswap, steq_refl.
       * (* copy *)
@@ -2228,7 +2256,10 @@ Proof. intros; now rewrite invert_invert. Qed.
 (** * Sanity checks: the semantics is not vacuous                      *)
 (* ------------------------------------------------------------------ *)
 
-Definition empty_env : menv := MEnv (fun _ => None) (fun _ => None).
+(* 例で使う環境。cells は「クラスあたりのセル数」。C0 は 2 フィールド、
+   配列のクラス CA は長さ 4 とする。 *)
+Definition empty_env : menv :=
+  MEnv (fun _ => None) (fun _ => None) (fun _ => 4%nat).
 Definition zero : state :=
   St (fun _ => 0) (fun _ => None) 0%nat (fun _ _ => 0) (fun _ => 0%nat).
 Definition X : id := 0%nat.
@@ -2331,15 +2362,18 @@ Proof.
     + reflexivity.
     + eapply E_seq.
       * eapply E_aassign with (l := 0%nat);
-          [ reflexivity | simpl; lia | apply steq_refl | reflexivity | reflexivity ].
+          [ reflexivity | simpl; lia | simpl; lia | apply steq_refl
+          | reflexivity | reflexivity ].
       * eapply E_seq.
         -- eapply E_aswap with (l1 := 0%nat) (l2 := 0%nat);
-             [ reflexivity | simpl; lia | reflexivity | simpl; lia
+             [ reflexivity | simpl; lia | simpl; lia
+             | reflexivity | simpl; lia | simpl; lia
              | apply steq_refl | reflexivity | reflexivity ].
         -- eapply E_seq.
            ++ apply E_assign; [ simpl; tauto | apply steq_refl ].
            ++ eapply E_aassign with (l := 0%nat);
-                [ reflexivity | simpl; lia | apply steq_refl | reflexivity | reflexivity ].
+                [ reflexivity | simpl; lia | simpl; lia | apply steq_refl
+                | reflexivity | reflexivity ].
     + reflexivity.
     + reflexivity.
     + intro f; simpl; destruct f as [ | [ | f ] ]; reflexivity.
@@ -2402,7 +2436,7 @@ Definition P0 : id := 10%nat.
 Definition genv : menv :=
   MEnv (fun m => if Nat.eqb m M0 then Some (MDecl [P0] (Sassign P0 MAdd (Cst 1)))
                  else None)
-       (fun _ => None).
+       (fun _ => None) (fun _ => 4%nat).
 
 Example ex_call_uncall :
   exists b c, exec genv (Scall M0 [Aref X]) zero b
@@ -2443,7 +2477,7 @@ Definition ctab : ctable := fun c =>
   else if Nat.eqb c CC then Some (CDecl (Some CA) (fun _ => None))
   else None.
 
-Definition oenv : menv := MEnv (fun _ => None) ctab.
+Definition oenv : menv := MEnv (fun _ => None) ctab (fun _ => 4%nat).
 
 (** construct <c> o   call o::bump()   X += o.f   o.f -= <k>   destruct o *)
 Definition dispatch_prog (c : cid) (k : Z) : stm :=
@@ -2519,7 +2553,7 @@ Definition venv : menv :=
   MEnv (fun m => if Nat.eqb m M1
                  then Some (MDecl [P0; P1] (Sassign P0 MAdd (Var P1)))
                  else None)
-       (fun _ => None).
+       (fun _ => None) (fun _ => 4%nat).
 
 Example ex_call_value_arg :
   exists b, exec venv (Scall M1 [Aref X; Aval (Cst 3)]) zero b
@@ -2540,7 +2574,7 @@ Definition badenv : menv :=
   MEnv (fun m => if Nat.eqb m M1
                  then Some (MDecl [P0; P1] (Sassign P1 MAdd (Cst 1)))
                  else None)
-       (fun _ => None).
+       (fun _ => None) (fun _ => 4%nat).
 
 Example ex_bind_args_is_local :
   bind_args [P0; P1] [Aref X; Aval (Cst 3)] (Sassign P1 MAdd (Cst 1))

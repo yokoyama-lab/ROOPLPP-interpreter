@@ -229,7 +229,8 @@ type ctable = cid -> cdecl option
 
 val call_body : mdecl -> id -> arg list -> stm
 
-type menv = { procs : (mid -> mdecl option); classes : ctable }
+type menv = { procs : (mid -> mdecl option); classes : ctable;
+              cells : (cid -> nat) }
 
 val dispatch_fn : nat -> ctable -> cid -> mid -> mdecl option
 

@@ -111,13 +111,16 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
     step (Mpre (Sfassign x f o e)) a (Mpost (Sfassign x f o e)) b
 | S_aassign : forall x ei o e a b l,
     os a x = Some l -> (l < hn a)%nat ->
+    (Z.to_nat (eval ei a) < cells G (hc a l))%nat ->
     b == setf a l (Z.to_nat (eval ei a))
               (mapp o (hp a l (Z.to_nat (eval ei a))) (eval e a)) ->
     eval ei b = eval ei a -> eval e b = eval e a ->
     step (Mpre (Saassign x ei o e)) a (Mpost (Saassign x ei o e)) b
 | S_aswap : forall x e1 y e2 a b l1 l2,
     os a x = Some l1 -> (l1 < hn a)%nat ->
+    (Z.to_nat (eval e1 a) < cells G (hc a l1))%nat ->
     os a y = Some l2 -> (l2 < hn a)%nat ->
+    (Z.to_nat (eval e2 a) < cells G (hc a l2))%nat ->
     b == setf (setf a l1 (Z.to_nat (eval e1 a)) (hp a l2 (Z.to_nat (eval e2 a))))
               l2 (Z.to_nat (eval e2 a)) (hp a l1 (Z.to_nat (eval e1 a))) ->
     eval e1 b = eval e1 a -> eval e2 b = eval e2 a ->
@@ -326,24 +329,24 @@ Inductive atomic : stm -> Prop :=
 | A_new : forall cl x, atomic (Snew cl x)
 | A_delete : forall cl x, atomic (Sdelete cl x).
 
-(** 内容のないメソッド環境（原子文の意味は環境に依らない）。 *)
-Definition dummy_env : menv := MEnv (fun _ => None) (fun _ => None).
+(** 配列の範囲検査はクラス表（[cells]）に依存するので、原子文の橋渡しも
+    節の環境 [G] のもとで述べる。 *)
 
 (** [• s] から [s •] への一歩は、原子文の大ステップ一歩そのもの
     （並び・分岐・ループは文脈へ入るので、この形にはならない）。 *)
-Lemma atom_exec : forall G' s a b,
-  step (Mpre s) a (Mpost s) b -> exec G' s a b.
+Lemma atom_exec : forall s a b,
+  step (Mpre s) a (Mpost s) b -> exec G s a b.
 Proof.
   (* 目標の文の形が exec の規則を一意に決めるので、構成子は自動で選べる *)
-  intros G' s a b H; inversion H; subst;
+  intros s a b H; inversion H; subst;
     solve [ econstructor; eassumption | now econstructor ].
 Qed.
 
 (** その逆。原子文の大ステップ一歩は小ステップ一歩でもある。 *)
-Lemma exec_atom : forall G' s a b,
-  atomic s -> exec G' s a b -> step (Mpre s) a (Mpost s) b.
+Lemma exec_atom : forall s a b,
+  atomic s -> exec G s a b -> step (Mpre s) a (Mpost s) b.
 Proof.
-  intros G' s a b Hat H; inversion Hat; subst; inversion H; subst;
+  intros s a b Hat H; inversion Hat; subst; inversion H; subst;
     solve [ econstructor; eassumption | now econstructor ].
 Qed.
 
@@ -352,7 +355,7 @@ Lemma atom_inj : forall s a1 a2 b,
   step (Mpre s) a1 (Mpost s) b -> step (Mpre s) a2 (Mpost s) b -> a1 == a2.
 Proof.
   intros s a1 a2 b H1 H2.
-  eapply exec_inj with (G := dummy_env); eapply atom_exec; eassumption.
+  eapply exec_inj with (G := G); eapply atom_exec; eassumption.
 Qed.
 
 Ltac impossible_step :=
@@ -873,53 +876,53 @@ Proof.
   (* 原子文は「小ステップ一歩 = 大ステップ一歩」なので、状態の合同性は
      大ステップ側の exec_eq をそのまま通せばよい *)
   - (* show *)
-    assert (Hx : exec dummy_env (Sshow e) a b) by (apply E_show; assumption).
+    assert (Hx : exec G (Sshow e) a b) by (apply E_show; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* field assign *)
-    assert (Hx : exec dummy_env (Sfassign x f o e) a b)
+    assert (Hx : exec G (Sfassign x f o e) a b)
       by (eapply E_fassign; eassumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* array assign *)
-    assert (Hx : exec dummy_env (Saassign x ei o e) a b)
+    assert (Hx : exec G (Saassign x ei o e) a b)
       by (eapply E_aassign; eassumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* array swap *)
-    assert (Hx : exec dummy_env (Saswap x e1 y e2) a b)
+    assert (Hx : exec G (Saswap x e1 y e2) a b)
       by (eapply E_aswap; eassumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* object swap *)
-    assert (Hx : exec dummy_env (Soswap x y) a b) by (apply E_oswap; assumption).
+    assert (Hx : exec G (Soswap x y) a b) by (apply E_oswap; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* new *)
-    assert (Hx : exec dummy_env (Snew cl x) a b) by (apply E_new; assumption).
+    assert (Hx : exec G (Snew cl x) a b) by (apply E_new; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* delete *)
-    assert (Hx : exec dummy_env (Sdelete cl x) a b) by (apply E_delete; assumption).
+    assert (Hx : exec G (Sdelete cl x) a b) by (apply E_delete; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* copy *)
-    assert (Hx : exec dummy_env (Scopy x y) a b) by (apply E_copy; assumption).
+    assert (Hx : exec G (Scopy x y) a b) by (apply E_copy; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* uncopy *)
-    assert (Hx : exec dummy_env (Suncopy x y) a b) by (apply E_uncopy; assumption).
+    assert (Hx : exec G (Suncopy x y) a b) by (apply E_uncopy; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
-    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+    exact (exec_eq G _ _ _ Hx _ _ Ha (steq_refl b)).
   - exists a2; split; [ apply S_seq_in | assumption ].
   - destruct (IHstep a2 Ha) as [ a2' [ Hs He ] ].
     exists a2'; split; [ now apply S_seq_l | assumption ].
@@ -1213,12 +1216,12 @@ Proof.
   - (* field assign *)
     intros x f o e a b l H1 H2 H3 H4 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sfassign x f o e);
+    apply steps_one; eapply exec_atom with (s := Sfassign x f o e);
       [ constructor | eapply E_fassign; eassumption ].
   - (* array assign *)
     intros x ei o e a b l H1 H2 H3 H4 H5 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Saassign x ei o e);
+    apply steps_one; eapply exec_atom with (s := Saassign x ei o e);
       [ constructor | eapply E_aassign; eassumption ].
   - (* swap *)
     intros x y a b Hb _.
@@ -1228,22 +1231,22 @@ Proof.
   - (* array swap *)
     intros x e1 y e2 a b l1 l2 H1 H2 H3 H4 H5 H6 H7 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Saswap x e1 y e2);
+    apply steps_one; eapply exec_atom with (s := Saswap x e1 y e2);
       [ constructor | eapply E_aswap; eassumption ].
   - (* object swap *)
     intros x y a b H1 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Soswap x y);
+    apply steps_one; eapply exec_atom with (s := Soswap x y);
       [ constructor | eapply E_oswap; eassumption ].
   - (* copy *)
     intros x y a b H1 H2 H3 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Scopy x y);
+    apply steps_one; eapply exec_atom with (s := Scopy x y);
       [ constructor | eapply E_copy; eassumption ].
   - (* uncopy *)
     intros x y a b H1 H2 H3 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Suncopy x y);
+    apply steps_one; eapply exec_atom with (s := Suncopy x y);
       [ constructor | eapply E_uncopy; eassumption ].
   - (* seq *)
     intros s1 s2 a b c H1 IH1 H2 IH2 Hc; inversion Hc; subst.
@@ -1295,7 +1298,7 @@ Proof.
   - (* show *)
     intros e a b H1 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sshow e);
+    apply steps_one; eapply exec_atom with (s := Sshow e);
       [ constructor | eapply E_show; eassumption ].
   - (* object block *)
     intros cl x s a b c Hx Hs IH Hbx Hbn Hbz Hbc Hc Hcore; inversion Hcore; subst.
@@ -1317,12 +1320,12 @@ Proof.
   - (* new *)
     intros cl x a b H1 H2 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Snew cl x);
+    apply steps_one; eapply exec_atom with (s := Snew cl x);
       [ constructor | eapply E_new; eassumption ].
   - (* delete *)
     intros cl x a b H1 H2 H3 H4 H5 Hc.
     exists b; split; [ | apply steq_refl ].
-    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sdelete cl x);
+    apply steps_one; eapply exec_atom with (s := Sdelete cl x);
       [ constructor | eapply E_delete; eassumption ].
   - (* call *)
     intros m ps body args a b Hp Hl Hx IH Hc.
@@ -1922,6 +1925,10 @@ End SmallStep.
 (** * 空虚でないことの確認                                              *)
 (* ------------------------------------------------------------------ *)
 
+(** 例で使う、内容のないメソッド環境。 *)
+Definition dummy_env : menv :=
+  MEnv (fun _ => None) (fun _ => None) (fun _ => 4%nat).
+
 Definition X : id := 0%nat.
 Definition Y : id := 1%nat.
 Definition zero0 : state :=
@@ -2053,7 +2060,7 @@ Definition penv : menv :=
   MEnv (fun m => if Nat.eqb m M0
                  then Some (MDecl (Y :: nil) (Sassign Y MAdd (Cst 5)))
                  else None)
-       (fun _ => None).
+       (fun _ => None) (fun _ => 4%nat).
 
 (** 環境の側の条件（本体が核に収まる）も満たしている。 *)
 Example penv_core : core_env penv.

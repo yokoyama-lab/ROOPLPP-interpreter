@@ -711,7 +711,8 @@ type ctable = cid -> cdecl option
 let call_body d x args =
   let MDecl (ps, body) = d in bind_args ps ((Aref x)::args) body
 
-type menv = { procs : (mid -> mdecl option); classes : ctable }
+type menv = { procs : (mid -> mdecl option); classes : ctable;
+              cells : (cid -> nat) }
 
 (** val dispatch_fn : nat -> ctable -> cid -> mid -> mdecl option **)
 
@@ -764,9 +765,9 @@ let rec run fuel g s a nf =
      | Saassign (x, ei, o, e) ->
        (match a.os x with
         | Some l ->
-          if Nat.ltb l a.hn
-          then let i = Z.to_nat (eval ei a) in
-               let b = setf a l i (mapp o (a.hp l i) (eval e a)) in
+          let i = Z.to_nat (eval ei a) in
+          if if Nat.ltb l a.hn then Nat.ltb i (g.cells (a.hc l)) else false
+          then let b = setf a l i (mapp o (a.hp l i) (eval e a)) in
                if if Z.eqb (eval ei b) (eval ei a)
                   then Z.eqb (eval e b) (eval e a)
                   else false
@@ -780,10 +781,16 @@ let rec run fuel g s a nf =
         | Some l1 ->
           (match a.os y with
            | Some l2 ->
-             if if Nat.ltb l1 a.hn then Nat.ltb l2 a.hn else false
-             then let i1 = Z.to_nat (eval e1 a) in
-                  let i2 = Z.to_nat (eval e2 a) in
-                  let b = setf (setf a l1 i1 (a.hp l2 i2)) l2 i2 (a.hp l1 i1)
+             let i1 = Z.to_nat (eval e1 a) in
+             let i2 = Z.to_nat (eval e2 a) in
+             if if if Nat.ltb l1 a.hn
+                   then Nat.ltb i1 (g.cells (a.hc l1))
+                   else false
+                then if Nat.ltb l2 a.hn
+                     then Nat.ltb i2 (g.cells (a.hc l2))
+                     else false
+                else false
+             then let b = setf (setf a l1 i1 (a.hp l2 i2)) l2 i2 (a.hp l1 i1)
                   in
                   if if Z.eqb (eval e1 b) (eval e1 a)
                      then Z.eqb (eval e2 b) (eval e2 a)
