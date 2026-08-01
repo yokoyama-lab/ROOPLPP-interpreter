@@ -194,6 +194,8 @@ type stm =
 | Slocal of id * exp * stm * exp
 | Sshow of exp
 | Sobj of cid * id * stm
+| Snew of cid * id
+| Sdelete of cid * id
 | Scall of mid * id list
 | Suncall of mid * id list
 | Socall of id * mid * id list

@@ -36,6 +36,7 @@ Rocq 9.1.1 で確認。
 | `for_up_reversible` / `for_down_reversible` | **`for` は可逆** |
 | `invert_rev_switch` | `switch` の反転は入口と出口を入れ替えた `switch` |
 | `rev_switch_reversible` | **`switch` は可逆** |
+| `E_new` / `E_delete` | ブロックにしない `new` / `delete`（オブジェクトブロックの前半・後半） |
 
 補助定理として `exec_loopx_eq`（実行は状態の点ごとの等しさを保つ），`loopx_exit`（ループ末尾は
 出口表明を満たす）を経由する。`exec_invert` / `exec_det` はいずれも `exec` と補助関係 `loopx`

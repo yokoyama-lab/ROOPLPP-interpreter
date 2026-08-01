@@ -126,6 +126,8 @@ let rec stm_of_formal (s : R.stm) : stm =
   | R.Sobj (cl, x, s') when is_array_class cl ->
      (* 配列はブロック構文が無いので new … delete の 3 文に開く *)
      failwith "array blocks are expanded by stms_of_formal"
+  | R.Snew (cl, x) -> ObjectConstruction (class_name cl, obj_of_id x)
+  | R.Sdelete (cl, x) -> ObjectDestruction (class_name cl, obj_of_id x)
   | R.Sobj (cl, x, s') ->
      ObjectBlock (class_name cl, name_of_id x, stms_of_formal s')
   | R.Sseq _ -> failwith "sequences are flattened by stms_of_formal"
@@ -177,9 +179,12 @@ let object_classes : cDecl list =
                     [ Assign (VarArray ("v3", None), ModAdd, Const 7) ]) ]);
     CDecl ("C4", Some "C2", [], [ MDecl ("noop", [], [ Skip ]) ]) ]
 
-(* 配列変数は実装側では宣言が要る（形式側のストアは全域なので不要） *)
+(* 配列とオブジェクトの変数は実装側では宣言が要る（形式側のストアは全域なので
+   不要）。ブロック形 construct/destruct は自分で束縛するが、単体の new/delete は
+   既にある変数に対して働くため。 *)
 let array_fields : decl list =
-  [ Decl (IntegerArrayType, "v20"); Decl (IntegerArrayType, "v21") ]
+  [ Decl (IntegerArrayType, "v20"); Decl (IntegerArrayType, "v21");
+    Decl (ObjectType "C0", "v5"); Decl (ObjectType "C0", "v6") ]
 
 let zero_state : R.state =
   { R.vs = (fun _ -> R.Z0); R.os = (fun _ -> None); R.hn = R.O;
@@ -523,6 +528,25 @@ let p_dispatch_uncall =
           R.Sseq (R.Socall (v 5, nat_of_int 0, [ v 0 ]),
                   R.Souncall (v 5, nat_of_int 0, [ v 0 ])))
 
+(* ---- ブロックにしない new / delete ------------------------------------
+
+   形式化はブロック形 Sobj に加えて、単体の new / delete も持つ（ヒープは
+   スタックなので delete は必ず一番上を解放する）。 *)
+
+(* new C0 v5  v5.f0 += 3  v0 += v5.f0  v5.f0 -= 3  delete C0 v5 *)
+let p_new_delete =
+  R.Sseq (R.Snew (nat_of_int 0, v 5),
+          R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 3),
+                  R.Sseq (R.Sassign (v 0, R.MAdd, R.Fld (v 5, nat_of_int 0)),
+                          R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MSub, c 3),
+                                  R.Sdelete (nat_of_int 0, v 5)))))
+
+(* ゼロクリアを忘れて delete する（両方で落ちるはず） *)
+let p_delete_dirty =
+  R.Sseq (R.Snew (nat_of_int 0, v 5),
+          R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 3),
+                  R.Sdelete (nat_of_int 0, v 5)))
+
 let suite = "test suite for the extracted verified interpreter" >::: [
       agree "arithmetic" p_arith [ 0; 1 ];
       agree "swap" p_swap [ 0; 1 ];
@@ -592,7 +616,13 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       "the verified interpreter runs object blocks" >:: (fun _ ->
         assert_equal ~printer (Some [ 3 ]) (run_verified p_object [ 0 ]);
         assert_equal ~printer (Some [ 5 ]) (run_verified p_object_nested [ 0 ]);
+        assert_equal ~printer (Some [ 3 ]) (run_verified p_new_delete [ 0 ]);
+        assert_equal ~printer None (run_verified p_delete_dirty [ 0 ]);
         assert_equal ~printer None (run_verified p_object_dirty [ 0 ]));
+
+      (* ブロックにしない new / delete *)
+      agree "new and delete outside a block" p_new_delete [ 0 ];
+      agree "delete with a dirty field" p_delete_dirty [ 0 ];
 
       (* 配列（形式化ではオブジェクト＋動的添字） *)
       agree "array cell written and cleared" p_array [ 0 ];

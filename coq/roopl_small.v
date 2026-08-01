@@ -125,6 +125,16 @@ Inductive step : mstm -> state -> mstm -> state -> Prop :=
 | S_oswap : forall x y a b,
     b == seto (seto a x (os a y)) y (os a x) ->
     step (Mpre (Soswap x y)) a (Mpost (Soswap x y)) b
+(* ブロックにしない new / delete。状態を 1 歩で変えるので原子文として扱う *)
+| S_new : forall cl x a b,
+    os a x = None -> b == alloc a cl x ->
+    step (Mpre (Snew cl x)) a (Mpost (Snew cl x)) b
+| S_delete : forall cl x a b,
+    os a x = Some (pred (hn a)) -> (0 < hn a)%nat ->
+    (forall f, hp a (pred (hn a)) f = 0) ->
+    hc a (pred (hn a)) = cl ->
+    b == dealloc a x ->
+    step (Mpre (Sdelete cl x)) a (Mpost (Sdelete cl x)) b
 | S_copy : forall x y a b,
     x <> y -> os a y = None -> b == seto a y (os a x) ->
     step (Mpre (Scopy x y)) a (Mpost (Scopy x y)) b
@@ -312,7 +322,9 @@ Inductive atomic : stm -> Prop :=
 | A_aswap : forall x e1 y e2, atomic (Saswap x e1 y e2)
 | A_oswap : forall x y, atomic (Soswap x y)
 | A_copy : forall x y, atomic (Scopy x y)
-| A_uncopy : forall x y, atomic (Suncopy x y).
+| A_uncopy : forall x y, atomic (Suncopy x y)
+| A_new : forall cl x, atomic (Snew cl x)
+| A_delete : forall cl x, atomic (Sdelete cl x).
 
 (** 内容のないメソッド環境（原子文の意味は環境に依らない）。 *)
 Definition dummy_env : menv := MEnv (fun _ => None) (fun _ => None).
@@ -322,17 +334,9 @@ Definition dummy_env : menv := MEnv (fun _ => None) (fun _ => None).
 Lemma atom_exec : forall G' s a b,
   step (Mpre s) a (Mpost s) b -> exec G' s a b.
 Proof.
-  intros G' s a b H; inversion H; subst.
-  - apply E_skip; assumption.
-  - apply E_assign; assumption.
-  - apply E_swap; assumption.
-  - apply E_show; assumption.
-  - eapply E_fassign; eassumption.
-  - eapply E_aassign; eassumption.
-  - eapply E_aswap; eassumption.
-  - apply E_oswap; assumption.
-  - apply E_copy; assumption.
-  - apply E_uncopy; assumption.
+  (* 目標の文の形が exec の規則を一意に決めるので、構成子は自動で選べる *)
+  intros G' s a b H; inversion H; subst;
+    solve [ econstructor; eassumption | now econstructor ].
 Qed.
 
 (** その逆。原子文の大ステップ一歩は小ステップ一歩でもある。 *)
@@ -340,7 +344,7 @@ Lemma exec_atom : forall G' s a b,
   atomic s -> exec G' s a b -> step (Mpre s) a (Mpost s) b.
 Proof.
   intros G' s a b Hat H; inversion Hat; subst; inversion H; subst;
-    econstructor; eassumption.
+    solve [ econstructor; eassumption | now econstructor ].
 Qed.
 
 (** したがって原子文の局所可逆性は、大ステップの可逆性 [exec_inj] から出る。 *)
@@ -685,6 +689,29 @@ Proof.
       rewrite <- Q1, <- Q2; reflexivity.
 Qed.
 
+(** [delete] 文の単射性。前提が [pred (hn a)] の形なので [obj_out_inj] を
+    そのまま当てられない。高さを合わせてから通す。 *)
+Lemma delete_inj : forall cl x a1 a2 b,
+  os a1 x = Some (pred (hn a1)) -> (0 < hn a1)%nat ->
+  (forall f, hp a1 (pred (hn a1)) f = 0) -> hc a1 (pred (hn a1)) = cl ->
+  b == dealloc a1 x ->
+  os a2 x = Some (pred (hn a2)) -> (0 < hn a2)%nat ->
+  (forall f, hp a2 (pred (hn a2)) f = 0) -> hc a2 (pred (hn a2)) = cl ->
+  b == dealloc a2 x ->
+  a1 == a2.
+Proof.
+  intros cl x a1 a2 b Ho1 Hp1 Hz1 Hc1 H1 Ho2 Hp2 Hz2 Hc2 H2.
+  assert (Hn1 : hn b = pred (hn a1)) by (rewrite (steq_hn b _ H1); reflexivity).
+  assert (Hn2 : hn b = pred (hn a2)) by (rewrite (steq_hn b _ H2); reflexivity).
+  assert (E : hn a1 = hn a2) by lia.
+  (* 高さ h として pred (hn a1) を選ぶ。a2 側の前提は E で綴りを合わせる *)
+  eapply (obj_out_inj cl x (pred (hn a1)) a1 a2 b);
+    solve [ assumption
+          | lia
+          | rewrite E; solve [ assumption | lia ]
+          | intro f; rewrite E; apply Hz2 ].
+Qed.
+
 (** 退避した高さも一意に決まる（解放後の高さがそれを教える）。 *)
 Lemma obj_out_h : forall x h h0 a1 a2 b,
   hn a1 = S h -> b == dealloc a1 x ->
@@ -793,6 +820,7 @@ Proof.
      その前提は reflexivity で閉じる *)
   all: solve [ eapply obj_in_inj; (eassumption || reflexivity)
              | eapply obj_out_inj; (eassumption || reflexivity)
+             | eapply delete_inj; (eassumption || reflexivity)
              | split; [ reflexivity | ];
                solve [ eapply obj_in_inj; (eassumption || reflexivity)
                      | eapply obj_out_inj; (eassumption || reflexivity) ] ].
@@ -869,6 +897,16 @@ Proof.
     exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
   - (* object swap *)
     assert (Hx : exec dummy_env (Soswap x y) a b) by (apply E_oswap; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* new *)
+    assert (Hx : exec dummy_env (Snew cl x) a b) by (apply E_new; assumption).
+    exists b; split; [ | apply steq_refl ].
+    eapply exec_atom; [ constructor | ].
+    exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
+  - (* delete *)
+    assert (Hx : exec dummy_env (Sdelete cl x) a b) by (apply E_delete; assumption).
     exists b; split; [ | apply steq_refl ].
     eapply exec_atom; [ constructor | ].
     exact (exec_eq dummy_env _ _ _ Hx _ _ Ha (steq_refl b)).
@@ -1095,6 +1133,8 @@ Inductive core : stm -> Prop :=
 | C_oswap : forall x y, core (Soswap x y)
 | C_copy : forall x y, core (Scopy x y)
 | C_uncopy : forall x y, core (Suncopy x y)
+| C_new : forall cl x, core (Snew cl x)
+| C_delete : forall cl x, core (Sdelete cl x)
 | C_seq : forall s1 s2, core s1 -> core s2 -> core (Sseq s1 s2)
 | C_if : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sif e1 s1 s2 e2)
 | C_loop : forall e1 s1 s2 e2, core s1 -> core s2 -> core (Sloop e1 s1 s2 e2)
@@ -1260,6 +1300,16 @@ Proof.
            rewrite <- (steq_hc b b' (hn a) Hb); [ reflexivity | lia ].
         -- apply steq_refl.
     + eapply steq_trans; [ eassumption | now apply dealloc_steq ].
+  - (* new *)
+    intros cl x a b H1 H2 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Snew cl x);
+      [ constructor | eapply E_new; eassumption ].
+  - (* delete *)
+    intros cl x a b H1 H2 H3 H4 H5 Hc.
+    exists b; split; [ | apply steq_refl ].
+    apply steps_one; eapply exec_atom with (G' := dummy_env) (s := Sdelete cl x);
+      [ constructor | eapply E_delete; eassumption ].
   - (* call *)
     intros m ps body args a b Hp Hl Hx IH Hc.
     destruct (IH (core_rename _ _ (proj1 Henv _ _ _ Hp))) as [ b' [ Hs Hb ] ].
@@ -1698,6 +1748,16 @@ Proof.
       destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
       eapply atom_exec; eassumption.
     + (* uncopy：原子文は一歩で終わり、その一歩が大ステップ一歩そのもの *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* new：原子文 *)
+      destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
+      destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
+      destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;
+      eapply atom_exec; eassumption.
+    + (* delete：原子文 *)
       destruct n as [ | k ]; [ destruct H as [ Hm _ ]; discriminate | ].
       destruct H as [ m2 [ a2 [ HS HR ] ] ]; inversion HS; subst;
       destruct (post_stuck _ _ _ _ _ HR) as [ _ Eb ]; subst;

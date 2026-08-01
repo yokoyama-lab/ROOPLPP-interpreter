@@ -590,6 +590,8 @@ type stm =
 | Slocal of id * exp * stm * exp
 | Sshow of exp
 | Sobj of cid * id * stm
+| Snew of cid * id
+| Sdelete of cid * id
 | Scall of mid * id list
 | Suncall of mid * id list
 | Socall of id * mid * id list
@@ -608,6 +610,8 @@ let rec invert = function
 | Sloop (e1, s1, s2, e2) -> Sloop (e2, (invert s1), (invert s2), e1)
 | Slocal (x, e1, s0, e2) -> Slocal (x, e2, (invert s0), e1)
 | Sobj (c, x, s0) -> Sobj (c, x, (invert s0))
+| Snew (c, x) -> Sdelete (c, x)
+| Sdelete (c, x) -> Snew (c, x)
 | Scall (m, args) -> Suncall (m, args)
 | Suncall (m, args) -> Scall (m, args)
 | Socall (x, m, args) -> Souncall (x, m, args)
@@ -656,6 +660,8 @@ let rec rename r = function
   Slocal ((r x), (rename_exp r e1), (rename r s'), (rename_exp r e2))
 | Sshow e -> Sshow (rename_exp r e)
 | Sobj (c, x, s') -> Sobj (c, (r x), (rename r s'))
+| Snew (c, x) -> Snew (c, (r x))
+| Sdelete (c, x) -> Sdelete (c, (r x))
 | Scall (m, args) -> Scall (m, (map r args))
 | Suncall (m, args) -> Suncall (m, (map r args))
 | Socall (x, m, args) -> Socall ((r x), m, (map r args))
@@ -821,6 +827,24 @@ let rec run fuel g s a nf =
              then Some ((dealloc b x),nf1)
              else None
            | None -> None))
+     | Snew (cl, x) ->
+       (match a.os x with
+        | Some _ -> None
+        | None -> Some ((alloc a cl x),nf))
+     | Sdelete (cl, x) ->
+       (match a.os x with
+        | Some l ->
+          if if Nat.ltb O a.hn
+             then if Nat.eqb l (pred a.hn)
+                  then if Nat.eqb (a.hc (pred a.hn)) cl
+                       then forallb (fun f -> Z.eqb (a.hp (pred a.hn) f) Z0)
+                              (seq O nf)
+                       else false
+                  else false
+             else false
+          then Some ((dealloc a x),nf)
+          else None
+        | None -> None)
      | Scall (m, args) ->
        (match g.procs m with
         | Some m0 ->

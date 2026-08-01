@@ -284,6 +284,8 @@ Inductive stm :=
 | Slocal (x : id) (e1 : exp) (s : stm) (e2 : exp)
 | Sshow (e : exp)                                     (**r show(e) / print("...") *)
 | Sobj (cl : cid) (x : id) (s : stm)                  (**r construct C x s destruct x *)
+| Snew (cl : cid) (x : id)                            (**r new C x *)
+| Sdelete (cl : cid) (x : id)                         (**r delete C x *)
 | Scall (m : mid) (args : list id)
 | Suncall (m : mid) (args : list id)
 | Socall (x : id) (m : mid) (args : list id)    (**r call x::m(args) *)
@@ -306,6 +308,8 @@ Fixpoint invert (s : stm) : stm :=
   | Slocal x e1 s e2 => Slocal x e2 (invert s) e1
   | Sshow e => Sshow e
   | Sobj c x s => Sobj c x (invert s)
+  | Snew c x => Sdelete c x
+  | Sdelete c x => Snew c x
   | Scall m args => Suncall m args
   | Suncall m args => Scall m args
   | Socall x m args => Souncall x m args
@@ -350,6 +354,8 @@ Fixpoint rename (r : id -> id) (s : stm) : stm :=
       Slocal (r x) (rename_exp r e1) (rename r s') (rename_exp r e2)
   | Sshow e => Sshow (rename_exp r e)
   | Sobj c x s' => Sobj c (r x) (rename r s')
+  | Snew c x => Snew c (r x)
+  | Sdelete c x => Sdelete c (r x)
   | Scall m args => Scall m (map r args)
   | Suncall m args => Suncall m (map r args)
   | Socall x m args => Socall (r x) m (map r args)
@@ -599,6 +605,21 @@ Inductive exec (G : menv) : stm -> state -> state -> Prop :=
     hc b (hn a) = cl ->
     c == dealloc b x ->
     exec G (Sobj cl x s) a c
+(* ブロックにしない [new] / [delete]。オブジェクトブロックの前半・後半を
+   そのまま切り出したもの。ヒープはスタックなので [delete] は必ず一番上の
+   対象を解放する（それを [os a x = Some (pred (hn a))] と [0 < hn a] が
+   要求している）。ゼロクリア検査は [E_obj] と同じ。 *)
+| E_new : forall cl x a b,
+    os a x = None ->
+    b == alloc a cl x ->
+    exec G (Snew cl x) a b
+| E_delete : forall cl x a b,
+    os a x = Some (pred (hn a)) ->
+    (0 < hn a)%nat ->
+    (forall f, hp a (pred (hn a)) f = 0) ->
+    hc a (pred (hn a)) = cl ->
+    b == dealloc a x ->
+    exec G (Sdelete cl x) a b
 | E_call : forall m ps body args a b,
     procs G m = Some (MDecl ps body) ->
     length ps = length args ->
@@ -765,6 +786,27 @@ Proof.
     + rewrite <- (steq_hn a a' Ha); assumption.
     + eapply steq_rewrite with (b := c) (c := dealloc b x);
         [ assumption | apply steq_refl | assumption ].
+  - (* new *)
+    intros cl x a b Hx Hb a' b' Ha Hb'.
+    apply E_new.
+    + rewrite <- (steq_os a a' x Ha); assumption.
+    + apply (steq_trans b' b (alloc a' cl x));
+        [ now apply steq_sym | ].
+      apply (steq_trans b (alloc a cl x) (alloc a' cl x));
+        [ assumption | now apply alloc_steq ].
+  - (* delete *)
+    intros cl x a b Hx Hpos Hz Hcc Hb a' b' Ha Hb'.
+    assert (Hn : hn a = hn a') by (apply (steq_hn a a' Ha)).
+    assert (Hlt : (pred (hn a) < hn a)%nat) by lia.
+    apply E_delete.
+    + rewrite <- (steq_os a a' x Ha), <- Hn; assumption.
+    + rewrite <- Hn; assumption.
+    + intro f; rewrite <- Hn, <- (steq_hp a a' (pred (hn a)) f Ha Hlt); apply Hz.
+    + rewrite <- Hn, <- (steq_hc a a' (pred (hn a)) Ha Hlt); assumption.
+    + apply (steq_trans b' b (dealloc a' x));
+        [ now apply steq_sym | ].
+      apply (steq_trans b (dealloc a x) (dealloc a' x));
+        [ assumption | now apply dealloc_steq ].
   - (* call *)
     intros m ps body args a b Hm Hlen Hs IH a' b' Ha Hb. eapply E_call; eauto.
   - (* uncall *)
@@ -1050,6 +1092,43 @@ Proof.
     + intro f; simpl; rewrite Hcn, Nat.eqb_refl; reflexivity.
     + simpl; rewrite Hcn, Nat.eqb_refl; reflexivity.
     + apply steq_sym; now apply dealloc_alloc.
+  - (* new の逆は delete *)
+    intros cl x a b Hx Hb. simpl.
+    assert (Hbn : hn b = S (hn a)) by (rewrite (steq_hn b _ Hb); reflexivity).
+    apply E_delete.
+    + rewrite Hbn; simpl.
+      rewrite (steq_os b _ x Hb); simpl; now rewrite Nat.eqb_refl.
+    + rewrite Hbn; lia.
+    + intro f; rewrite Hbn; simpl.
+      rewrite (steq_hp b _ (hn a) f Hb); [ simpl; now rewrite Nat.eqb_refl | ].
+      rewrite Hbn; lia.
+    + rewrite Hbn; simpl.
+      rewrite (steq_hc b _ (hn a) Hb); [ simpl; now rewrite Nat.eqb_refl | ].
+      rewrite Hbn; lia.
+    + apply steq_sym.
+      apply (steq_trans (dealloc b x) (dealloc (alloc a cl x) x) a);
+        [ now apply dealloc_steq | now apply dealloc_alloc ].
+  - (* delete の逆は new。解放した対象を同じ位置に取り直せることが要 *)
+    intros cl x a b Hx Hpos Hz Hcc Hb. simpl.
+    assert (Hbn : hn b = pred (hn a)) by (rewrite (steq_hn b _ Hb); reflexivity).
+    assert (Halloc : alloc b cl x == a).
+    { steq_split; simpl.
+      - intro y; rewrite (steq_vs b _ y Hb); reflexivity.
+      - intro y; destruct (Nat.eqb x y) eqn:E.
+        + apply Nat.eqb_eq in E; subst y. rewrite Hbn; symmetry; assumption.
+        + rewrite (steq_os b _ y Hb); simpl; now rewrite E.
+      - rewrite Hbn; lia.
+      - intros l f Hl; destruct (Nat.eqb l (hn b)) eqn:E.
+        + apply Nat.eqb_eq in E; subst l. rewrite Hbn; symmetry; apply Hz.
+        + rewrite (steq_hp b _ l f Hb); [ reflexivity | ].
+          apply Nat.eqb_neq in E; simpl in Hl; lia.
+      - intros l Hl; destruct (Nat.eqb l (hn b)) eqn:E.
+        + apply Nat.eqb_eq in E; subst l. rewrite Hbn; symmetry; apply Hcc.
+        + rewrite (steq_hc b _ l Hb); [ reflexivity | ].
+          apply Nat.eqb_neq in E; simpl in Hl; lia. }
+    apply E_new.
+    + rewrite (steq_os b _ x Hb); simpl; now rewrite Nat.eqb_refl.
+    + now apply steq_sym.
   - (* call *)
     intros m ps body args a b Hm Hlen Hs IH. simpl. eapply E_uncall; eassumption.
   - (* uncall *)
@@ -1148,6 +1227,12 @@ Proof.
     eapply steq_trans; [ eassumption | ].
     eapply steq_trans; [ | apply steq_sym; eassumption ].
     apply dealloc_steq. now apply IH.
+  - (* new *)
+    intros cl x a b Hx Hb b' H; inversion H; subst.
+    eapply steq_trans; [ eassumption | now apply steq_sym ].
+  - (* delete *)
+    intros cl x a b Hx Hpos Hz Hcc Hb b' H; inversion H; subst.
+    eapply steq_trans; [ eassumption | now apply steq_sym ].
   - (* call *)
     intros m ps body args a b Hm Hlen Hs IH b' H; inversion H; subst.
     match goal with
@@ -1420,6 +1505,23 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
             end
         | Some _ => None
         end
+    (* ブロックにしない new / delete。オブジェクトブロックの前半・後半と同じ *)
+    | Snew cl x =>
+        match os a x with
+        | None => Some (alloc a cl x, nf)
+        | Some _ => None
+        end
+    | Sdelete cl x =>
+        match os a x with
+        | Some l =>
+            if andb (Nat.ltb 0 (hn a))
+               (andb (Nat.eqb l (pred (hn a)))
+               (andb (Nat.eqb (hc a (pred (hn a))) cl)
+                     (forallb (fun f => Z.eqb (hp a (pred (hn a)) f) 0)
+                              (seq 0 nf))))
+            then Some (dealloc a x, nf) else None
+        | None => None
+        end
     | Scall m args =>
         match procs G m with
         | Some (MDecl ps body) =>
@@ -1578,6 +1680,13 @@ Proof.
         injection H as Heq Hn; subst.
         apply above_dealloc.
         eapply IHrun; [ eassumption | now apply above_alloc ].
+      * (* new *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        injection H as Heq Hn; subst; now apply above_alloc.
+      * (* delete *)
+        destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
+        destruct (andb _ _) eqn:Hchk; try discriminate.
+        injection H as Heq Hn; subst; now apply above_dealloc.
       * (* call *)
         destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; try discriminate.
         destruct (Nat.eqb (length ps) (length args)); try discriminate.
@@ -1743,6 +1852,26 @@ Proof.
         eapply E_obj;
           [ eassumption | eapply IHrun; [ eassumption | now apply above_alloc ]
           | assumption | assumption | assumption | assumption | apply steq_refl ].
+      * (* new *)
+        destruct (os a x) as [ l | ] eqn:Hx; [ discriminate | ].
+        injection H as Heq Hn; subst b.
+        apply E_new; [ assumption | apply steq_refl ].
+      * (* delete *)
+        destruct (os a x) as [ l | ] eqn:Hx; [ | discriminate ].
+        destruct (andb _ _) eqn:Hchk; [ | discriminate ].
+        injection H as Heq Hn; subst b.
+        apply andb_true_iff in Hchk as [ Hpos Hrest ].
+        apply andb_true_iff in Hrest as [ Htop Hrest2 ].
+        apply andb_true_iff in Hrest2 as [ Hhc Hzero ].
+        apply Nat.ltb_lt in Hpos. apply Nat.eqb_eq in Htop.
+        apply Nat.eqb_eq in Hhc. subst l.
+        (* 上限 [nf] 未満は実際に調べ、それ以上は不変条件から 0 *)
+        assert (Hz : forall f, hp a (pred (hn a)) f = 0).
+        { intro f. destruct (Nat.ltb f nf) eqn:Hf.
+          - apply Nat.ltb_lt in Hf. eapply forallb_seq_zero; eassumption.
+          - apply Nat.ltb_ge in Hf. now apply Ha. }
+        apply E_delete;
+          [ assumption | assumption | assumption | assumption | apply steq_refl ].
       * (* call *)
         destruct (procs G m) as [ [ ps body ] | ] eqn:Hm; [ | discriminate ].
         destruct (Nat.eqb (length ps) (length args)) eqn:Hlen; [ | discriminate ].
@@ -1894,6 +2023,11 @@ Inductive wt (E : tenv) (S : sigenv) : stm -> Prop :=
 (* construct allocates a cell block: an object or a (fixed-size) array *)
 | WT_obj : forall cl x s,
     E x = Tobj \/ E x = Tarr -> wt E S s -> wt E S (Sobj cl x s)
+(* ブロックにしない new / delete。反転で互いに移るので同じ前提を課す *)
+| WT_new : forall cl x,
+    E x = Tobj \/ E x = Tarr -> wt E S (Snew cl x)
+| WT_delete : forall cl x,
+    E x = Tobj \/ E x = Tarr -> wt E S (Sdelete cl x)
 | WT_show : forall e, wt_exp E e -> wt E S (Sshow e)
 | WT_ocall : forall x m args,
     E x = Tobj -> wt E S (Socall x m args)
@@ -2339,6 +2473,66 @@ Proof.
   - split; reflexivity.
 Qed.
 
+(** ブロックにしない new / delete。ブロック形と同じ計算をする。 *)
+Definition newprog : stm :=
+  Sseq (Snew C0 O)
+       (Sseq (Sfassign O F0 MAdd (Cst 3))
+             (Sseq (Sassign X MAdd (Fld O F0))
+                   (Sseq (Sfassign O F0 MSub (Cst 3))
+                         (Sdelete C0 O)))).
+
+Example ex_new_delete :
+  exists b, exec empty_env newprog zero b /\ vs b X = 3 /\ hn b = 0%nat
+         /\ os b O = None.
+Proof.
+  eexists. split.
+  - eapply E_seq; [ apply E_new; [ reflexivity | apply steq_refl ] | ].
+    eapply E_seq;
+      [ eapply E_fassign; [ reflexivity | simpl; lia | apply steq_refl | reflexivity ] | ].
+    eapply E_seq;
+      [ apply E_assign; [ unfold X, O; simpl; intuition discriminate
+                        | apply steq_refl ] | ].
+    eapply E_seq;
+      [ eapply E_fassign; [ reflexivity | simpl; lia | apply steq_refl | reflexivity ] | ].
+    apply E_delete.
+    + reflexivity.
+    + simpl; lia.
+    + intro f; simpl; destruct f; reflexivity.
+    + reflexivity.
+    + apply steq_refl.
+  - split; [ reflexivity | ]. split; reflexivity.
+Qed.
+
+(** 反転は new と delete をちょうど入れ替える。 *)
+Example ex_invert_new : invert (Snew C0 O) = Sdelete C0 O.
+Proof. reflexivity. Qed.
+
+Example ex_invert_delete : invert (Sdelete C0 O) = Snew C0 O.
+Proof. reflexivity. Qed.
+
+(** 実行してから逆を実行すると元に戻る（[exec_invert] の new/delete 版）。 *)
+Example ex_new_delete_back :
+  exists b, exec empty_env newprog zero b /\ exec empty_env (invert newprog) b zero.
+Proof.
+  destruct ex_new_delete as [ b [ Hb _ ] ]. exists b.
+  split; [ assumption | now apply exec_invert ].
+Qed.
+
+(** 抽出したインタプリタも走らせる。 *)
+Example ex_run_new_delete :
+  exists b nf, run 100 empty_env newprog zero 0%nat = Some (b, nf)
+            /\ vs b X = 3 /\ hn b = 0%nat.
+Proof.
+  eexists; eexists; split; [ reflexivity | ]. split; reflexivity.
+Qed.
+
+(** ゼロクリアを忘れた delete は落ちる。 *)
+Example ex_run_delete_garbage :
+  run 100 empty_env
+      (Sseq (Snew C0 O) (Sseq (Sfassign O F0 MAdd (Cst 3)) (Sdelete C0 O)))
+      zero 0%nat = None.
+Proof. reflexivity. Qed.
+
 (** 抽出したインタプリタが**オブジェクトブロックを実際に走らせる**こと。
     出口の「全フィールドがゼロ」は、持ち回った上限までを調べて判定している。 *)
 Example ex_run_object :
@@ -2466,6 +2660,8 @@ Print Assumptions run_injective.
 Print Assumptions run_above.
 Print Assumptions ex_run_object.
 Print Assumptions ex_run_dispatch.
+Print Assumptions ex_new_delete.
+Print Assumptions ex_new_delete_back.
 Print Assumptions for_up_reversible.
 Print Assumptions rev_switch_reversible.
 Print Assumptions ex_for.
