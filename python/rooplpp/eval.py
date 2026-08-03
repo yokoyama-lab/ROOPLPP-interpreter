@@ -520,6 +520,14 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             # 変えないことを毎周検査する。この 2 つが可逆性の前提で（逆は
             # for x in (e2..e1) do 逆体 end）、どちらかが崩れると逆向きの実行
             # が同じ道をたどらない。形式化は coq/roopl.v の for_up / for_down。
+            # 糖衣が局所ブロックなので、E_local の x ∉ fv(e1), x ∉ fv(e2) が
+            # そのまま範囲式にかかる（範囲が x を指すと出口の表明が恒真になる）
+            if x in free_vars(e1) or x in free_vars(e2):
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + "\nERROR:The range of this for statement must not mention"
+                      f" the loop variable {x}")
+
             def int_of(e, st_):
                 return match_int(eval_exp(e, env, st_), "for range must be integer")
 

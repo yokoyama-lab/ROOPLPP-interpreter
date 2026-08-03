@@ -389,6 +389,13 @@ let rec eval_state stml env map st0 =
        形式化は coq/roopl.v の for_up / for_down（局所ブロック＋二重ガードの
        ループへの糖衣）。 *)
     | For(x, e1, e2, stml) ->
+       (* for は局所ブロック＋二重ガードのループの糖衣（coq/roopl.v の for_up）
+          なので、E_local の x ∉ fv(e1), x ∉ fv(e2) がそのまま範囲式にかかる。
+          範囲がループ変数を指すと出口の表明が恒真になる *)
+       if List.mem x (free_vars e1) || List.mem x (free_vars e2) then
+         fail_stm (pretty_stms [stm] 0 ^
+                     "\nERROR:The range of this for statement must not mention \
+                      the loop variable " ^ x);
        let int_of e st' = match eval_exp e env st' with
          | IntVal(n) -> n
          | _ -> failwith "ERROR:for range must be integer"

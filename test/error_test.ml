@@ -79,6 +79,19 @@ let suite = "test suite for runtime error paths" >::: [
   case "local expression mentions its own variable" "must not occur in its own"
     (prog "  local int t = t\n  x += 1\n  delocal int t = 0\n");
 
+  (* for は局所ブロック＋二重ガードのループの糖衣（coq/roopl.v の for_up）
+     なので、E_local の条件がそのまま範囲式にかかる。範囲が自分自身を指すと
+     出口の表明が恒真になる *)
+  case "for range mentions the loop variable (upper end)"
+    "must not mention the loop variable"
+    (prog "  local int i = 3\n  for i in (0..i) do\n   x += 1\n  end\n"
+     ^ "  delocal int i = 3\n");
+
+  case "for range mentions the loop variable (lower end)"
+    "must not mention the loop variable"
+    (prog "  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
+     ^ "  delocal int i = 0\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");

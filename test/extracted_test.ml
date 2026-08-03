@@ -455,6 +455,14 @@ let bad_for_body_r =
 let o_for_bad = [ For (oid 2, Const 1, Const 3, bad_for_body_o) ]
 let r_for_bad = R.for_up (v 2) (c 1) (c 3) bad_for_body_r
 
+(* 範囲式がループ変数を指す for。糖衣は局所ブロックなので E_local の
+   x ∉ fv(e1), x ∉ fv(e2) がかかり、どちらの端でも落ちる *)
+let o_for_range_lo = [ For (oid 2, Var (oid 2), Const 3, for_body_o) ]
+let r_for_range_lo = R.for_up (v 2) (R.Var (v 2)) (c 3) for_body_r
+
+let o_for_range_hi = [ For (oid 2, Const 0, Var (oid 2), for_body_o) ]
+let r_for_range_hi = R.for_up (v 2) (c 0) (R.Var (v 2)) for_body_r
+
 (* ---- オブジェクトブロック（run が扱えるようになった範囲） -------------
 
    construct C x … destruct x は「確保 → 体 → 全フィールドのゼロクリア検査
@@ -765,6 +773,10 @@ let suite = "test suite for the extracted verified interpreter" >::: [
         o_switch_dup r_switch_dup [ 0; 1 ];
       agree_sugar "for whose body changes the loop variable is rejected"
         o_for_bad r_for_bad [ 0 ];
+      agree_sugar "for whose lower range mentions the loop variable is rejected"
+        o_for_range_lo r_for_range_lo [ 0; 2 ];
+      agree_sugar "for whose upper range mentions the loop variable is rejected"
+        o_for_range_hi r_for_range_hi [ 0; 2 ];
 
       (* 「どちらも None」が偶然の一致でないこと：実装は理由つきで落ちる *)
       "the interpreter explains why it rejects them" >:: (fun _ ->

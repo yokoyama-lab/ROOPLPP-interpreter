@@ -55,6 +55,15 @@ CASES = [
      prog("  local int t = 0\n  t += 3\n  x += t\n  delocal int t = t\n")),
     ("local expression mentions its own variable", "must not occur in its own",
      prog("  local int t = t\n  x += 1\n  delocal int t = 0\n")),
+    # for は局所ブロックの糖衣なので、同じ条件が範囲式にかかる
+    ("for range mentions the loop variable (upper end)",
+     "must not mention the loop variable",
+     prog("  local int i = 3\n  for i in (0..i) do\n   x += 1\n  end\n"
+          "  delocal int i = 3\n")),
+    ("for range mentions the loop variable (lower end)",
+     "must not mention the loop variable",
+     prog("  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
+          "  delocal int i = 0\n")),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",
