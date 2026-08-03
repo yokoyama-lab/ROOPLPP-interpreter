@@ -1452,6 +1452,37 @@ Qed.
 Lemma above_dealloc : forall nf a x, above nf a -> above nf (dealloc a x).
 Proof. intros nf a x H l f Hf; apply H; assumption. Qed.
 
+(** 式の中の読み出しが範囲内か（決定可能）。
+
+    意味論 [exec] はこれを要求しない。範囲外の読み出しは全域なヒープから値が
+    読めるだけで、決定性も可逆性も壊さないからである（壊すのは書き込み側で、
+    そちらは [E_aassign] / [E_aswap] の前提で塞いである）。一方で実装
+    (lib/eval.ml) は読み出しも検査して落ちるので、**実行可能インタプリタの側で
+    同じ検査を入れて実装に合わせる**。[run_sound] は「run が返す状態は必ず
+    exec が許す」という片側の含意なので、run を厳しくしても成り立つ。 *)
+Fixpoint inb (G : menv) (a : state) (e : exp) : bool :=
+  match e with
+  | Cst _ => true
+  | Var _ => true
+  | Fld x f =>
+      match os a x with
+      | Some l => andb (Nat.ltb l (hn a)) (Nat.ltb f (cells G (hc a l)))
+      | None => false
+      end
+  | Idx x e' =>
+      andb (inb G a e')
+           (match os a x with
+            | Some l => andb (Nat.ltb l (hn a))
+                             (Nat.ltb (Z.to_nat (eval e' a)) (cells G (hc a l)))
+            | None => false
+            end)
+  | Bop _ e1 e2 => andb (inb G a e1) (inb G a e2)
+  end.
+
+(** 複数の式をまとめて検査する。 *)
+Definition inb2 (G : menv) (a : state) (e1 e2 : exp) : bool :=
+  andb (inb G a e1) (inb G a e2).
+
 (** 実行可能インタプリタ。状態と一緒にフィールド番号の上限を返す。 *)
 Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
               {struct fuel} : option (state * nat) :=
@@ -1463,14 +1494,16 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
     | Sshow _ => Some (a, nf)
     | Sassign x o e =>
         if in_dec Nat.eq_dec x (fv e) then None
+        else if negb (inb G a e) then None
         else Some (setv a x (mapp o (vs a x) (eval e a)), nf)
     | Sswap x y => Some (setv (setv a x (vs a y)) y (vs a x), nf)
     (* フィールド・配列・オブジェクト参照。副条件はどれも決定可能で、
        規則が [b == …] の形で許す状態のうち、右辺そのものを返せばよい。 *)
     | Sfassign x f o e =>
+        if negb (inb G a e) then None else
         match os a x with
         | Some l =>
-            if Nat.ltb l (hn a) then
+            if andb (Nat.ltb l (hn a)) (Nat.ltb f (cells G (hc a l))) then
               let b := setf a l f (mapp o (hp a l f) (eval e a)) in
               if Z.eqb (eval e b) (eval e a)
               then Some (b, Nat.max (S f) nf) else None
@@ -1478,6 +1511,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         | None => None
         end
     | Saassign x ei o e =>
+        if negb (inb2 G a ei e) then None else
         match os a x with
         | Some l =>
             let i := Z.to_nat (eval ei a) in
@@ -1489,6 +1523,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         | None => None
         end
     | Saswap x e1 y e2 =>
+        if negb (inb2 G a e1 e2) then None else
         match os a x, os a y with
         | Some l1, Some l2 =>
             let i1 := Z.to_nat (eval e1 a) in
@@ -1517,6 +1552,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         | None => None
         end
     | Sif e1 s1 s2 e2 =>
+        if negb (inb G a e1) then None else
         if Z.eqb (eval e1 a) 0
         then match run k G s2 a nf with
              | Some (b, nf1) => if Z.eqb (eval e2 b) 0 then Some (b, nf1) else None
@@ -1527,6 +1563,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
              | None => None
              end
     | Sloop e1 s1 s2 e2 =>
+        if negb (inb G a e1) then None else
         if Z.eqb (eval e1 a) 0 then None
         else match run k G s1 a nf with
              | Some (b, nf1) => run_loop k G e1 s1 s2 e2 b nf1
@@ -1535,6 +1572,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
     | Slocal x e1 s' e2 =>
         if in_dec Nat.eq_dec x (fv e1) then None
         else if in_dec Nat.eq_dec x (fv e2) then None
+        else if negb (inb G a e1) then None
         else match run k G s' (setv a x (eval e1 a)) nf with
              | Some (b, nf1) =>
                  if Z.eqb (vs b x) (eval e2 b)
@@ -1674,19 +1712,26 @@ Proof.
                    | now repeat apply above_seto ]).
       * (* assign *)
         destruct (in_dec Nat.eq_dec x (fv e)); [ discriminate | ].
+        repeat (match type of H with
+                | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
+                end).
         injection H as Heq Hn; subst; now apply above_setv.
       * (* field assignment *)
+        destruct (negb (inb G a e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
-        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
-        destruct (Z.eqb _ _) eqn:He; try discriminate.
+        repeat (match type of H with
+                | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
+                end).
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array assignment *)
+        destruct (negb (inb2 G a ei e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
         repeat (match type of H with
                 | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
                 end).
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array element swap *)
+        destruct (negb (inb2 G a e1 e2)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
         repeat (match type of H with
@@ -1707,6 +1752,7 @@ Proof.
         destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R1; try discriminate.
         eapply IHrun; [ eassumption | ]. eapply IHrun; eassumption.
       * (* if *)
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (Z.eqb (eval e1 a) 0) eqn:E1.
         -- destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
            destruct (Z.eqb (eval e2 m) 0); try discriminate.
@@ -1715,12 +1761,14 @@ Proof.
            destruct (Z.eqb (eval e2 m) 0); try discriminate.
            injection H as Heq Hn; subst. eapply IHrun; eassumption.
       * (* loop *)
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (Z.eqb (eval e1 a) 0); try discriminate.
         destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
         eapply IHloop; [ eassumption | ]. eapply IHrun; eassumption.
       * (* local *)
         destruct (in_dec Nat.eq_dec x (fv e1)); try discriminate.
         destruct (in_dec Nat.eq_dec x (fv e2)); try discriminate.
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
           try discriminate.
         destruct (Z.eqb (vs m x) (eval e2 m)); try discriminate.
@@ -1801,16 +1849,20 @@ Proof.
       * (* skip *) injection H as Heq Hn; subst b; apply E_skip, steq_refl.
       * (* assign *)
         destruct (in_dec Nat.eq_dec x (fv e)); [ discriminate | ].
+        destruct (negb (inb G a e)) eqn:Hin; try discriminate.
         injection H as Heq Hn; subst b.
         apply E_assign; [ assumption | apply steq_refl ].
       * (* field assignment *)
+        destruct (negb (inb G a e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
-        destruct (Nat.ltb l (hn a)) eqn:Hl; try discriminate.
+        destruct (andb (Nat.ltb l (hn a)) _) eqn:Hl; try discriminate.
         destruct (Z.eqb _ _) eqn:He; try discriminate.
         injection H as Heq Hn; subst b.
+        apply andb_true_iff in Hl as [ Hl _ ].
         apply Nat.ltb_lt in Hl. apply Z.eqb_eq in He.
         eapply E_fassign; [ eassumption | assumption | apply steq_refl | assumption ].
       * (* array assignment *)
+        destruct (negb (inb2 G a ei e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
         destruct (andb (Nat.ltb l (hn a)) _) eqn:Hl; try discriminate.
         destruct (andb (Z.eqb _ _) _) eqn:He; try discriminate.
@@ -1824,6 +1876,7 @@ Proof.
           | assumption | assumption ].
       * (* swap *) injection H as Heq Hn; subst b. apply E_swap, steq_refl.
       * (* array element swap *)
+        destruct (negb (inb2 G a e1 e2)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
         destruct (andb (andb (Nat.ltb l1 (hn a)) _) _) eqn:Hl; try discriminate.
@@ -1860,6 +1913,7 @@ Proof.
         -- eapply IHrun; [ eassumption | ].
            eapply (proj1 (run_above k G)); eassumption.
       * (* if *)
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (Z.eqb (eval e1 a) 0) eqn:E1.
         -- apply Z.eqb_eq in E1.
            destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
@@ -1872,6 +1926,7 @@ Proof.
            injection H as Heq Hn; subst b. apply Z.eqb_neq in E2.
            apply E_if_t; [ assumption | eapply IHrun; eassumption | assumption ].
       * (* loop *)
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (Z.eqb (eval e1 a) 0) eqn:E1; [ discriminate | ].
         apply Z.eqb_neq in E1.
         destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
@@ -1881,6 +1936,7 @@ Proof.
       * (* local *)
         destruct (in_dec Nat.eq_dec x (fv e1)); [ discriminate | ].
         destruct (in_dec Nat.eq_dec x (fv e2)); [ discriminate | ].
+        destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
           [ | discriminate ].
         destruct (Z.eqb (vs m x) (eval e2 m)) eqn:Ex; [ | discriminate ].

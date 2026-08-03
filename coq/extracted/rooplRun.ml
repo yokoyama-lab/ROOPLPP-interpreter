@@ -1,4 +1,10 @@
 
+(** val negb : bool -> bool **)
+
+let negb = function
+| true -> false
+| false -> true
+
 type nat =
 | O
 | S of nat
@@ -741,6 +747,30 @@ let oloc_eqb r1 r2 =
              | Some _ -> false
              | None -> true)
 
+(** val inb : menv -> state -> exp -> bool **)
+
+let rec inb g a = function
+| Fld (x, f) ->
+  (match a.os x with
+   | Some l -> if Nat.ltb l a.hn then Nat.ltb f (g.cells (a.hc l)) else false
+   | None -> false)
+| Idx (x, e') ->
+  if inb g a e'
+  then (match a.os x with
+        | Some l ->
+          if Nat.ltb l a.hn
+          then Nat.ltb (Z.to_nat (eval e' a)) (g.cells (a.hc l))
+          else false
+        | None -> false)
+  else false
+| Bop (_, e1, e2) -> if inb g a e1 then inb g a e2 else false
+| _ -> true
+
+(** val inb2 : menv -> state -> exp -> exp -> bool **)
+
+let inb2 g a e1 e2 =
+  if inb g a e1 then inb g a e2 else false
+
 (** val run : nat -> menv -> stm -> state -> nat -> (state*nat) option **)
 
 let rec run fuel g s a nf =
@@ -751,55 +781,68 @@ let rec run fuel g s a nf =
      | Sassign (x, o, e) ->
        if in_dec Nat.eq_dec x (fv e)
        then None
-       else Some ((setv a x (mapp o (a.vs x) (eval e a))),nf)
+       else if negb (inb g a e)
+            then None
+            else Some ((setv a x (mapp o (a.vs x) (eval e a))),nf)
      | Sfassign (x, f, o, e) ->
-       (match a.os x with
-        | Some l ->
-          if Nat.ltb l a.hn
-          then let b = setf a l f (mapp o (a.hp l f) (eval e a)) in
-               if Z.eqb (eval e b) (eval e a)
-               then Some (b,(Nat.max (S f) nf))
-               else None
-          else None
-        | None -> None)
-     | Saassign (x, ei, o, e) ->
-       (match a.os x with
-        | Some l ->
-          let i = Z.to_nat (eval ei a) in
-          if if Nat.ltb l a.hn then Nat.ltb i (g.cells (a.hc l)) else false
-          then let b = setf a l i (mapp o (a.hp l i) (eval e a)) in
-               if if Z.eqb (eval ei b) (eval ei a)
-                  then Z.eqb (eval e b) (eval e a)
+       if negb (inb g a e)
+       then None
+       else (match a.os x with
+             | Some l ->
+               if if Nat.ltb l a.hn
+                  then Nat.ltb f (g.cells (a.hc l))
                   else false
-               then Some (b,(Nat.max (S i) nf))
+               then let b = setf a l f (mapp o (a.hp l f) (eval e a)) in
+                    if Z.eqb (eval e b) (eval e a)
+                    then Some (b,(Nat.max (S f) nf))
+                    else None
                else None
-          else None
-        | None -> None)
+             | None -> None)
+     | Saassign (x, ei, o, e) ->
+       if negb (inb2 g a ei e)
+       then None
+       else (match a.os x with
+             | Some l ->
+               let i = Z.to_nat (eval ei a) in
+               if if Nat.ltb l a.hn
+                  then Nat.ltb i (g.cells (a.hc l))
+                  else false
+               then let b = setf a l i (mapp o (a.hp l i) (eval e a)) in
+                    if if Z.eqb (eval ei b) (eval ei a)
+                       then Z.eqb (eval e b) (eval e a)
+                       else false
+                    then Some (b,(Nat.max (S i) nf))
+                    else None
+               else None
+             | None -> None)
      | Sswap (x, y) -> Some ((setv (setv a x (a.vs y)) y (a.vs x)),nf)
      | Saswap (x, e1, y, e2) ->
-       (match a.os x with
-        | Some l1 ->
-          (match a.os y with
-           | Some l2 ->
-             let i1 = Z.to_nat (eval e1 a) in
-             let i2 = Z.to_nat (eval e2 a) in
-             if if if Nat.ltb l1 a.hn
-                   then Nat.ltb i1 (g.cells (a.hc l1))
-                   else false
-                then if Nat.ltb l2 a.hn
-                     then Nat.ltb i2 (g.cells (a.hc l2))
+       if negb (inb2 g a e1 e2)
+       then None
+       else (match a.os x with
+             | Some l1 ->
+               (match a.os y with
+                | Some l2 ->
+                  let i1 = Z.to_nat (eval e1 a) in
+                  let i2 = Z.to_nat (eval e2 a) in
+                  if if if Nat.ltb l1 a.hn
+                        then Nat.ltb i1 (g.cells (a.hc l1))
+                        else false
+                     then if Nat.ltb l2 a.hn
+                          then Nat.ltb i2 (g.cells (a.hc l2))
+                          else false
                      else false
-                else false
-             then let b = setf (setf a l1 i1 (a.hp l2 i2)) l2 i2 (a.hp l1 i1)
-                  in
-                  if if Z.eqb (eval e1 b) (eval e1 a)
-                     then Z.eqb (eval e2 b) (eval e2 a)
-                     else false
-                  then Some (b,(Nat.max (S i2) (Nat.max (S i1) nf)))
+                  then let b =
+                         setf (setf a l1 i1 (a.hp l2 i2)) l2 i2 (a.hp l1 i1)
+                       in
+                       if if Z.eqb (eval e1 b) (eval e1 a)
+                          then Z.eqb (eval e2 b) (eval e2 a)
+                          else false
+                       then Some (b,(Nat.max (S i2) (Nat.max (S i1) nf)))
+                       else None
                   else None
-             else None
-           | None -> None)
-        | None -> None)
+                | None -> None)
+             | None -> None)
      | Soswap (x, y) -> Some ((seto (seto a x (a.os y)) y (a.os x)),nf)
      | Scopy (x, y) ->
        if Nat.eqb x y
@@ -818,35 +861,41 @@ let rec run fuel g s a nf =
         | Some p -> let b,nf1 = p in run k g s2 b nf1
         | None -> None)
      | Sif (e1, s1, s2, e2) ->
-       if Z.eqb (eval e1 a) Z0
-       then (match run k g s2 a nf with
-             | Some p ->
-               let b,nf1 = p in
-               if Z.eqb (eval e2 b) Z0 then Some (b,nf1) else None
-             | None -> None)
-       else (match run k g s1 a nf with
-             | Some p ->
-               let b,nf1 = p in
-               if Z.eqb (eval e2 b) Z0 then None else Some (b,nf1)
-             | None -> None)
-     | Sloop (e1, s1, s2, e2) ->
-       if Z.eqb (eval e1 a) Z0
+       if negb (inb g a e1)
        then None
-       else (match run k g s1 a nf with
-             | Some p -> let b,nf1 = p in run_loop k g e1 s1 s2 e2 b nf1
-             | None -> None)
+       else if Z.eqb (eval e1 a) Z0
+            then (match run k g s2 a nf with
+                  | Some p ->
+                    let b,nf1 = p in
+                    if Z.eqb (eval e2 b) Z0 then Some (b,nf1) else None
+                  | None -> None)
+            else (match run k g s1 a nf with
+                  | Some p ->
+                    let b,nf1 = p in
+                    if Z.eqb (eval e2 b) Z0 then None else Some (b,nf1)
+                  | None -> None)
+     | Sloop (e1, s1, s2, e2) ->
+       if negb (inb g a e1)
+       then None
+       else if Z.eqb (eval e1 a) Z0
+            then None
+            else (match run k g s1 a nf with
+                  | Some p -> let b,nf1 = p in run_loop k g e1 s1 s2 e2 b nf1
+                  | None -> None)
      | Slocal (x, e1, s', e2) ->
        if in_dec Nat.eq_dec x (fv e1)
        then None
        else if in_dec Nat.eq_dec x (fv e2)
             then None
-            else (match run k g s' (setv a x (eval e1 a)) nf with
-                  | Some p ->
-                    let b,nf1 = p in
-                    if Z.eqb (b.vs x) (eval e2 b)
-                    then Some ((setv b x (a.vs x)),nf1)
-                    else None
-                  | None -> None)
+            else if negb (inb g a e1)
+                 then None
+                 else (match run k g s' (setv a x (eval e1 a)) nf with
+                       | Some p ->
+                         let b,nf1 = p in
+                         if Z.eqb (b.vs x) (eval e2 b)
+                         then Some ((setv b x (a.vs x)),nf1)
+                         else None
+                       | None -> None)
      | Sobj (cl, x, s') ->
        (match a.os x with
         | Some _ -> None

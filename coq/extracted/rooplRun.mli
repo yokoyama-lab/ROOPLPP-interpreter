@@ -1,4 +1,6 @@
 
+val negb : bool -> bool
+
 type nat =
 | O
 | S of nat
@@ -235,6 +237,10 @@ type menv = { procs : (mid -> mdecl option); classes : ctable;
 val dispatch_fn : nat -> ctable -> cid -> mid -> mdecl option
 
 val oloc_eqb : loc option -> loc option -> bool
+
+val inb : menv -> state -> exp -> bool
+
+val inb2 : menv -> state -> exp -> exp -> bool
 
 val run : nat -> menv -> stm -> state -> nat -> (state*nat) option
 

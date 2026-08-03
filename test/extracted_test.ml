@@ -516,8 +516,15 @@ let p_array_dynamic_index =
                           R.Sseq (R.Sassign (v 1, R.MAdd, R.Idx (arr, R.Var (v 0))),
                                   R.Saassign (arr, R.Var (v 0), R.MSub, c 6)))))
 
-(* 範囲外アクセス。形式化はヒープを全域関数で持つので長さの概念が無く、
-   実装だけが落ちる。これは「バグ」ではなく形式化の対象外の明示。 *)
+(* 範囲外の書き込み。長さはクラス表の cells から引くので意味論も落ちる。 *)
+(* 範囲外の読み出し。意味論 exec は許す（可逆性は壊れない）が、実行可能
+   インタプリタ run は実装と同じく落ちる（coq/roopl.v の inb）。 *)
+let p_array_read_oob =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sassign (v 0, R.MAdd, R.Idx (arr, c 10)))
+
+let p_array_read_oob_stms = stms_of_formal p_array_read_oob
+
 let p_array_oob_stms = stms_of_formal
   (R.Sobj (nat_of_int 1, arr,
            R.Sseq (R.Saassign (arr, c 10, R.MAdd, c 1),
@@ -686,6 +693,14 @@ let suite = "test suite for the extracted verified interpreter" >::: [
 
       (* 範囲外アクセスは意味論の側でも落ちる（長さはクラス表の cells から引く）*)
       agree "array write out of bounds is rejected" p_array_out_of_bounds [ 0 ];
+
+      (* 読み出しの範囲外も、実行可能インタプリタは実装と同じく落ちる *)
+      agree "array read out of bounds is rejected" p_array_read_oob [ 0 ];
+
+      "the verified interpreter checks array reads too" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_array_read_oob [ 0 ]);
+        assert_equal ~printer None
+          (run_interpreter_stms p_array_read_oob_stms [ 0 ]));
 
       "the semantics knows the array length" >:: (fun _ ->
         assert_equal ~printer None (run_verified p_array_out_of_bounds [ 0 ]);
