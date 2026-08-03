@@ -18,7 +18,7 @@ class Hanoi4
 
     // 4-peg minimum moves via Frame-Stewart
     // f(n) = min over k=1..n-1 of (2*f(k) + 2^(n-k) - 1)
-    method solve(int n, int[] dp)
+    method solve(int n, int[] dp, int[] gains)
         dp[0] += 0
         dp[1] += 1
         for i in (2..n) do
@@ -28,12 +28,14 @@ class Hanoi4
                 local int m3 = 0
                 call moves3(nk, m3)
                 local int candidate = 2 * dp[k] + m3
-                local int oldDp = dp[i]
+                local int idx = i * n + k
+                // 減った分だけを記録して引く。古い値を捨てないので逆向きに
+                // 戻せるし、減少量が正であることが出口の表明になる
                 if candidate < dp[i] then
-                    dp[i] -= dp[i]
-                    dp[i] += candidate
-                fi dp[i] < oldDp
-                delocal int oldDp = oldDp
+                    gains[idx] += dp[i] - candidate
+                    dp[i] -= gains[idx]
+                fi gains[idx] > 0
+                delocal int idx = i * n + k
                 delocal int candidate = 2 * dp[k] + m3
                 uncall moves3(nk, m3)
                 delocal int m3 = 0
@@ -43,12 +45,14 @@ class Hanoi4
 
 class Program
     int[] dp
+    int[] gains
     method main()
         new int[10] dp
+        new int[90] gains
         local Hanoi4 h = nil
         new Hanoi4 h
         local int n = 9
-        call h::solve(n, dp)
+        call h::solve(n, dp, gains)
         delocal int n = 9
         delete Hanoi4 h
         delocal Hanoi4 h = nil

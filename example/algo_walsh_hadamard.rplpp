@@ -15,8 +15,11 @@ class WalshHadamard
                     local int j = i + step
                     local int sum = x[i] + x[j]
                     local int diff = x[i] - x[j]
-                    x[i] -= x[i]
-                    x[j] -= x[j]
+                    // 古い値は sum と diff から復元できる（sum+diff = 2a,
+                    // sum-diff = 2b）ので、それを引いて 0 にする。
+                    // x[i] -= x[i] は古い値を捨ててしまう
+                    x[i] -= (sum + diff) / 2
+                    x[j] -= (sum - diff) / 2
                     x[i] += sum
                     x[j] += diff
                     delocal int diff = x[j]
@@ -32,7 +35,8 @@ class WalshHadamard
             step += s2 + s2
             delocal int s2 = step / 2
         until step >= n
-        delocal int step = step
+        // 1 から倍々にして n 以上で止まるので、n が 2 の冪なら出口は n
+        delocal int step = n
 
 class Program
     int[] x

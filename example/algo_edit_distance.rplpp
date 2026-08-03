@@ -3,7 +3,7 @@
 // Full DP table stored for reversibility
 
 class EditDist
-    method solve(int[] a, int m, int[] b, int n, int[] dp)
+    method solve(int[] a, int m, int[] b, int n, int[] dp, int[] g1, int[] g2)
         local int cols = n + 1
         // Init first column and row
         for i in (0..m) do
@@ -28,18 +28,16 @@ class EditDist
                 fi a[i1] != b[j1]
                 // dp[idx] = min(delCost, insCost, subCost)
                 dp[idx] += delCost
-                local int old1 = dp[idx]
+                // 二段階の min は「減った分」を残す形で行う。古い値を捨てない
+                // ので逆向きに戻せるし、減少量が正であることが出口の表明になる
                 if insCost < dp[idx] then
-                    dp[idx] -= dp[idx]
-                    dp[idx] += insCost
-                fi dp[idx] < old1
-                delocal int old1 = old1
-                local int old2 = dp[idx]
+                    g1[idx] += dp[idx] - insCost
+                    dp[idx] -= g1[idx]
+                fi g1[idx] > 0
                 if subCost < dp[idx] then
-                    dp[idx] -= dp[idx]
-                    dp[idx] += subCost
-                fi dp[idx] < old2
-                delocal int old2 = old2
+                    g2[idx] += dp[idx] - subCost
+                    dp[idx] -= g2[idx]
+                fi g2[idx] > 0
                 if a[i1] != b[j1] then
                     subCost -= 1
                 fi a[i1] != b[j1]
@@ -57,10 +55,14 @@ class Program
     int[] a
     int[] b
     int[] dp
+    int[] g1
+    int[] g2
     method main()
         new int[3] a
         new int[3] b
         new int[16] dp
+        new int[16] g1
+        new int[16] g2
         a[0] += 1
         a[1] += 2
         a[2] += 3
@@ -71,7 +73,7 @@ class Program
         new EditDist ed
         local int m = 3
         local int n = 3
-        call ed::solve(a, m, b, n, dp)
+        call ed::solve(a, m, b, n, dp, g1, g2)
         delocal int n = 3
         delocal int m = 3
         delete EditDist ed

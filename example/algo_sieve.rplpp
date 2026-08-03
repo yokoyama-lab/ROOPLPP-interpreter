@@ -15,7 +15,10 @@ class Sieve
                     fi sieve[j] = i
                     j += i
                 until j >= n
-                delocal int j = j
+                // 出口の j は n 以上になる最初の i の倍数（i < n なので
+                // 2i 以上であることも満たす）。自分自身で表明すると恒真になり、
+                // 逆向きの実行が値を作れない
+                delocal int j = ((n + i - 1) / i) * i
             fi sieve[i] = 0
         end
 

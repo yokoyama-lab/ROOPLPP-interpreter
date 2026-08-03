@@ -41,15 +41,24 @@ class MillerRabin
                         fi found = 1
                     fi y = n - 1
                 end
+                // 二乗の履歴を逆にたどって y を x に戻す。こうしておくと
+                // 下の delocal が枝によらず x になる
+                for r in (1..s-1) do
+                    local int j = s - r
+                    y -= (sqHist[j-1] * sqHist[j-1]) % n
+                    y += sqHist[j-1]
+                    delocal int j = s - r
+                end
                 if found = 0 then
                     isWitness ^= 1
                 fi found = 0
-                delocal int found = found
+                // isWitness はこの枝でだけ立つので、found はそこから読める
+                delocal int found = 1 - isWitness
             fi x1 = n - 1
-            delocal int x1 = x1
+            delocal int x1 = x
         fi x0 = 1
-        delocal int x0 = x0
-        delocal int y = y
+        delocal int x0 = x
+        delocal int y = x
         uncall modpow(a, d, n, x, hist)
         delocal int x = 0
 

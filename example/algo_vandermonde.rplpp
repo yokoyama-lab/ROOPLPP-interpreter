@@ -18,7 +18,9 @@ class Vandermonde
                 v[idx2] += pw
                 delocal int idx2 = i * n + j
             end
-            delocal int pw = pw
+            // 最後に書いた行の要素が points[i]^(n-1) ＝ pw そのものなので、
+            // それを出口の表明に使う（自分自身では恒真になってしまう）
+            delocal int pw = v[i * n + n - 1]
             delocal int idx = i * n
         end
 

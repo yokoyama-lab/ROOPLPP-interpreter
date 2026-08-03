@@ -74,7 +74,9 @@ class Program
         local int dir = 1
         local int h = 0
         call b::bitonicSort(a, lo, cnt, dir, hist, h)
-        delocal int h = h
+        // 比較器の個数はデータに依らず決まる（n=8 で n/2 * log n * (log n + 1) / 2
+        // = 24）。自分自身で表明すると恒真になり、逆向きの実行が値を作れない
+        delocal int h = 24
         delocal int dir = 1
         delocal int cnt = 8
         delocal int lo = 0

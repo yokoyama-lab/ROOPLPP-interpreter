@@ -5,7 +5,7 @@
 
 class IntervalSched
     method schedule(int[] start, int[] finish, int n, int count,
-                    int[] selected)
+                    int[] selected, int[] ends)
         // First interval always selected
         selected[0] ^= 1
         count += 1
@@ -14,23 +14,29 @@ class IntervalSched
             if start[i] >= lastEnd then
                 selected[i] ^= 1
                 count += 1
-                local int oldEnd = lastEnd
-                lastEnd -= oldEnd
-                lastEnd += finish[i]
-                delocal int oldEnd = oldEnd
+                // 古い lastEnd を捨てずに「増分」を残す。これで逆向きの実行が
+                // 前の終了時刻を復元できる
+                ends[i] += finish[i] - lastEnd
+                lastEnd += ends[i]
             fi selected[i] = 1
         end
-        delocal int lastEnd = lastEnd
+        // 増分をすべて引き戻せば lastEnd は最初の値に戻る
+        for i in (1..n-1) do
+            lastEnd -= ends[i]
+        end
+        delocal int lastEnd = finish[0]
 
 class Program
     int[] start
     int[] finish
     int count
     int[] selected
+    int[] ends
     method main()
         new int[5] start
         new int[5] finish
         new int[5] selected
+        new int[5] ends
         start[0] += 1
         start[1] += 2
         start[2] += 4
@@ -44,7 +50,7 @@ class Program
         local IntervalSched is = nil
         new IntervalSched is
         local int n = 5
-        call is::schedule(start, finish, n, count, selected)
+        call is::schedule(start, finish, n, count, selected, ends)
         delocal int n = 5
         delete IntervalSched is
         delocal IntervalSched is = nil

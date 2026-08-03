@@ -22,7 +22,9 @@ class ShortestPath
                         local int hidx = iter * n * n + u * n + v
                         oldDist[hidx] += dist[v]
                         if newDist < dist[v] then
-                            dist[v] -= dist[v]
+                            // 古い距離は oldDist[hidx] に写してある
+                            // （dist[v] -= dist[v] は逆向きに戻せない）
+                            dist[v] -= oldDist[hidx]
                             dist[v] += newDist
                         fi dist[v] < oldDist[hidx]
                         delocal int hidx = iter * n * n + u * n + v

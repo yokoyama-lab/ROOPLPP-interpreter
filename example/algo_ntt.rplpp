@@ -14,27 +14,29 @@ class NTT
         end
 
     // DFT: out[k] = sum_{j} x[j] * tw[j*k] mod p
-    method transform(int[] x, int n, int[] tw, int p, int[] out)
+    method transform(int[] x, int n, int[] tw, int p, int[] out, int[] quot)
         for k in (0..n-1) do
             for j in (0..n-1) do
                 local int tidx = (j * k) % (n * n)
                 out[k] += x[j] * tw[tidx]
                 delocal int tidx = (j * k) % (n * n)
             end
-            local int r = out[k] % p
-            out[k] -= out[k]
-            out[k] += r
-            delocal int r = out[k]
+            // 商を残しておけば余りを取る操作も可逆になる
+            // （out[k] -= out[k] は商を捨ててしまう）
+            quot[k] += out[k] / p
+            out[k] -= quot[k] * p
         end
 
 class Program
     int[] x
     int[] tw
     int[] out
+    int[] quot
     method main()
         new int[4] x
         new int[16] tw
         new int[4] out
+        new int[4] quot
         x[0] += 1
         x[1] += 2
         x[2] += 3
@@ -46,7 +48,7 @@ class Program
         local int p = 17
         local int n2 = 16
         call ntt::precompute(tw, n2, w, p)
-        call ntt::transform(x, n, tw, p, out)
+        call ntt::transform(x, n, tw, p, out, quot)
         delocal int n2 = 16
         delocal int p = 17
         delocal int w = 4

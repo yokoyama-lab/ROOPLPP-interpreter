@@ -27,7 +27,10 @@ class CRT
         result += a1 + m1 * t
         delocal int t = (result - a1) / m1
         delocal int diff = a2 - a1
-        delocal int m1inv = m1inv
+        // m1inv は計算しっぱなしにせず、同じ呼出しを uncall して消す
+        // （delocal int m1inv = m1inv は表明が恒真で、値を捨てている）
+        uncall modpow(m1, exp, m2, m1inv, hist)
+        delocal int m1inv = 0
         delocal int exp = m2 - 2
 
 class Program

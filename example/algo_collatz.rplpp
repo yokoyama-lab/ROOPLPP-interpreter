@@ -14,7 +14,9 @@ class Collatz
             else
                 parity[steps] ^= 1
                 local int triple = n * 3 + 1
-                n -= n
+                // traj[steps] にはこの時点の n が入っているので、それを引いて
+                // 0 にする（n -= n は逆向きに戻せない）
+                n -= traj[steps]
                 n += triple
                 delocal int triple = n
             fi parity[steps] = 0

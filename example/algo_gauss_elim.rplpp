@@ -23,7 +23,9 @@ class GaussElim
                     local int oldVal = mat[idx]
                     mat[idx] -= oldVal
                     mat[idx] += oldVal * pivVal - mat[pidx] * rowVal
-                    delocal int oldVal = oldVal
+                    // 新しい値から古い値を復元する（pivVal で割り切れる）。
+                    // delocal int oldVal = oldVal では表明が恒真になる
+                    delocal int oldVal = (mat[idx] + mat[pidx] * rowVal) / pivVal
                     delocal int pidx = piv * cols + col
                     delocal int idx = row * cols + col
                 end

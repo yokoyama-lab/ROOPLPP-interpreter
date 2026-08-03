@@ -20,7 +20,9 @@ class EulerTotient
                     phi[idx] -= oldPhi
                     phi[idx] += newPhi
                     delocal int newPhi = phi[idx]
-                    delocal int oldPhi = oldPhi
+                    // 出口の表明は自分自身ではなく、新しい値から古い値を
+                    // 復元する式にする（p | oldPhi なので割り切れる）
+                    delocal int oldPhi = (phi[idx] / (p - 1)) * p
                     delocal int idx = k * p
                 end
             fi phi[p] = p - 1

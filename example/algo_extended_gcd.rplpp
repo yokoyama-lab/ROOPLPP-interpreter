@@ -24,12 +24,10 @@ class ExtGCD
         for i in (1..steps) do
             local int idx = steps - i
             local int q = quots[idx]
-            local int newY = x - q * y
-            x -= x
-            x += y
-            y -= y
-            y += newY
-            delocal int newY = y
+            // (x, y) := (y, x - q*y) は線形な可逆変換なので、入れ替えと
+            // 減算の 2 文で書ける（x -= x のような破壊的な代入は要らない）
+            x <=> y
+            y -= q * x
             delocal int q = quots[idx]
             delocal int idx = steps - i
         end

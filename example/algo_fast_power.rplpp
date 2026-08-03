@@ -36,7 +36,14 @@ class FastPow
                 delocal int tmp2 = sqHist[i]
             fi i < nbits - 1
         end
-        delocal int b = b
+        // b は base を 2^(nbits-1) 乗したもの。sqHist に最後の底が残っている
+        // ので、それを使って base へ戻してから局所ブロックを閉じる
+        // （delocal int b = b は表明が恒真になり、逆向きの実行が値を作れない）
+        if nbits > 1 then
+            b -= sqHist[nbits - 2] * sqHist[nbits - 2]
+            b += base
+        fi nbits > 1
+        delocal int b = base
 
 class Program
     int result

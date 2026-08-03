@@ -15,7 +15,9 @@ class FloydWarshall
                     local int via = dist[ik] + dist[kj]
                     old[h] += dist[ij]
                     if via < dist[ij] then
-                        dist[ij] -= dist[ij]
+                        // 古い距離は old[h] に写してあるので、それを引いて 0 に
+                        // する（dist[ij] -= dist[ij] は逆向きに戻せない）
+                        dist[ij] -= old[h]
                         dist[ij] += via
                     fi dist[ij] < old[h]
                     h += 1

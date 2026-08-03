@@ -13,14 +13,18 @@ class CRC
                 local int msb = crc / 128
                 // Shift left by 1
                 local int doubled = (crc - msb * 128) * 2
-                crc -= crc
+                // 古い crc は msb と doubled から復元できるので、それを引いて
+                // 0 にする（crc -= crc は逆向きに戻せない）
+                crc -= msb * 128 + doubled / 2
                 crc += doubled
                 delocal int doubled = crc
                 // XOR with polynomial if MSB was 1
                 if msb = 1 then
                     crc ^= 29
                 fi msb = 1
-                delocal int msb = msb
+                // doubled は偶数なので、29（最下位ビットが 1）と XOR したか
+                // どうかが crc の最下位ビットに残る
+                delocal int msb = crc % 2
             end
         end
 

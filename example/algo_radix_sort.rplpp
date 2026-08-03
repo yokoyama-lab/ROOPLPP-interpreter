@@ -15,13 +15,15 @@ class RadixSort
             pos[i] += pos[i-1] + count[i-1]
         end
         for i in (0..n-1) do
+            // 値を buf へ写したら、その写した先を使って a[i] を 0 に戻す
+            // （a[i] -= a[i] は古い値を捨ててしまい逆向きに戻せない）
             buf[pos[digits[i]]] += a[i]
+            a[i] -= buf[pos[digits[i]]]
             pos[digits[i]] += 1
         end
         for i in (0..n-1) do
-            a[i] -= a[i]
             a[i] += buf[i]
-            buf[i] -= buf[i]
+            buf[i] -= a[i]
         end
 
 class Program

@@ -4,7 +4,7 @@
 // dp[63] = 6 (25+25+10+1+1+1)
 
 class CoinChange
-    method solve(int[] coins, int nc, int amount, int[] dp)
+    method solve(int[] coins, int nc, int amount, int[] dp, int[] gains)
         // Initialize dp with large value (amount+1 as infinity)
         local int inf = amount + 1
         for i in (1..amount) do
@@ -15,12 +15,15 @@ class CoinChange
             for j in (0..nc-1) do
                 if coins[j] <= i then
                     local int prev = dp[i - coins[j]] + 1
-                    local int oldDp = dp[i]
+                    local int idx = (i - 1) * nc + j
+                    // 更新は「減った分」を残す形で行う。古い値を捨てないので
+                    // 逆向きに戻せるし、減少量が正であることがそのまま出口の
+                    // 表明になる
                     if prev < dp[i] then
-                        dp[i] -= dp[i]
-                        dp[i] += prev
-                    fi dp[i] < oldDp
-                    delocal int oldDp = oldDp
+                        gains[idx] += dp[i] - prev
+                        dp[i] -= gains[idx]
+                    fi gains[idx] > 0
+                    delocal int idx = (i - 1) * nc + j
                     delocal int prev = dp[i - coins[j]] + 1
                 fi coins[j] <= i
             end
@@ -30,9 +33,11 @@ class CoinChange
 class Program
     int[] coins
     int[] dp
+    int[] gains
     method main()
         new int[4] coins
         new int[64] dp
+        new int[252] gains
         coins[0] += 1
         coins[1] += 5
         coins[2] += 10
@@ -41,7 +46,7 @@ class Program
         new CoinChange cc
         local int nc = 4
         local int amount = 63
-        call cc::solve(coins, nc, amount, dp)
+        call cc::solve(coins, nc, amount, dp, gains)
         delocal int amount = 63
         delocal int nc = 4
         delete CoinChange cc

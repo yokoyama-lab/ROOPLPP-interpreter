@@ -28,11 +28,13 @@ class CRT3
             else
                 call modpow(prod, exp, m[i], inv, hist2)
             fi i = 1
-            local int diff = ((a[i] - result) % m[i] + m[i]) % m[i]
-            local int t = (diff * inv) % m[i]
+            // diff は局所変数にせず t の式に畳み込む。局所ブロックは後入れ先出しで
+            // 閉じるので、diff を閉じるときには t が既にスコープの外にあり、
+            // 古い result を復元する式が書けない（delocal int diff = diff は
+            // 表明が恒真になり値を捨ててしまう）
+            local int t = ((((a[i] - result) % m[i] + m[i]) % m[i]) * inv) % m[i]
             result += prod * t
             delocal int t = (result - a[0]) / prod
-            delocal int diff = diff
             if i = 1 then
                 uncall modpow(prod, exp, m[i], inv, hist1)
             else
@@ -45,7 +47,16 @@ class CRT3
             prod += oldProd * m[i]
             delocal int oldProd = prod / m[i]
         end
-        delocal int prod = prod
+        // prod = m[0]*...*m[nmod-1] を掛けた順の逆にたどって m[0] へ戻す
+        for i in (1..nmod-1) do
+            local int j = nmod - i
+            local int oldProd = prod / m[j]
+            prod -= oldProd * m[j]
+            prod += oldProd
+            delocal int oldProd = prod
+            delocal int j = nmod - i
+        end
+        delocal int prod = m[0]
 
 class Program
     int[] a

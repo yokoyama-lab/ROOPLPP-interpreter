@@ -16,7 +16,10 @@ class Knapsack
                     local int takeIdx = i1 * cols + remW
                     local int withItem = dp[takeIdx] + val[i1]
                     if withItem > dp[idx] then
-                        dp[idx] -= dp[idx]
+                        // この時点の dp[idx] は直前の行の値そのものなので、
+                        // それを引いて 0 にする（dp[idx] -= dp[idx] は
+                        // 古い値を捨ててしまい逆向きに戻せない）
+                        dp[idx] -= dp[prevIdx]
                         dp[idx] += withItem
                     fi dp[idx] > dp[prevIdx]
                     delocal int withItem = dp[takeIdx] + val[i1]

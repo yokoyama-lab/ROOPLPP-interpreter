@@ -9,13 +9,16 @@ class FFTButterfly
         local int prod = re[j] * tw
         local int sum = re[i] + prod
         local int diff = re[i] - prod
-        re[i] -= re[i]
-        re[j] -= re[j]
+        // 古い値は sum と diff から復元できる（sum+diff = 2*re[i],
+        // sum-diff = 2*prod = 2*tw*re[j]）ので、それを引いて 0 にする。
+        // re[i] -= re[i] は古い値を捨ててしまい逆向きに戻せない
+        re[i] -= (sum + diff) / 2
+        re[j] -= ((sum - diff) / 2) / tw
         re[i] += sum
         re[j] += diff
         delocal int diff = re[j]
         delocal int sum = re[i]
-        delocal int prod = prod
+        delocal int prod = (re[i] - re[j]) / 2
 
     // 4-point DFT using radix-2 decimation in time
     method dft4(int[] x)
