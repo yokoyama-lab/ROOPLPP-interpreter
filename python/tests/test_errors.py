@@ -33,6 +33,28 @@ CASES = [
      prog("  new int[2] a\n  x += a[2]\n")),
     ("array write out of bounds", "is out of bounds",
      prog("  new int[2] a\n  a[5] += 1\n")),
+    # 代入の副条件（可逆性そのもの）。coq/roopl.v の E_assign は構文的な
+    # x ∉ fv(e) を、E_fassign / E_aassign / E_aswap は意味的な「書き込みが
+    # 右辺と添字の値を変えない」を要求する
+    ("assignment target occurs on the right", "must not occur on both sides",
+     prog("  x += 3\n  x += x\n")),
+    ("subtraction target occurs on the right", "must not occur on both sides",
+     prog("  x += 3\n  x -= x\n")),
+    ("assignment reads the cell it writes",
+     "must not be changed by the assignment itself",
+     prog("  new int[2] a\n  a[0] += 5\n  a[0] += a[0]\n")),
+    ("field assignment reads the field it writes",
+     "must not be changed by the assignment itself",
+     "class T\n int f\n method noop()\n  skip\n\n"
+     "class Program\n T t\n method main()\n  new T t\n  t.f += 5\n  t.f += t.f\n"),
+    ("array swap moves its own index",
+     "must not be changed by the statement itself",
+     prog("  new int[2] a\n  a[0] += 1\n  a[a[0]] <=> a[0]\n")),
+    # 局所ブロックの表明が自分自身を参照すると恒真になる（E_local の x ∉ fv(e)）
+    ("delocal expression mentions its own variable", "must not occur in its own",
+     prog("  local int t = 0\n  t += 3\n  x += t\n  delocal int t = t\n")),
+    ("local expression mentions its own variable", "must not occur in its own",
+     prog("  local int t = t\n  x += 1\n  delocal int t = 0\n")),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",
@@ -82,6 +104,13 @@ CONTROLS = [
                               "  until i = 3\n  delocal int i = 3\n  x += 1\n")),
     ("delete after zero-clearing", prog("  new int[2] a\n  a[0] += 1\n  a[0] -= 1\n"
                                         "  delete int[2] a\n")),
+    # 別のセルを読む代入・添字に使う変数への代入は可逆なので通る
+    ("assignment reading another cell",
+     prog("  new int[2] a\n  a[1] += 5\n  a[0] += a[1]\n  a[0] -= 5\n  a[1] -= 5\n"
+          "  delete int[2] a\n")),
+    ("assignment whose index mentions a variable",
+     prog("  new int[2] a\n  x += 1\n  a[x] += x\n  a[x] -= 1\n  x -= 1\n"
+          "  delete int[2] a\n")),
 ]
 
 

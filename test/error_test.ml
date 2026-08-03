@@ -47,6 +47,38 @@ let suite = "test suite for runtime error paths" >::: [
   case "array index negative" "out of bounds"
     (prog "  new int[2] a\n  x -= 1\n  a[x] += 1\n");
 
+  (* ---- 代入の副条件（可逆性そのもの） --------------------------------
+     coq/roopl.v の E_assign は構文的な x ∉ fv(e) を、E_fassign / E_aassign /
+     E_aswap は意味的な「書き込みが右辺（と添字）の値を変えない」を要求する。
+     これが無いと x += x のように逆向きに戻せない文が通ってしまう。 *)
+  case "assignment whose target occurs on the right" "must not occur on both sides"
+    (prog "  x += 3\n  x += x\n");
+
+  case "subtraction whose target occurs on the right" "must not occur on both sides"
+    (prog "  x += 3\n  x -= x\n");
+
+  case "assignment whose right-hand side reads the cell it writes"
+    "must not be changed by the assignment itself"
+    (prog "  new int[2] a\n  a[0] += 5\n  a[0] += a[0]\n");
+
+  case "field assignment whose right-hand side reads the field it writes"
+    "must not be changed by the assignment itself"
+    ("class T\n int f\n method noop()\n  skip\n\n"
+     ^ "class Program\n T t\n method main()\n"
+     ^ "  new T t\n  t.f += 5\n  t.f += t.f\n");
+
+  case "array swap that moves its own index"
+    "must not be changed by the statement itself"
+    (prog "  new int[2] a\n  a[0] += 1\n  a[a[0]] <=> a[0]\n");
+
+  (* 局所ブロックの出口表明が自分自身を参照すると恒真になり、逆向きの実行が
+     値を復元できない（coq/roopl.v の E_local の x ∉ fv(e2)） *)
+  case "delocal expression mentions its own variable" "must not occur in its own"
+    (prog "  local int t = 0\n  t += 3\n  x += t\n  delocal int t = t\n");
+
+  case "local expression mentions its own variable" "must not occur in its own"
+    (prog "  local int t = t\n  x += 1\n  delocal int t = 0\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");
@@ -174,6 +206,15 @@ let suite = "test suite for runtime error paths" >::: [
 
   "control: delete after zero-clearing raises nothing" >:: (fun _ ->
     assert_ok (prog "  new int[2] a\n  a[0] += 1\n  a[0] -= 1\n  delete int[2] a\n"));
+
+  (* 別のセルを読む代入・添字に使う変数への代入は可逆なので通る *)
+  "control: an assignment reading another cell raises nothing" >:: (fun _ ->
+    assert_ok (prog ("  new int[2] a\n  a[1] += 5\n  a[0] += a[1]\n"
+                     ^ "  a[0] -= 5\n  a[1] -= 5\n  delete int[2] a\n")));
+
+  "control: an assignment whose index mentions a variable raises nothing" >:: (fun _ ->
+    assert_ok (prog ("  new int[2] a\n  x += 1\n  a[x] += x\n"
+                     ^ "  a[x] -= 1\n  x -= 1\n  delete int[2] a\n")));
 ]
 
 let _ = run_test_tt_main suite

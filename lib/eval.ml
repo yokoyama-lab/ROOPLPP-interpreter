@@ -215,6 +215,23 @@ let rec ext_env_field f n =
   | [] -> []
   | Decl(dtype, id) :: tl -> ext_envs (ext_env_field tl (n + 1)) id n
 
+(**式に自由に現れる変数名（いまの環境で解決されるものだけ）。
+   ドットの右側はオブジェクト側の環境で解決されるので数えない*)
+let rec free_vars e =
+  match e with
+  | Const _ | Nil -> []
+  | Var(x) -> [x]
+  | ArrayElement(x, e1) -> x :: free_vars e1
+  | Binary(_, e1, e2) -> free_vars e1 @ free_vars e2
+  | Dot(x, _) -> free_vars x
+  | EPos(_, e1) -> free_vars e1
+
+(**l 値が添字を含むか。含むなら書き込みでロケーションが動きうる*)
+let rec obj_has_index = function
+  | VarArray(_, None) -> false
+  | VarArray(_, Some _) -> true
+  | InstVar(x, xi) -> obj_has_index x || obj_has_index xi
+
 (**文statementを実行する関数：第一引数に文、第二引数にオブジェクトブロックを指すロケーションと環境のタプル、
 第三引数にマップ、第四引数にストアを受け取り、更新されたストアを返す．*)
 let rec eval_state stml env map st0 =
@@ -230,8 +247,10 @@ let rec eval_state stml env map st0 =
     | ModSub -> (-)
     | ModXor -> (lxor) in
   let rec update st stm =
-    (** y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す *)
-    let rec lval_val y env =
+    (** y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す。
+        ストアを引数に取るのは、書き込んだ後の状態でもう一度解決して
+        「l 値が自分の書き込みで動いていないか」を確かめるため *)
+    let rec lval_val_in st y env =
     match y with
     | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | VarArray(x, Some e) ->
@@ -244,20 +263,36 @@ let rec eval_state stml env map st0 =
        let locsx' =
          if x_index >= 0 && x_index < List.length locsvecx then x_index + List.hd locsvecx
          else fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Array index " ^ x ^ "[" ^
-                          string_of_int x_index ^ "] is out of bounds in this statement")                
+                          string_of_int x_index ^ "] is out of bounds in this statement")
        in
        let v = lookup_st locsx' st in (**the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->
-       let _, locs = lval_val x env in
+       let _, locs = lval_val_in st x env in
        (match locs with
          LocsVal(l) ->
           (match lookup_st l st with
             | ObjVal(c, env') ->
-               let li, v = lval_val xi env' in
+               let li, v = lval_val_in st xi env' in
                li, v
             | _ -> failwith "ERROR:expected object value for instance variable access")
        | _ -> failwith "ERROR:expected location value for instance variable access")
+    in
+    let lval_val y env = lval_val_in st y env in
+    (** 書き込みで l 値のロケーションが動いていないことを確認する。
+        coq/roopl.v の E_aassign / E_aswap の前提「eval ei b = eval ei a」
+        （添字が自分の書き込みで変わらない）にあたる。添字を含まない l 値は
+        動きようがないので調べない *)
+    let check_locs_stable st' targets =
+      List.iter
+        (fun (y, lv) ->
+          if obj_has_index y then
+            let lv', _ = lval_val_in st' y env in
+            if lv' <> lv then
+              fail_stm (pretty_stms [stm] 0 ^
+                          "\nERROR:The array index of this statement must not be \
+                           changed by the statement itself"))
+        targets
     in
     (** call処理の共通部分を実行する関数．invertFlagが1なら逆実行 *)
     let mycall locs locs2 invertFlag =
@@ -303,13 +338,30 @@ let rec eval_state stml env map st0 =
        let v' = try bin_op (f op) vx v with
                 | Failure e -> fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Integer value expected in this statement")
        in
-       ext_st st lvx v' (* the right value of x *)
+       let st2 = ext_st st lvx v' (* the right value of x *) in
+       (* 可逆性の副条件。整数変数への代入は構文的に（coq/roopl.v の E_assign の
+          x ∉ fv(e)）、フィールドと配列要素は意味的に（E_fassign / E_aassign の
+          eval e b = eval e a）検査する。後者は別名を構文で近似せずに済む *)
+       (match y with
+        | VarArray(x, None) ->
+           if List.mem x (free_vars e) then
+             fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable " ^ x ^
+                         " must not occur on both sides of this assignment")
+        | _ ->
+           if eval_exp e env st2 <> v then
+             fail_stm (pretty_stms [stm] 0 ^
+                         "\nERROR:The right-hand side of this assignment must not be \
+                          changed by the assignment itself"));
+       check_locs_stable st2 [ (y, lvx) ];
+       st2
     (*SWPVAR*) (*SWAPARRVAR*)
     | Swap(y1, y2) (*y1 <=> y2*)->
        let lv1, v1 = lval_val y1 env in
        let lv2, v2 = lval_val y2 env in
        let st2 = ext_st st lv1 v2 in (*update y2 -> y1*)
-       ext_st st2 lv2 v1 (*update y1 -> y2*)
+       let st3 = ext_st st2 lv2 v1 (*update y1 -> y2*) in
+       check_locs_stable st3 [ (y1, lv1); (y2, lv2) ];
+       st3
     | Loop(e1, stml1, stml2, e2) ->                          (* from e1 do s1 loop s2 until e2 *)
        let rec eval_loop (e1, stml1, stml2, e2) env map st = (* 意味関数L *)
          (*LOOPREC*)
@@ -566,6 +618,11 @@ let rec eval_state stml env map st0 =
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:both variable's reference is not same in this statement")
     (*LOCALBLOCK*)
     | LocalBlock(dt, id, e1, stml, e2) -> (* local c x = e1  s  delocal x = e2 *)
+       (* 入口・出口の式が自分自身を参照すると表明が恒真になり、逆向きの実行が
+          値を復元できない（coq/roopl.v の E_local の x ∉ fv(e1), x ∉ fv(e2)） *)
+       if List.mem id (free_vars e1) || List.mem id (free_vars e2) then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Local variable " ^ id ^
+                     " must not occur in its own local/delocal expression");
        let v1 = eval_exp e1 env st in     (* e1の値を求める *)
        let locs = max_locs st + 1 in      (* 未使用のロケーションを求める *)
        let env2 = ext_envs env id locs in (* 環境に変数xを追加 *)

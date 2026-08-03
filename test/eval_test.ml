@@ -120,8 +120,13 @@ let tests = "test suite for eval.ml" >::: [
       
       "skip"    >:: (fun _ ->
         assert_equal [] (eval_state [Skip] [] [] []) );
-      "x += x"    >:: (fun _ ->
-        assert_equal [(1, IntVal 2)] (eval_state [Assign(VarArray("x", None), ModAdd, Var "x")] [("x", 1)] [] [(1, IntVal 1)]) );
+      (* x += x は可逆でない（x -= x は元の値を戻さない）。coq/roopl.v の
+         E_assign の副条件 x ∉ fv(e) にあたる検査で落ちる *)
+      "x += x is rejected"    >:: (fun _ ->
+        assert_raises
+          (Util.Runtime_error
+             "x += x\n\nERROR:Variable x must not occur on both sides of this assignment\nWHERE:x = 1")
+          (fun () -> eval_state [Assign(VarArray("x", None), ModAdd, Var "x")] [("x", 1)] [] [(1, IntVal 1)]) );
       "x += 1"    >:: (fun _ ->
         assert_equal [(1, IntVal 2)] (eval_state [Assign(VarArray("x", None), ModAdd, Const 1)] [("x", 1)] [] [(1, IntVal 1)]) );
       "x -= 1"    >:: (fun _ ->

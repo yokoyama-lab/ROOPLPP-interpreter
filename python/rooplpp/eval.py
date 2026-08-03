@@ -205,6 +205,40 @@ def eval_exp(exp: Exp, env: Env, st: State) -> Value:
 
 # --- Helper functions ---
 
+def free_vars(e: Exp) -> list[Id]:
+    """式に自由に現れる変数名（いまの環境で解決されるものだけ）。
+
+    ドットの右側はオブジェクト側の環境で解決されるので数えない。"""
+    match e:
+        case Const(_) | Nil():
+            return []
+        case Var(x):
+            return [x]
+        case ArrayElement(x, idx):
+            return [x] + free_vars(idx)
+        case Binary(_, e1, e2):
+            return free_vars(e1) + free_vars(e2)
+        case Dot(x, _):
+            return free_vars(x)
+        case EPos(_, e1):
+            return free_vars(e1)
+        case _:
+            return []
+
+
+def obj_has_index(y: Obj) -> bool:
+    """l 値が添字を含むか。含むなら書き込みでロケーションが動きうる。"""
+    match y:
+        case VarArray(_, None):
+            return False
+        case VarArray(_, _):
+            return True
+        case InstVar(x, xi):
+            return obj_has_index(x) or obj_has_index(xi)
+        case _:
+            return False
+
+
 def match_int(v: Value, msg: str = "") -> int:
     match v:
         case IntVal(n): return n
@@ -332,31 +366,51 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             ModOp.ModXor: lambda a, b: a ^ b,
         }[op]
 
-    def lval_val(y: Obj, env: Env) -> tuple[Locs, Value]:
+    def lval_val_in(st_: State, y: Obj, env: Env) -> tuple[Locs, Value]:
+        """l 値のロケーションと値を返す。ストアを引数に取るのは、書き込んだ後の
+        状態でもう一度解決して「l 値が自分の書き込みで動いていないか」を見るため。"""
         match y:
             case VarArray(x, None):
                 lv = lookup_envs(x, env)
-                return lv, lookup_st(lv, st)
+                return lv, lookup_st(lv, st_)
             case VarArray(x, idx):
-                x_index = match_int(eval_exp(idx, env, st), "array index must be an integer")
-                locsvecx = match_locsvec(lookup_val(x, env, st))
+                x_index = match_int(eval_exp(idx, env, st_), "array index must be an integer")
+                locsvecx = match_locsvec(lookup_val(x, env, st_))
                 if x_index >= 0 and x_index < len(locsvecx):
                     locsx = x_index + locsvecx[0]
                 else:
                     raise RuntimeError(
                         pretty_stms([stm], 0) + f"\nERROR:Array index {x}[{x_index}] is out of bounds in this statement")
-                return locsx, lookup_st(locsx, st)
+                return locsx, lookup_st(locsx, st_)
             case InstVar(x, xi):
-                _, locs = lval_val(x, env)
+                _, locs = lval_val_in(st_, x, env)
                 match locs:
                     case LocsVal(l):
-                        match lookup_st(l, st):
+                        match lookup_st(l, st_):
                             case ObjVal(_, env2):
-                                return lval_val(xi, env2)
+                                return lval_val_in(st_, xi, env2)
                             case _:
                                 raise RuntimeError("ERROR:expected object value for instance variable access")
                     case _:
                         raise RuntimeError("ERROR:expected location value for instance variable access")
+
+    def lval_val(y: Obj, env: Env) -> tuple[Locs, Value]:
+        return lval_val_in(st, y, env)
+
+    def check_locs_stable(st_: State, targets: list[tuple[Obj, Locs]]) -> None:
+        """書き込みで l 値のロケーションが動いていないことを確認する。
+
+        coq/roopl.v の E_aassign / E_aswap の前提「eval ei b = eval ei a」
+        （添字が自分の書き込みで変わらない）にあたる。添字を含まない l 値は
+        動きようがないので調べない。"""
+        for y, lv in targets:
+            if obj_has_index(y):
+                lv2, _ = lval_val_in(st_, y, env)
+                if lv2 != lv:
+                    raise StmError(
+                        pretty_stms([stm], 0)
+                        + "\nERROR:The array index of this statement must not be"
+                          " changed by the statement itself")
 
     def mycall(locs: Locs, locs2: Locs, invert_flag: int) -> State:
         nonlocal st
@@ -413,13 +467,33 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 v2 = bin_op(f_modop(op), vx, v)
             except RuntimeError:
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:Integer value expected in this statement")
-            return ext_st(st, lvx, v2)
+            st2 = ext_st(st, lvx, v2)
+            # 可逆性の副条件。整数変数への代入は構文的に（coq/roopl.v の E_assign の
+            # x ∉ fv(e)）、フィールドと配列要素は意味的に（E_fassign / E_aassign の
+            # eval e b = eval e a）検査する。後者は別名を構文で近似せずに済む
+            match y:
+                case VarArray(x, None):
+                    if x in free_vars(e):
+                        raise StmError(
+                            pretty_stms([stm], 0)
+                            + f"\nERROR:Variable {x} must not occur on both sides"
+                              " of this assignment")
+                case _:
+                    if eval_exp(e, env, st2) != v:
+                        raise StmError(
+                            pretty_stms([stm], 0)
+                            + "\nERROR:The right-hand side of this assignment must not be"
+                              " changed by the assignment itself")
+            check_locs_stable(st2, [(y, lvx)])
+            return st2
 
         case Swap(y1, y2):
             lv1, v1 = lval_val(y1, env)
             lv2, v2 = lval_val(y2, env)
             st2 = ext_st(st, lv1, v2)
-            return ext_st(st2, lv2, v1)
+            st3 = ext_st(st2, lv2, v1)
+            check_locs_stable(st3, [(y1, lv1), (y2, lv2)])
+            return st3
 
         case Loop(e1, stml1, stml2, e2):
             def eval_loop(st_):
@@ -596,6 +670,13 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             raise StmError(pretty_stms([stm], 0) + "\nERROR:both variable's reference is not same in this statement")
 
         case LocalBlock(dt, name, e1, body, e2):
+            # 入口・出口の式が自分自身を参照すると表明が恒真になり、逆向きの実行が
+            # 値を復元できない（coq/roopl.v の E_local の x ∉ fv(e1), x ∉ fv(e2)）
+            if name in free_vars(e1) or name in free_vars(e2):
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + f"\nERROR:Local variable {name} must not occur in its own"
+                      " local/delocal expression")
             v1 = eval_exp(e1, env, st)
             l = max_locs(st) + 1
             env2 = ext_envs(env, name, l)
