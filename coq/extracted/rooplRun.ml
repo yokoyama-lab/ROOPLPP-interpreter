@@ -1200,12 +1200,16 @@ let rec run fuel g s a nf =
             then (match run k g s2 a nf with
                   | Some p ->
                     let b,nf1 = p in
-                    if Z.eqb (eval e2 b) Z0 then Some (b,nf1) else None
+                    if negb (inb g b e2)
+                    then None
+                    else if Z.eqb (eval e2 b) Z0 then Some (b,nf1) else None
                   | None -> None)
             else (match run k g s1 a nf with
                   | Some p ->
                     let b,nf1 = p in
-                    if Z.eqb (eval e2 b) Z0 then None else Some (b,nf1)
+                    if negb (inb g b e2)
+                    then None
+                    else if Z.eqb (eval e2 b) Z0 then None else Some (b,nf1)
                   | None -> None)
      | Sloop (e1, s1, s2, e2) ->
        if negb (inb g a e1)
@@ -1225,9 +1229,11 @@ let rec run fuel g s a nf =
                  else (match run k g s' (setv a x (eval e1 a)) nf with
                        | Some p ->
                          let b,nf1 = p in
-                         if Z.eqb (b.vs x) (eval e2 b)
-                         then Some ((setv b x (a.vs x)),nf1)
-                         else None
+                         if negb (inb g b e2)
+                         then None
+                         else if Z.eqb (b.vs x) (eval e2 b)
+                              then Some ((setv b x (a.vs x)),nf1)
+                              else None
                        | None -> None)
      | Sobj (cl, x, s') ->
        (match a.os x with
@@ -1331,18 +1337,22 @@ and run_loop fuel g e1 s1 s2 e2 a nf =
   match fuel with
   | O -> None
   | S k ->
-    if Z.eqb (eval e2 a) Z0
-    then (match run k g s2 a nf with
-          | Some p ->
-            let b,nf1 = p in
-            if Z.eqb (eval e1 b) Z0
-            then (match run k g s1 b nf1 with
-                  | Some p0 ->
-                    let c,nf2 = p0 in run_loop k g e1 s1 s2 e2 c nf2
-                  | None -> None)
-            else None
-          | None -> None)
-    else Some (a,nf)
+    if negb (inb g a e2)
+    then None
+    else if Z.eqb (eval e2 a) Z0
+         then (match run k g s2 a nf with
+               | Some p ->
+                 let b,nf1 = p in
+                 if negb (inb g b e1)
+                 then None
+                 else if Z.eqb (eval e1 b) Z0
+                      then (match run k g s1 b nf1 with
+                            | Some p0 ->
+                              let c,nf2 = p0 in run_loop k g e1 s1 s2 e2 c nf2
+                            | None -> None)
+                      else None
+               | None -> None)
+         else Some (a,nf)
 
 (** val for_up : id -> exp -> exp -> stm -> stm **)
 

@@ -649,6 +649,29 @@ let p_binops =
 let p_div_zero = R.Sassign (v 0, R.MAdd, bop R.Odiv (c 1) (R.Var (v 1)))
 let p_mod_zero = R.Sassign (v 0, R.MAdd, bop R.Omod (c 1) (R.Var (v 1)))
 
+(* ---- 出口の表明の中の式 ----------------------------------------------
+
+   入口の表明だけでなく、条件分岐・ループ・局所ブロックの**出口**の表明の中の
+   式も run が検査する。実装は表明を評価するときに同じところで落ちる。 *)
+
+(* 出口の表明がゼロ除算する条件分岐（v1 = 0 のまま） *)
+let p_if_exit_div_zero =
+  R.Sif (R.Bop (R.Oeq, var 0, c 0),
+         R.Sassign (v 2, R.MAdd, c 1),
+         R.Sassign (v 2, R.MAdd, c 2),
+         R.Bop (R.Oeq, bop R.Odiv (c 1) (R.Var (v 1)), c 1))
+
+(* 出口の表明が範囲外を読むループ *)
+let p_loop_exit_oob =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sloop (R.Bop (R.Oeq, var 0, c 0), R.Sskip,
+                   R.Sassign (v 0, R.MAdd, c 1),
+                   R.Bop (R.Oeq, R.Idx (arr, c 10), c 1)))
+
+(* 出口の表明がゼロ除算する局所ブロック *)
+let p_local_exit_div_zero =
+  R.Slocal (v 3, c 3, R.Sskip, bop R.Odiv (c 3) (R.Var (v 1)))
+
 (* ---- 自己代入（E_assign の x ∉ fv(e)、E_aassign の eval e b = eval e a）--
 
    x += x は逆向きに戻せない。形式側には導出が無く（ex_self_assign_stuck）、
@@ -856,6 +879,19 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       agree "every binary operator" p_binops [ 0; 1; 2; 3 ];
       agree "division by zero is rejected" p_div_zero [ 0; 1 ];
       agree "modulo by zero is rejected" p_mod_zero [ 0; 1 ];
+
+      (* 出口の表明の中の式も検査する（入口だけでは実装と食い違う） *)
+      agree "a conditional whose exit assertion divides by zero is rejected"
+        p_if_exit_div_zero [ 0; 1; 2 ];
+      agree "a loop whose exit assertion reads out of bounds is rejected"
+        p_loop_exit_oob [ 0 ];
+      agree "a local block whose exit assertion divides by zero is rejected"
+        p_local_exit_div_zero [ 0; 1 ];
+
+      "the exit assertions are checked, not just the entry ones" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_if_exit_div_zero [ 0; 1; 2 ]);
+        assert_equal ~printer None (run_verified p_loop_exit_oob [ 0 ]);
+        assert_equal ~printer None (run_verified p_local_exit_div_zero [ 0; 1 ]));
 
       "the operators compute the same numbers on both sides" >:: (fun _ ->
         assert_equal ~printer (Some [ 42; 0; 3; 2 ]) (run_verified p_binops [ 0; 1; 2; 3 ]);

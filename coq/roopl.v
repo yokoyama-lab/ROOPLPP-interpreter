@@ -1593,11 +1593,15 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         if negb (inb G a e1) then None else
         if Z.eqb (eval e1 a) 0
         then match run k G s2 a nf with
-             | Some (b, nf1) => if Z.eqb (eval e2 b) 0 then Some (b, nf1) else None
+             | Some (b, nf1) =>
+                 if negb (inb G b e2) then None
+                 else if Z.eqb (eval e2 b) 0 then Some (b, nf1) else None
              | None => None
              end
         else match run k G s1 a nf with
-             | Some (b, nf1) => if Z.eqb (eval e2 b) 0 then None else Some (b, nf1)
+             | Some (b, nf1) =>
+                 if negb (inb G b e2) then None
+                 else if Z.eqb (eval e2 b) 0 then None else Some (b, nf1)
              | None => None
              end
     | Sloop e1 s1 s2 e2 =>
@@ -1613,7 +1617,8 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         else if negb (inb G a e1) then None
         else match run k G s' (setv a x (eval e1 a)) nf with
              | Some (b, nf1) =>
-                 if Z.eqb (vs b x) (eval e2 b)
+                 if negb (inb G b e2) then None
+                 else if Z.eqb (vs b x) (eval e2 b)
                  then Some (setv b x (vs a x), nf1)
                  else None
              | None => None
@@ -1715,10 +1720,12 @@ with run_loop (fuel : nat) (G : menv) (e1 : exp) (s1 s2 : stm) (e2 : exp)
   match fuel with
   | O => None
   | S k =>
+    if negb (inb G a e2) then None else
     if Z.eqb (eval e2 a) 0
     then match run k G s2 a nf with
          | Some (b, nf1) =>
-             if Z.eqb (eval e1 b) 0
+             if negb (inb G b e1) then None
+             else if Z.eqb (eval e1 b) 0
              then match run k G s1 b nf1 with
                   | Some (c, nf2) => run_loop k G e1 s1 s2 e2 c nf2
                   | None => None
@@ -1793,9 +1800,11 @@ Proof.
         destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (Z.eqb (eval e1 a) 0) eqn:E1.
         -- destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
+           destruct (negb (inb G m e2)) eqn:Hin2; try discriminate.
            destruct (Z.eqb (eval e2 m) 0); try discriminate.
            injection H as Heq Hn; subst. eapply IHrun; eassumption.
         -- destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; try discriminate.
+           destruct (negb (inb G m e2)) eqn:Hin2; try discriminate.
            destruct (Z.eqb (eval e2 m) 0); try discriminate.
            injection H as Heq Hn; subst. eapply IHrun; eassumption.
       * (* loop *)
@@ -1809,6 +1818,7 @@ Proof.
         destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
           try discriminate.
+        destruct (negb (inb G m e2)) eqn:Hin2; try discriminate.
         destruct (Z.eqb (vs m x) (eval e2 m)); try discriminate.
         injection H as Heq Hn; subst.
         apply above_setv. eapply IHrun; [ eassumption | now apply above_setv ].
@@ -1854,8 +1864,10 @@ Proof.
         destruct (andb _ _) eqn:Hchk; try discriminate.
         injection H as Heq Hn; subst. eapply IHrun; eassumption.
     + intros e1 s1 s2 e2 a nf b nf' H Ha; simpl in H.
+      destruct (negb (inb G a e2)) eqn:Hin2; try discriminate.
       destruct (Z.eqb (eval e2 a) 0) eqn:E2.
       * destruct (run k G s2 a nf) as [ [ x1 n1 ] | ] eqn:R2; try discriminate.
+        destruct (negb (inb G x1 e1)) eqn:Hin1; try discriminate.
         destruct (Z.eqb (eval e1 x1) 0) eqn:E1; try discriminate.
         destruct (run k G s1 x1 n1) as [ [ x2 n2 ] | ] eqn:R1; try discriminate.
         eapply IHloop; [ eassumption | ].
@@ -1955,11 +1967,13 @@ Proof.
         destruct (Z.eqb (eval e1 a) 0) eqn:E1.
         -- apply Z.eqb_eq in E1.
            destruct (run k G s2 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
+           destruct (negb (inb G m e2)) eqn:Hin2; [ discriminate | ].
            destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ | discriminate ].
            injection H as Heq Hn; subst b. apply Z.eqb_eq in E2.
            apply E_if_f; [ assumption | eapply IHrun; eassumption | assumption ].
         -- apply Z.eqb_neq in E1.
            destruct (run k G s1 a nf) as [ [ m n1 ] | ] eqn:R; [ | discriminate ].
+           destruct (negb (inb G m e2)) eqn:Hin2; [ discriminate | ].
            destruct (Z.eqb (eval e2 m) 0) eqn:E2; [ discriminate | ].
            injection H as Heq Hn; subst b. apply Z.eqb_neq in E2.
            apply E_if_t; [ assumption | eapply IHrun; eassumption | assumption ].
@@ -1977,6 +1991,7 @@ Proof.
         destruct (negb (inb G a e1)) eqn:Hin; try discriminate.
         destruct (run k G s (setv a x (eval e1 a)) nf) as [ [ m n1 ] | ] eqn:R;
           [ | discriminate ].
+        destruct (negb (inb G m e2)) eqn:Hin2; [ discriminate | ].
         destruct (Z.eqb (vs m x) (eval e2 m)) eqn:Ex; [ | discriminate ].
         injection H as Heq Hn; subst b. apply Z.eqb_eq in Ex.
         eapply E_local; try eassumption.
@@ -2069,9 +2084,11 @@ Proof.
           [ eassumption | assumption | eapply dispatch_fn_sound; eassumption
           | eapply IHrun; eassumption | assumption | assumption | assumption ].
     + intros e1 s1 s2 e2 a nf b nf' H Ha; simpl in H.
+      destruct (negb (inb G a e2)) eqn:Hin2; [ discriminate | ].
       destruct (Z.eqb (eval e2 a) 0) eqn:E2.
       * apply Z.eqb_eq in E2.
         destruct (run k G s2 a nf) as [ [ x1 n1 ] | ] eqn:R2; [ | discriminate ].
+        destruct (negb (inb G x1 e1)) eqn:Hin1; [ discriminate | ].
         destruct (Z.eqb (eval e1 x1) 0) eqn:E1; [ | discriminate ].
         apply Z.eqb_eq in E1.
         destruct (run k G s1 x1 n1) as [ [ x2 n2 ] | ] eqn:R1; [ | discriminate ].
