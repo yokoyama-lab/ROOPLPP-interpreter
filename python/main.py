@@ -19,12 +19,19 @@ from rooplpp.printer import print_result
 
 
 def _parse_error_position(err: ParseError) -> tuple[int, int, int, int]:
-    """ParseError から (行, 列, 終了行, 終了列) を取り出す。"""
+    """ParseError から (行, 列, 終了行, 終了列) を取り出す。
+
+    **列は 0 起点に直す。** 字句解析器の列は 1 起点だが、診断の規約は 0 起点
+    （parser.py の Pos と同じ。OCaml 側は pos_cnum - pos_bol）。ここが素通しに
+    なっていて、構文エラーのキャレットだけが OCaml と 1 桁ずれていた。
+    """
     tok = err.token
     line = getattr(tok, "line", 0) or 0
-    col = getattr(tok, "col", 0) or 0
-    text = str(getattr(tok, "value", "") or "")
-    return line, col, line, col + max(1, len(text))
+    col = max((getattr(tok, "col", 0) or 0) - 1, 0)
+    # 幅はトークン自身が持っている（value は記号のトークンでは None なので使えない）。
+    # 幅の無いトークン（EOF）は OCaml 側も開始＝終了になる
+    end_col = max((getattr(tok, "end_col", 0) or 0) - 1, col)
+    return line, col, line, end_col
 
 
 def main() -> None:

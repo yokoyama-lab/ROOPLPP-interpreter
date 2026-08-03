@@ -63,6 +63,10 @@ let runtime_error =
 
 let parse_error = "class Program\n int x\n method main()\n  x = 1\n"
 
+(* 字句解析器が知らない文字。素の Failure で落ちていて、修正ヒントが
+   「余分な ; はエラー」と言っているのにそこへ到達できていなかった *)
+let lex_error = "class Program\n int x\n method main()\n  x += 1;\n  x -= 1\n"
+
 let suite = "test suite for the rplpp command" >::: [
 
       "a normal run exits 0 and prints the result" >:: (fun _ ->
@@ -103,6 +107,16 @@ let suite = "test suite for the rplpp command" >::: [
         assert_has "^" out;
         (* ocamlyacc 既定の裸のメッセージは出さない *)
         assert_not_has "syntax error" out);
+
+      "an unknown character is reported like any other parse error" >:: (fun _ ->
+        let code, out = run lex_error in
+        assert_equal ~printer:string_of_int 1 code;
+        assert_has "ROOPL++ parse error" out;
+        assert_has "line 4, column" out;
+        assert_has "^" out;
+        (* 素の例外で落ちない *)
+        assert_not_has "Fatal error" out;
+        assert_not_has "unknown token" out);
 
       "-inverse prints a program that parses back" >:: (fun _ ->
         let code, out = run ~args:[ "-inverse" ] dirty in

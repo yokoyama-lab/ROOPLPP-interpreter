@@ -161,11 +161,10 @@ rule token = parse
 
   | _
     {
-      let message = Printf.sprintf
-        "unknown token %s near characters %d-%d"
-        (Lexing.lexeme lexbuf)
-        (Lexing.lexeme_start lexbuf)
-        (Lexing.lexeme_end lexbuf)
-      in
-      failwith message
+      (* 知らない文字。素の Failure で落とすと診断に載らないので、構文エラーと
+         同じ経路（Util.Parse_error → diagnostics.ml）に流す。修正のヒントが
+         「余分な ; や , は構文エラー」と言っているのに、そこへ到達できて
+         いなかった *)
+      raise (Util.Parse_error (Lexing.lexeme_start_p lexbuf,
+                               Lexing.lexeme_end_p lexbuf))
     }

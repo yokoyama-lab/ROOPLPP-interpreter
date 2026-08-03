@@ -42,6 +42,8 @@ class TT(Enum):
     COPY = auto(); UNCOPY = auto()
     SHOW = auto(); PRINT = auto()
     EOF = auto()
+    # 字句解析器が知らない文字（エラーの位置を運ぶためだけに使う）
+    UNKNOWN = auto()
 
 
 KEYWORDS = {
@@ -89,6 +91,20 @@ class Token:
     col: int
     # このトークンの次の桁（1 起点。位置の範囲を作るのに使う）
     end_col: int = 0
+
+
+class ParseError(Exception):
+    """構文・字句のエラー。落ちた位置のトークンを運ぶ。
+
+    字句解析器も同じ例外を投げる（知らない文字を素の SyntaxError で落とすと、
+    main.py のキャレットつき診断に載らないため）。parser.py が再輸出している
+    ので `from rooplpp.parser import ParseError` も従来どおり使える。
+    """
+
+    def __init__(self, token: "Token", msg: str = ""):
+        self.token = token
+        super().__init__(f"Parse error at {token.line}.{token.col}" +
+                         (f": {msg}" if msg else ""))
 
 
 def _unescape(s: str) -> str:
@@ -186,8 +202,10 @@ def tokenize(source: str) -> list[Token]:
             i += 1
             continue
 
-        raise SyntaxError(
-            f"unknown token '{source[i]}' at line {line}, column {col}")
+        # 知らない文字。素の例外で落とさず構文エラーと同じ経路に載せる
+        # （「余分な ; はエラー」という修正ヒントに到達できていなかった）
+        raise ParseError(Token(TT.UNKNOWN, source[i], line, col, col + 1),
+                         f"unknown character {source[i]!r}")
 
     eof_col = i - line_start + 1
     tokens.append(Token(TT.EOF, None, line, eof_col, eof_col))

@@ -3,16 +3,13 @@
 Uses Pratt parsing for expressions to handle operator precedence.
 """
 from __future__ import annotations
-from .lexer import Token, TT
+from .lexer import ParseError, Token, TT
 from .syntax import *
 import sys
 
 
-class ParseError(Exception):
-    def __init__(self, token: Token, msg: str = ""):
-        self.token = token
-        super().__init__(f"Parse error at {token.line}.{token.col}" +
-                         (f": {msg}" if msg else ""))
+# ParseError の実体は lexer.py にある（字句解析器も同じ例外を投げるため）。
+# ここから import している呼び出し元のために名前を残す。
 
 
 class Parser:

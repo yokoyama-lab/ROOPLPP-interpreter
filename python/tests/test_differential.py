@@ -25,6 +25,38 @@ def test_same_output_as_ocaml(name: str, ocaml_bin: pathlib.Path) -> None:
     assert p.returncode == o.returncode, f"{name}: exit code differs"
 
 
+# 構文エラーの経路は example/ が全部パースできるので上のテストでは一度も
+# 通らない。列の起点が両実装でずれていた（字句解析器は 1 起点、OCaml の
+# pos_cnum - pos_bol は 0 起点）ので、ここで固定する。
+SYNTAX_ERRORS = [
+    ("stray equals sign",
+     "class Program\n    int x\n    method main()\n        x += = 1\n"),
+    ("assignment without an operator",
+     "class Program\n    int x\n    method main()\n        x = 1\n"),
+    ("unclosed if",
+     "class Program\n    int x\n    method main()\n        if x = 0 then\n"
+     "            x += 1\n"),
+    # 字句解析器が知らない文字。修正のヒントが「余分な ; はエラー」と言って
+    # いるのに、両実装とも素の例外で落ちていた
+    ("stray semicolon",
+     "class Program\n    int x\n    method main()\n        x += 1;\n        x -= 1\n"),
+]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("name,src", SYNTAX_ERRORS,
+                         ids=[c[0] for c in SYNTAX_ERRORS])
+def test_same_parse_error_as_ocaml(name: str, src: str,
+                                   ocaml_bin: pathlib.Path,
+                                   tmp_path: pathlib.Path) -> None:
+    path = tmp_path / "syntax_error.rplpp"
+    path.write_text(src)
+    o = run_ocaml(ocaml_bin, [str(path)])
+    p = run_python([str(path)])
+    assert p.stdout == o.stdout, f"{name}: stdout differs"
+    assert p.returncode == o.returncode, f"{name}: exit code differs"
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("name", ["fib.rplpp", "algo_zagier.rplpp", "algo_bwt.rplpp"])
 def test_same_inverse_as_ocaml(name: str, ocaml_bin: pathlib.Path) -> None:
