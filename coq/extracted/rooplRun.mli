@@ -5,6 +5,10 @@ type nat =
 | O
 | S of nat
 
+val fst : ('a1*'a2) -> 'a1
+
+val snd : ('a1*'a2) -> 'a2
+
 val length : 'a1 list -> nat
 
 val app : 'a1 list -> 'a1 list -> 'a1 list
@@ -59,6 +63,21 @@ module Pos :
 
   val pred_N : positive -> n
 
+  type mask =
+  | IsNul
+  | IsPos of positive
+  | IsNeg
+
+  val succ_double_mask : mask -> mask
+
+  val double_mask : mask -> mask
+
+  val double_pred_mask : positive -> mask
+
+  val sub_mask : positive -> positive -> mask
+
+  val sub_mask_carry : positive -> positive -> mask
+
   val mul : positive -> positive -> positive
 
   val compare_cont : comparison -> positive -> positive -> comparison
@@ -71,6 +90,12 @@ module Pos :
 
   val coq_Ndouble : n -> n
 
+  val coq_lor : positive -> positive -> positive
+
+  val coq_land : positive -> positive -> n
+
+  val ldiff : positive -> positive -> n
+
   val coq_lxor : positive -> positive -> n
 
   val iter_op : ('a1 -> 'a1 -> 'a1) -> positive -> 'a1 -> 'a1
@@ -80,7 +105,25 @@ module Pos :
 
 module N :
  sig
+  val succ_double : n -> n
+
+  val double : n -> n
+
   val succ_pos : n -> positive
+
+  val sub : n -> n -> n
+
+  val compare : n -> n -> comparison
+
+  val leb : n -> n -> bool
+
+  val pos_div_eucl : positive -> n -> n*n
+
+  val coq_lor : n -> n -> n
+
+  val coq_land : n -> n -> n
+
+  val ldiff : n -> n -> n
 
   val coq_lxor : n -> n -> n
  end
@@ -105,6 +148,8 @@ module Z :
 
   val compare : z -> z -> comparison
 
+  val leb : z -> z -> bool
+
   val ltb : z -> z -> bool
 
   val eqb : z -> z -> bool
@@ -112,6 +157,16 @@ module Z :
   val to_nat : z -> nat
 
   val of_N : n -> z
+
+  val quotrem : z -> z -> z*z
+
+  val quot : z -> z -> z
+
+  val rem : z -> z -> z
+
+  val coq_lor : z -> z -> z
+
+  val coq_land : z -> z -> z
 
   val coq_lxor : z -> z -> z
  end
@@ -150,9 +205,20 @@ val dealloc : state -> id -> state
 type binop =
 | Oadd
 | Osub
+| Oxor
 | Omul
-| Oeq
+| Odiv
+| Omod
+| Oband
+| Obor
+| Oand
+| Oor
 | Olt
+| Ogt
+| Oeq
+| One
+| Ole
+| Oge
 
 type exp =
 | Cst of z
@@ -163,7 +229,11 @@ type exp =
 
 val bval : bool -> z
 
+val ztrue : z -> bool
+
 val eval_binop : binop -> z -> z -> z
+
+val divb : binop -> z -> bool
 
 val rdf : state -> id -> field -> z
 
@@ -241,6 +311,10 @@ val oloc_eqb : loc option -> loc option -> bool
 val inb : menv -> state -> exp -> bool
 
 val inb2 : menv -> state -> exp -> exp -> bool
+
+val inbw : menv -> state -> exp -> exp -> bool
+
+val inbw2 : menv -> state -> exp -> exp -> bool
 
 val run : nat -> menv -> stm -> state -> nat -> (state*nat) option
 

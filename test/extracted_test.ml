@@ -60,8 +60,11 @@ let rec exp_of_formal (e : R.exp) : exp =
   | R.Var x -> Var (name_of_id x)
   | R.Bop (o, e1, e2) ->
      let op = match o with
-       | R.Oadd -> Add | R.Osub -> Sub | R.Omul -> Mul
-       | R.Oeq -> Eq | R.Olt -> Lt
+       | R.Oadd -> Add | R.Osub -> Sub | R.Oxor -> Xor | R.Omul -> Mul
+       | R.Odiv -> Div | R.Omod -> Mod | R.Oband -> Band | R.Obor -> Bor
+       | R.Oand -> And | R.Oor -> Or
+       | R.Olt -> Lt | R.Ogt -> Gt | R.Oeq -> Eq | R.One -> Ne
+       | R.Ole -> Le | R.Oge -> Ge
      in
      Binary (op, exp_of_formal e1, exp_of_formal e2)
   | R.Fld (x, f) -> Dot (Var (name_of_id x), Var (field_name f))
@@ -263,6 +266,13 @@ let v n = nat_of_int n
 let c n = R.Cst (z_of_int n)
 let var n = R.Var (v n)
 
+let bop o e1 e2 = R.Bop (o, e1, e2)
+
+let rec seqs = function
+  | [] -> R.Sskip
+  | [ s ] -> s
+  | s :: tl -> R.Sseq (s, seqs tl)
+
 (* v0 += 3 ; v1 += v0 * 2 *)
 let p_arith =
   R.Sseq (R.Sassign (v 0, R.MAdd, c 3),
@@ -310,6 +320,14 @@ let p_local_bad =
   R.Slocal (v 2, c 0,
             R.Sseq (R.Sassign (v 2, R.MAdd, c 3), R.Sassign (v 0, R.MAdd, var 2)),
             c 0)
+
+(* 局所ブロックの入口・出口の式が自分自身を参照する（E_local の x ∉ fv(e)）。
+   表明が恒真になるので逆向きの実行が値を復元できない *)
+let p_local_self_exit =
+  R.Slocal (v 2, c 0, R.Sassign (v 2, R.MAdd, c 3), R.Var (v 2))
+
+let p_local_self_entry =
+  R.Slocal (v 2, R.Var (v 2), R.Sassign (v 0, R.MAdd, c 1), c 0)
 
 (* 入れ子のループと局所ブロック: 三角数 *)
 let p_nested =
@@ -589,6 +607,98 @@ let p_delete_dirty =
           R.Sseq (R.Sfassign (v 5, nat_of_int 0, R.MAdd, c 3),
                   R.Sdelete (nat_of_int 0, v 5)))
 
+(* ---- 二項演算 --------------------------------------------------------
+
+   形式側は lib/syntax.ml の binOp 16 個をすべて持つ。除算と剰余は OCaml と
+   同じく 0 方向へ切り捨てる（Z.quot / Z.rem）ので、負の被除数でも一致する
+   はずである。 *)
+
+let p_binops =
+  seqs [ R.Sassign (v 0, R.MAdd, bop R.Oadd (c 7) (c 2));    (*  9 *)
+         R.Sassign (v 0, R.MAdd, bop R.Osub (c 7) (c 2));    (*  5 *)
+         R.Sassign (v 0, R.MAdd, bop R.Omul (c 7) (c 2));    (* 14 *)
+         R.Sassign (v 0, R.MAdd, bop R.Oxor (c 6) (c 3));    (*  5 *)
+         R.Sassign (v 0, R.MAdd, bop R.Oband (c 6) (c 3));   (*  2 *)
+         R.Sassign (v 0, R.MAdd, bop R.Obor (c 6) (c 3));    (*  7 *)
+         (* 負の被除数：切り捨ての向きが Coq の Z.div/Z.modulo とは違う *)
+         R.Sassign (v 1, R.MAdd, bop R.Odiv (c 7) (c 2));    (*  3 *)
+         R.Sassign (v 1, R.MAdd, bop R.Omod (c 7) (c 2));    (*  1 *)
+         R.Sassign (v 1, R.MAdd, bop R.Odiv (c (-7)) (c 2)); (* -3 *)
+         R.Sassign (v 1, R.MAdd, bop R.Omod (c (-7)) (c 2)); (* -1 *)
+         R.Sassign (v 2, R.MAdd, bop R.Olt (c 3) (c 2));     (*  0 *)
+         R.Sassign (v 2, R.MAdd, bop R.Ogt (c 3) (c 2));     (*  1 *)
+         R.Sassign (v 2, R.MAdd, bop R.Oeq (c 3) (c 3));     (*  1 *)
+         R.Sassign (v 2, R.MAdd, bop R.One (c 3) (c 3));     (*  0 *)
+         R.Sassign (v 2, R.MAdd, bop R.Ole (c 3) (c 3));     (*  1 *)
+         R.Sassign (v 2, R.MAdd, bop R.Oge (c 2) (c 3));     (*  0 *)
+         R.Sassign (v 3, R.MAdd, bop R.Oand (c 0) (c 5));    (*  0 *)
+         R.Sassign (v 3, R.MAdd, bop R.Oand (c 4) (c 5));    (*  1 *)
+         R.Sassign (v 3, R.MAdd, bop R.Oor (c 0) (c 0));     (*  0 *)
+         R.Sassign (v 3, R.MAdd, bop R.Oor (c 0) (c 5)) ]    (*  1 *)
+
+(* ゼロ除算。意味論 exec は Z.quot a 0 = 0 を許すが、run は inb で塞いである
+   （実装は「division by zero」で落ちる） *)
+let p_div_zero = R.Sassign (v 0, R.MAdd, bop R.Odiv (c 1) (R.Var (v 1)))
+let p_mod_zero = R.Sassign (v 0, R.MAdd, bop R.Omod (c 1) (R.Var (v 1)))
+
+(* ---- 自己代入（E_assign の x ∉ fv(e)、E_aassign の eval e b = eval e a）--
+
+   x += x は逆向きに戻せない。形式側には導出が無く（ex_self_assign_stuck）、
+   実装も 2026-08-03 から拒否する。 *)
+
+let p_self_assign =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 3), R.Sassign (v 0, R.MAdd, R.Var (v 0)))
+
+let p_self_sub =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 3), R.Sassign (v 0, R.MSub, R.Var (v 0)))
+
+(* 配列版：書き込みが右辺の値を変えてしまう *)
+let p_array_self =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 0, R.MAdd, c 5),
+                  R.Saassign (arr, c 0, R.MAdd, R.Idx (arr, c 0))))
+
+(* 添字が自分の書き込みで動く入れ替え *)
+let p_swap_moves_index =
+  R.Sobj (nat_of_int 1, arr,
+          R.Sseq (R.Saassign (arr, c 0, R.MAdd, c 1),
+                  R.Saswap (arr, R.Idx (arr, c 0), arr, c 0)))
+
+(* ---- 負の添字 --------------------------------------------------------
+   意味論は Z.to_nat で 0 に丸めるが、run は実装に合わせて拒否する（inbw）。 *)
+
+let p_array_write_negative =
+  R.Sobj (nat_of_int 1, arr, R.Saassign (arr, c (-1), R.MAdd, c 1))
+
+let p_array_read_negative =
+  R.Sobj (nat_of_int 1, arr, R.Sassign (v 0, R.MAdd, R.Idx (arr, c (-1))))
+
+(* ---- copy / uncopy ---------------------------------------------------
+   参照の複製。複製先が nil であること・取り消しの両者が同じ参照であることが
+   副条件（どちらも欠けると可逆でなくなる）。 *)
+
+(* copy した別名を通してフィールドを書き、本体から読む *)
+let p_copy_uncopy =
+  R.Sobj (nat_of_int 0, v 5,
+          seqs [ R.Scopy (v 5, v 6);
+                 R.Sfassign (v 6, nat_of_int 0, R.MAdd, c 3);
+                 R.Sassign (v 0, R.MAdd, R.Fld (v 5, nat_of_int 0));
+                 R.Sfassign (v 6, nat_of_int 0, R.MSub, c 3);
+                 R.Suncopy (v 5, v 6) ])
+
+(* 複製先が nil でない（両方で落ちるはず） *)
+let p_copy_not_nil =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sobj (nat_of_int 0, v 6, R.Scopy (v 5, v 6)))
+
+(* 同じ変数への複製（別名禁止の規則そのもの） *)
+let p_copy_self = R.Sobj (nat_of_int 0, v 5, R.Scopy (v 5, v 5))
+
+(* uncopy の両者が別の参照（両方で落ちるはず） *)
+let p_uncopy_mismatch =
+  R.Sobj (nat_of_int 0, v 5,
+          R.Sobj (nat_of_int 0, v 6, R.Suncopy (v 5, v 6)))
+
 let suite = "test suite for the extracted verified interpreter" >::: [
       agree "arithmetic" p_arith [ 0; 1 ];
       agree "swap" p_swap [ 0; 1 ];
@@ -599,6 +709,14 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       agree "loop with a false entry assertion" p_loop_bad [ 0 ];
       agree "local block" p_local [ 0 ];
       agree "local block with a wrong delocal value" p_local_bad [ 0 ];
+      agree "a delocal expression mentioning its own variable is rejected"
+        p_local_self_exit [ 0 ];
+      agree "a local expression mentioning its own variable is rejected"
+        p_local_self_entry [ 0 ];
+
+      "both engines reject a self-referential local block" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_local_self_exit [ 0 ]);
+        assert_equal ~printer None (run_verified p_local_self_entry [ 0 ]));
       agree "nested loop and local block" p_nested [ 0 ];
       agree ~env:menv_bump ~methods:methods_bump "call" p_call [ 0 ];
       agree ~env:menv_bump ~methods:methods_bump "call then uncall" p_call_uncall [ 0 ];
@@ -721,6 +839,53 @@ let suite = "test suite for the extracted verified interpreter" >::: [
           (run_verified ~env:menv_dispatch p_dispatch_inherited [ 0 ]);
         assert_equal ~printer (Some [ 0 ])
           (run_verified ~env:menv_dispatch p_dispatch_uncall [ 0 ]));
+
+      (* 二項演算 16 個 *)
+      agree "every binary operator" p_binops [ 0; 1; 2; 3 ];
+      agree "division by zero is rejected" p_div_zero [ 0; 1 ];
+      agree "modulo by zero is rejected" p_mod_zero [ 0; 1 ];
+
+      "the operators compute the same numbers on both sides" >:: (fun _ ->
+        assert_equal ~printer (Some [ 42; 0; 3; 2 ]) (run_verified p_binops [ 0; 1; 2; 3 ]);
+        assert_equal ~printer (Some [ 42; 0; 3; 2 ])
+          (run_interpreter p_binops [ 0; 1; 2; 3 ]));
+
+      (* 自己代入（可逆性の副条件） *)
+      agree "an assignment whose target occurs on the right is rejected"
+        p_self_assign [ 0 ];
+      agree "a subtraction whose target occurs on the right is rejected"
+        p_self_sub [ 0 ];
+      agree "an array assignment that reads the cell it writes is rejected"
+        p_array_self [ 0 ];
+      agree "a swap that moves its own index is rejected" p_swap_moves_index [ 0 ];
+
+      "both engines reject self-assignment for the same reason" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_self_assign [ 0 ]);
+        (match interpreter_error (stms_of_formal p_self_assign) [ 0 ] with
+         | None -> assert_failure "the self-assignment should have been rejected"
+         | Some m ->
+            assert_bool ("unexpected message: " ^ m)
+              (Diagnostics.contains ~needle:"must not occur on both sides" m)));
+
+      (* 負の添字 *)
+      agree "a negative index write is rejected" p_array_write_negative [ 0 ];
+      agree "a negative index read is rejected" p_array_read_negative [ 0 ];
+
+      "negative indices are rejected on both sides" >:: (fun _ ->
+        assert_equal ~printer None (run_verified p_array_write_negative [ 0 ]);
+        assert_equal ~printer None (run_verified p_array_read_negative [ 0 ]));
+
+      (* copy / uncopy *)
+      agree "copy and uncopy of a reference" p_copy_uncopy [ 0 ];
+      agree "copy onto a variable that is not nil is rejected" p_copy_not_nil [ 0 ];
+      agree "copy onto itself is rejected" p_copy_self [ 0 ];
+      agree "uncopy of two different references is rejected" p_uncopy_mismatch [ 0 ];
+
+      "the verified interpreter runs copy and uncopy" >:: (fun _ ->
+        assert_equal ~printer (Some [ 3 ]) (run_verified p_copy_uncopy [ 0 ]);
+        assert_equal ~printer None (run_verified p_copy_not_nil [ 0 ]);
+        assert_equal ~printer None (run_verified p_copy_self [ 0 ]);
+        assert_equal ~printer None (run_verified p_uncopy_mismatch [ 0 ]));
 
       (* ゼロクリアを忘れたオブジェクトブロックは意味論どおり落ちる *)
       "an object block that leaves a field dirty is rejected" >:: (fun _ ->

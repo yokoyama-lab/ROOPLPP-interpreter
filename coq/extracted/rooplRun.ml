@@ -9,6 +9,16 @@ type nat =
 | O
 | S of nat
 
+(** val fst : ('a1*'a2) -> 'a1 **)
+
+let fst = function
+| x,_ -> x
+
+(** val snd : ('a1*'a2) -> 'a2 **)
+
+let snd = function
+| _,y -> y
+
 (** val length : 'a1 list -> nat **)
 
 let rec length = function
@@ -174,6 +184,65 @@ module Pos =
   | XO p -> Npos (pred_double p)
   | XH -> N0
 
+  type mask =
+  | IsNul
+  | IsPos of positive
+  | IsNeg
+
+  (** val succ_double_mask : mask -> mask **)
+
+  let succ_double_mask = function
+  | IsNul -> IsPos XH
+  | IsPos p -> IsPos (XI p)
+  | IsNeg -> IsNeg
+
+  (** val double_mask : mask -> mask **)
+
+  let double_mask = function
+  | IsPos p -> IsPos (XO p)
+  | x0 -> x0
+
+  (** val double_pred_mask : positive -> mask **)
+
+  let double_pred_mask = function
+  | XI p -> IsPos (XO (XO p))
+  | XO p -> IsPos (XO (pred_double p))
+  | XH -> IsNul
+
+  (** val sub_mask : positive -> positive -> mask **)
+
+  let rec sub_mask x y =
+    match x with
+    | XI p ->
+      (match y with
+       | XI q -> double_mask (sub_mask p q)
+       | XO q -> succ_double_mask (sub_mask p q)
+       | XH -> IsPos (XO p))
+    | XO p ->
+      (match y with
+       | XI q -> succ_double_mask (sub_mask_carry p q)
+       | XO q -> double_mask (sub_mask p q)
+       | XH -> IsPos (pred_double p))
+    | XH -> (match y with
+             | XH -> IsNul
+             | _ -> IsNeg)
+
+  (** val sub_mask_carry : positive -> positive -> mask **)
+
+  and sub_mask_carry x y =
+    match x with
+    | XI p ->
+      (match y with
+       | XI q -> succ_double_mask (sub_mask_carry p q)
+       | XO q -> double_mask (sub_mask p q)
+       | XH -> IsPos (pred_double p))
+    | XO p ->
+      (match y with
+       | XI q -> double_mask (sub_mask_carry p q)
+       | XO q -> succ_double_mask (sub_mask_carry p q)
+       | XH -> double_pred_mask p)
+    | XH -> IsNeg
+
   (** val mul : positive -> positive -> positive **)
 
   let rec mul x y =
@@ -231,6 +300,60 @@ module Pos =
   | N0 -> N0
   | Npos p -> Npos (XO p)
 
+  (** val coq_lor : positive -> positive -> positive **)
+
+  let rec coq_lor p q =
+    match p with
+    | XI p0 ->
+      (match q with
+       | XI q0 -> XI (coq_lor p0 q0)
+       | XO q0 -> XI (coq_lor p0 q0)
+       | XH -> p)
+    | XO p0 ->
+      (match q with
+       | XI q0 -> XI (coq_lor p0 q0)
+       | XO q0 -> XO (coq_lor p0 q0)
+       | XH -> XI p0)
+    | XH -> (match q with
+             | XO q0 -> XI q0
+             | _ -> q)
+
+  (** val coq_land : positive -> positive -> n **)
+
+  let rec coq_land p q =
+    match p with
+    | XI p0 ->
+      (match q with
+       | XI q0 -> coq_Nsucc_double (coq_land p0 q0)
+       | XO q0 -> coq_Ndouble (coq_land p0 q0)
+       | XH -> Npos XH)
+    | XO p0 ->
+      (match q with
+       | XI q0 -> coq_Ndouble (coq_land p0 q0)
+       | XO q0 -> coq_Ndouble (coq_land p0 q0)
+       | XH -> N0)
+    | XH -> (match q with
+             | XO _ -> N0
+             | _ -> Npos XH)
+
+  (** val ldiff : positive -> positive -> n **)
+
+  let rec ldiff p q =
+    match p with
+    | XI p0 ->
+      (match q with
+       | XI q0 -> coq_Ndouble (ldiff p0 q0)
+       | XO q0 -> coq_Nsucc_double (ldiff p0 q0)
+       | XH -> Npos (XO p0))
+    | XO p0 ->
+      (match q with
+       | XI q0 -> coq_Ndouble (ldiff p0 q0)
+       | XO q0 -> coq_Ndouble (ldiff p0 q0)
+       | XH -> Npos p)
+    | XH -> (match q with
+             | XO _ -> Npos XH
+             | _ -> N0)
+
   (** val coq_lxor : positive -> positive -> n **)
 
   let rec coq_lxor p q =
@@ -267,11 +390,100 @@ module Pos =
 
 module N =
  struct
+  (** val succ_double : n -> n **)
+
+  let succ_double = function
+  | N0 -> Npos XH
+  | Npos p -> Npos (XI p)
+
+  (** val double : n -> n **)
+
+  let double = function
+  | N0 -> N0
+  | Npos p -> Npos (XO p)
+
   (** val succ_pos : n -> positive **)
 
   let succ_pos = function
   | N0 -> XH
   | Npos p -> Pos.succ p
+
+  (** val sub : n -> n -> n **)
+
+  let sub n0 m =
+    match n0 with
+    | N0 -> N0
+    | Npos n' ->
+      (match m with
+       | N0 -> n0
+       | Npos m' ->
+         (match Pos.sub_mask n' m' with
+          | Pos.IsPos p -> Npos p
+          | _ -> N0))
+
+  (** val compare : n -> n -> comparison **)
+
+  let compare n0 m =
+    match n0 with
+    | N0 -> (match m with
+             | N0 -> Eq
+             | Npos _ -> Lt)
+    | Npos n' -> (match m with
+                  | N0 -> Gt
+                  | Npos m' -> Pos.compare n' m')
+
+  (** val leb : n -> n -> bool **)
+
+  let leb x y =
+    match compare x y with
+    | Gt -> false
+    | _ -> true
+
+  (** val pos_div_eucl : positive -> n -> n*n **)
+
+  let rec pos_div_eucl a b =
+    match a with
+    | XI a' ->
+      let q,r = pos_div_eucl a' b in
+      let r' = succ_double r in
+      if leb b r' then (succ_double q),(sub r' b) else (double q),r'
+    | XO a' ->
+      let q,r = pos_div_eucl a' b in
+      let r' = double r in
+      if leb b r' then (succ_double q),(sub r' b) else (double q),r'
+    | XH ->
+      (match b with
+       | N0 -> N0,(Npos XH)
+       | Npos p -> (match p with
+                    | XH -> (Npos XH),N0
+                    | _ -> N0,(Npos XH)))
+
+  (** val coq_lor : n -> n -> n **)
+
+  let coq_lor n0 m =
+    match n0 with
+    | N0 -> m
+    | Npos p -> (match m with
+                 | N0 -> n0
+                 | Npos q -> Npos (Pos.coq_lor p q))
+
+  (** val coq_land : n -> n -> n **)
+
+  let coq_land n0 m =
+    match n0 with
+    | N0 -> N0
+    | Npos p -> (match m with
+                 | N0 -> N0
+                 | Npos q -> Pos.coq_land p q)
+
+  (** val ldiff : n -> n -> n **)
+
+  let ldiff n0 m =
+    match n0 with
+    | N0 -> N0
+    | Npos p -> (match m with
+                 | N0 -> n0
+                 | Npos q -> Pos.ldiff p q)
 
   (** val coq_lxor : n -> n -> n **)
 
@@ -386,6 +598,13 @@ module Z =
        | Zneg y' -> compOpp (Pos.compare x' y')
        | _ -> Lt)
 
+  (** val leb : z -> z -> bool **)
+
+  let leb x y =
+    match compare x y with
+    | Gt -> false
+    | _ -> true
+
   (** val ltb : z -> z -> bool **)
 
   let ltb x y =
@@ -418,6 +637,70 @@ module Z =
   let of_N = function
   | N0 -> Z0
   | Npos p -> Zpos p
+
+  (** val quotrem : z -> z -> z*z **)
+
+  let quotrem a b =
+    match a with
+    | Z0 -> Z0,Z0
+    | Zpos a0 ->
+      (match b with
+       | Z0 -> Z0,a
+       | Zpos b0 -> let q,r = N.pos_div_eucl a0 (Npos b0) in (of_N q),(of_N r)
+       | Zneg b0 ->
+         let q,r = N.pos_div_eucl a0 (Npos b0) in (opp (of_N q)),(of_N r))
+    | Zneg a0 ->
+      (match b with
+       | Z0 -> Z0,a
+       | Zpos b0 ->
+         let q,r = N.pos_div_eucl a0 (Npos b0) in
+         (opp (of_N q)),(opp (of_N r))
+       | Zneg b0 ->
+         let q,r = N.pos_div_eucl a0 (Npos b0) in (of_N q),(opp (of_N r)))
+
+  (** val quot : z -> z -> z **)
+
+  let quot a b =
+    fst (quotrem a b)
+
+  (** val rem : z -> z -> z **)
+
+  let rem a b =
+    snd (quotrem a b)
+
+  (** val coq_lor : z -> z -> z **)
+
+  let coq_lor a b =
+    match a with
+    | Z0 -> b
+    | Zpos a0 ->
+      (match b with
+       | Z0 -> a
+       | Zpos b0 -> Zpos (Pos.coq_lor a0 b0)
+       | Zneg b0 -> Zneg (N.succ_pos (N.ldiff (Pos.pred_N b0) (Npos a0))))
+    | Zneg a0 ->
+      (match b with
+       | Z0 -> a
+       | Zpos b0 -> Zneg (N.succ_pos (N.ldiff (Pos.pred_N a0) (Npos b0)))
+       | Zneg b0 ->
+         Zneg (N.succ_pos (N.coq_land (Pos.pred_N a0) (Pos.pred_N b0))))
+
+  (** val coq_land : z -> z -> z **)
+
+  let coq_land a b =
+    match a with
+    | Z0 -> Z0
+    | Zpos a0 ->
+      (match b with
+       | Z0 -> Z0
+       | Zpos b0 -> of_N (Pos.coq_land a0 b0)
+       | Zneg b0 -> of_N (N.ldiff (Npos a0) (Pos.pred_N b0)))
+    | Zneg a0 ->
+      (match b with
+       | Z0 -> Z0
+       | Zpos b0 -> of_N (N.ldiff (Npos b0) (Pos.pred_N a0))
+       | Zneg b0 ->
+         Zneg (N.succ_pos (N.coq_lor (Pos.pred_N a0) (Pos.pred_N b0))))
 
   (** val coq_lxor : z -> z -> z **)
 
@@ -508,9 +791,20 @@ let dealloc a x =
 type binop =
 | Oadd
 | Osub
+| Oxor
 | Omul
-| Oeq
+| Odiv
+| Omod
+| Oband
+| Obor
+| Oand
+| Oor
 | Olt
+| Ogt
+| Oeq
+| One
+| Ole
+| Oge
 
 type exp =
 | Cst of z
@@ -525,15 +819,39 @@ let bval = function
 | true -> Zpos XH
 | false -> Z0
 
+(** val ztrue : z -> bool **)
+
+let ztrue z0 =
+  negb (Z.eqb z0 Z0)
+
 (** val eval_binop : binop -> z -> z -> z **)
 
 let eval_binop o a b =
   match o with
   | Oadd -> Z.add a b
   | Osub -> Z.sub a b
+  | Oxor -> Z.coq_lxor a b
   | Omul -> Z.mul a b
-  | Oeq -> bval (Z.eqb a b)
+  | Odiv -> Z.quot a b
+  | Omod -> Z.rem a b
+  | Oband -> Z.coq_land a b
+  | Obor -> Z.coq_lor a b
+  | Oand -> bval (if ztrue a then ztrue b else false)
+  | Oor -> bval (if ztrue a then true else ztrue b)
   | Olt -> bval (Z.ltb a b)
+  | Ogt -> bval (Z.ltb b a)
+  | Oeq -> bval (Z.eqb a b)
+  | One -> bval (negb (Z.eqb a b))
+  | Ole -> bval (Z.leb a b)
+  | Oge -> bval (Z.leb b a)
+
+(** val divb : binop -> z -> bool **)
+
+let divb o b =
+  match o with
+  | Odiv -> ztrue b
+  | Omod -> ztrue b
+  | _ -> true
 
 (** val rdf : state -> id -> field -> z **)
 
@@ -755,7 +1073,7 @@ let rec inb g a = function
    | Some l -> if Nat.ltb l a.hn then Nat.ltb f (g.cells (a.hc l)) else false
    | None -> false)
 | Idx (x, e') ->
-  if inb g a e'
+  if if inb g a e' then Z.leb Z0 (eval e' a) else false
   then (match a.os x with
         | Some l ->
           if Nat.ltb l a.hn
@@ -763,13 +1081,28 @@ let rec inb g a = function
           else false
         | None -> false)
   else false
-| Bop (_, e1, e2) -> if inb g a e1 then inb g a e2 else false
+| Bop (o, e1, e2) ->
+  if if inb g a e1 then inb g a e2 else false
+  then divb o (eval e2 a)
+  else false
 | _ -> true
 
 (** val inb2 : menv -> state -> exp -> exp -> bool **)
 
 let inb2 g a e1 e2 =
   if inb g a e1 then inb g a e2 else false
+
+(** val inbw : menv -> state -> exp -> exp -> bool **)
+
+let inbw g a ei e =
+  if inb2 g a ei e then Z.leb Z0 (eval ei a) else false
+
+(** val inbw2 : menv -> state -> exp -> exp -> bool **)
+
+let inbw2 g a e1 e2 =
+  if inb2 g a e1 e2
+  then if Z.leb Z0 (eval e1 a) then Z.leb Z0 (eval e2 a) else false
+  else false
 
 (** val run : nat -> menv -> stm -> state -> nat -> (state*nat) option **)
 
@@ -799,7 +1132,7 @@ let rec run fuel g s a nf =
                else None
              | None -> None)
      | Saassign (x, ei, o, e) ->
-       if negb (inb2 g a ei e)
+       if negb (inbw g a ei e)
        then None
        else (match a.os x with
              | Some l ->
@@ -817,7 +1150,7 @@ let rec run fuel g s a nf =
              | None -> None)
      | Sswap (x, y) -> Some ((setv (setv a x (a.vs y)) y (a.vs x)),nf)
      | Saswap (x, e1, y, e2) ->
-       if negb (inb2 g a e1 e2)
+       if negb (inbw2 g a e1 e2)
        then None
        else (match a.os x with
              | Some l1 ->

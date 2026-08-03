@@ -157,7 +157,12 @@ Ltac hc_auto :=
 (** * Expressions                                                      *)
 (* ------------------------------------------------------------------ *)
 
-Inductive binop := Oadd | Osub | Omul | Oeq | Olt.
+(** インタプリタ (lib/syntax.ml の [binOp]) が持つ 16 個すべて。二項演算は
+    可逆性には関わらない（式の評価は状態を変えない）が、抽出したインタプリタを
+    実装と突き合わせるには同じ演算が要る。 *)
+Inductive binop :=
+  | Oadd | Osub | Oxor | Omul | Odiv | Omod | Oband | Obor
+  | Oand | Oor | Olt | Ogt | Oeq | One | Ole | Oge.
 
 Inductive exp :=
 | Cst (z : Z)
@@ -167,15 +172,35 @@ Inductive exp :=
 | Bop (o : binop) (e1 e2 : exp).
 
 Definition bval (b : bool) : Z := if b then 1 else 0.
+Definition ztrue (z : Z) : bool := negb (Z.eqb z 0).
 
+(** 除算と剰余は OCaml に合わせる：[/] は 0 方向への切り捨て（[Z.quot]），
+    [mod] は被除数の符号（[Z.rem]）。Coq の [Z.div] / [Z.modulo] は下方向に
+    丸めるので，負の値で食い違う。ゼロ除算は全域性のために 0 を返し，拒否は
+    実行可能インタプリタ側（[inb]）で行う。 *)
 Definition eval_binop (o : binop) (a b : Z) : Z :=
   match o with
-  | Oadd => a + b
-  | Osub => a - b
-  | Omul => a * b
-  | Oeq  => bval (Z.eqb a b)
-  | Olt  => bval (Z.ltb a b)
+  | Oadd  => a + b
+  | Osub  => a - b
+  | Oxor  => Z.lxor a b
+  | Omul  => a * b
+  | Odiv  => Z.quot a b
+  | Omod  => Z.rem a b
+  | Oband => Z.land a b
+  | Obor  => Z.lor a b
+  | Oand  => bval (andb (ztrue a) (ztrue b))
+  | Oor   => bval (orb (ztrue a) (ztrue b))
+  | Olt   => bval (Z.ltb a b)
+  | Ogt   => bval (Z.ltb b a)
+  | Oeq   => bval (Z.eqb a b)
+  | One   => bval (negb (Z.eqb a b))
+  | Ole   => bval (Z.leb a b)
+  | Oge   => bval (Z.leb b a)
   end.
+
+(** 除数が 0 でないこと（決定可能）。 *)
+Definition divb (o : binop) (b : Z) : bool :=
+  match o with Odiv | Omod => ztrue b | _ => true end.
 
 (** Reading a field through nil, or through a location that is no longer
     live, yields 0.  The clamp is what makes [eval] respect [==]. *)
@@ -1470,18 +1495,31 @@ Fixpoint inb (G : menv) (a : state) (e : exp) : bool :=
       | None => false
       end
   | Idx x e' =>
-      andb (inb G a e')
+      andb (andb (inb G a e') (Z.leb 0 (eval e' a)))
            (match os a x with
             | Some l => andb (Nat.ltb l (hn a))
                              (Nat.ltb (Z.to_nat (eval e' a)) (cells G (hc a l)))
             | None => false
             end)
-  | Bop _ e1 e2 => andb (inb G a e1) (inb G a e2)
+  (* ゼロ除算も同じ理由でここで塞ぐ。意味論は [Z.quot a 0 = 0] を許すが、
+     実装は「ERROR:division by zero」で落ちる *)
+  | Bop o e1 e2 =>
+      andb (andb (inb G a e1) (inb G a e2)) (divb o (eval e2 a))
   end.
 
 (** 複数の式をまとめて検査する。 *)
 Definition inb2 (G : menv) (a : state) (e1 e2 : exp) : bool :=
   andb (inb G a e1) (inb G a e2).
+
+(** 書き込み先の添字は、読み出しの検査に加えて**非負**であることを要求する。
+    意味論 [exec] は [Z.to_nat] で負の添字をセル 0 に丸めるが、実装
+    (lib/eval.ml) は範囲外として落とすので、実行可能インタプリタの側を実装に
+    合わせる（[run_sound] は片側の含意なので厳しくしてよい）。 *)
+Definition inbw (G : menv) (a : state) (ei e : exp) : bool :=
+  andb (inb2 G a ei e) (Z.leb 0 (eval ei a)).
+
+Definition inbw2 (G : menv) (a : state) (e1 e2 : exp) : bool :=
+  andb (inb2 G a e1 e2) (andb (Z.leb 0 (eval e1 a)) (Z.leb 0 (eval e2 a))).
 
 (** 実行可能インタプリタ。状態と一緒にフィールド番号の上限を返す。 *)
 Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
@@ -1511,7 +1549,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         | None => None
         end
     | Saassign x ei o e =>
-        if negb (inb2 G a ei e) then None else
+        if negb (inbw G a ei e) then None else
         match os a x with
         | Some l =>
             let i := Z.to_nat (eval ei a) in
@@ -1523,7 +1561,7 @@ Fixpoint run (fuel : nat) (G : menv) (s : stm) (a : state) (nf : nat)
         | None => None
         end
     | Saswap x e1 y e2 =>
-        if negb (inb2 G a e1 e2) then None else
+        if negb (inbw2 G a e1 e2) then None else
         match os a x, os a y with
         | Some l1, Some l2 =>
             let i1 := Z.to_nat (eval e1 a) in
@@ -1724,14 +1762,14 @@ Proof.
                 end).
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array assignment *)
-        destruct (negb (inb2 G a ei e)) eqn:Hin; try discriminate.
+        destruct (negb (inbw G a ei e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
         repeat (match type of H with
                 | context [ if ?c then _ else _ ] => destruct c eqn:?; try discriminate
                 end).
         injection H as Heq Hn; subst; now apply above_setf.
       * (* array element swap *)
-        destruct (negb (inb2 G a e1 e2)) eqn:Hin; try discriminate.
+        destruct (negb (inbw2 G a e1 e2)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
         repeat (match type of H with
@@ -1862,7 +1900,7 @@ Proof.
         apply Nat.ltb_lt in Hl. apply Z.eqb_eq in He.
         eapply E_fassign; [ eassumption | assumption | apply steq_refl | assumption ].
       * (* array assignment *)
-        destruct (negb (inb2 G a ei e)) eqn:Hin; try discriminate.
+        destruct (negb (inbw G a ei e)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l | ] eqn:Hx; try discriminate.
         destruct (andb (Nat.ltb l (hn a)) _) eqn:Hl; try discriminate.
         destruct (andb (Z.eqb _ _) _) eqn:He; try discriminate.
@@ -1876,7 +1914,7 @@ Proof.
           | assumption | assumption ].
       * (* swap *) injection H as Heq Hn; subst b. apply E_swap, steq_refl.
       * (* array element swap *)
-        destruct (negb (inb2 G a e1 e2)) eqn:Hin; try discriminate.
+        destruct (negb (inbw2 G a e1 e2)) eqn:Hin; try discriminate.
         destruct (os a x) as [ l1 | ] eqn:Hx; try discriminate.
         destruct (os a y) as [ l2 | ] eqn:Hy; try discriminate.
         destruct (andb (andb (Nat.ltb l1 (hn a)) _) _) eqn:Hl; try discriminate.
