@@ -69,6 +69,38 @@ let check_file name =
      | Util.Runtime_error e | Failure e ->
         assert_failure (name ^ ": unexpected runtime error:\n" ^ e))
 
+(* main の本体を「本体 ; その逆」に差し替える。可逆プログラムなら必ず初期状態
+   （すべて 0 / nil）に戻るので、これは「最後まで走る」よりずっと強い検査になる。
+   破壊的な書き換えはここで garbage として残る（あるいは表明で落ちる）。 *)
+let round_trip_prog (Prog cl) =
+  Prog
+    (List.map
+       (fun (CDecl (tid, inh, fields, methods)) ->
+         CDecl (tid, inh, fields,
+                List.map
+                  (fun (MDecl (mid, para, stml)) ->
+                    if mid = "main" then MDecl (mid, para, stml @ Invert.invert stml)
+                    else MDecl (mid, para, stml))
+                  methods))
+       cl)
+
+let check_round_trip name =
+  let prog = parse (read_file (Filename.concat example_dir name)) in
+  let result =
+    try Eval.eval_prog (round_trip_prog prog) with
+    | Util.Runtime_error e | Failure e ->
+       assert_failure (name ^ ": the program and its inverse do not run:\n" ^ e)
+  in
+  match List.filter (fun (_, v) -> not (Diagnostics.is_zero v)) result with
+  | [] -> ()
+  | dirty ->
+     assert_failure
+       (Printf.sprintf
+          "%s: running the program and then its inverse must restore the initial \
+           state, but %s did not come back"
+          name
+          (String.concat ", " (List.map fst dirty)))
+
 (* 代表的な例の結果は値まで固定する（回帰の網） *)
 let result_of name =
   Eval.eval_prog (parse (read_file (Filename.concat example_dir name)))
@@ -89,6 +121,11 @@ let suite = "test suite for the example corpus" >::: [
 
       "every example parses, inverts, re-parses and runs"
       >::: List.map (fun name -> name >:: (fun _ -> check_file name)) examples;
+
+      (* 可逆性そのものの検査: 本体とその逆を続けて走らせると初期状態に戻る *)
+      "every example returns to its initial state after its inverse"
+      >::: List.map (fun name -> name >:: (fun _ -> check_round_trip name))
+             (List.filter (fun n -> not (List.mem n expected_to_fail)) examples);
 
       (* 値まで固定する代表例（PyJanus 由来の移植は移植元の期待値と一致） *)
       "fib.rplpp" >:: (fun _ -> assert_values "fib.rplpp" [ ("result", 8) ]);
