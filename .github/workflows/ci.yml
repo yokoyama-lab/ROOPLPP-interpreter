@@ -77,14 +77,16 @@ jobs:
         with:
           coq_version: "8.20"
           ocaml_version: "default"
-          # チェックアウトは runner (uid 1001) の所有だが、コンテナは coq ユーザ
-          # (uid 1000) で走るので、そのままだと coqc が .glob / .vo を書けずに
-          # 「Permission denied」で落ちる。docker-coq の定石どおり所有者を移す。
-          before_script: |
+          # custom_script は既定のスクリプト一式（install / before_script /
+          # script）を丸ごと置き換えるので、既定の before_script が行う
+          # 所有者の付け替えもここに書く必要がある。チェックアウトは
+          # runner (uid 1001) の所有だが、コンテナは coq ユーザ (uid 1000) で
+          # 走るため、これが無いと coqc が .glob / .vo を書けず
+          # 「Permission denied」で最初の make から落ちる。
+          custom_script: |
             startGroup "fix the checkout's ownership"
               sudo chown -R coq:coq .
             endGroup
-          custom_script: |
             startGroup "build the proof"
               cd coq && make
             endGroup
