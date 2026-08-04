@@ -115,6 +115,62 @@ let assert_values name expected =
          assert_equal ~printer:Print.show_val ~msg:(name ^ ": " ^ id) (Value.IntVal v) got)
     expected
 
+(* 2026-08-03 の可逆性監査で書き直した 30 本。往復テストは「初期状態に戻る」
+   ことしか言わないので、**計算が正しいこと**はここで別に押さえる。値はどれも
+   ファイル冒頭のコメントが主張している答え（手計算で確認済み）。 *)
+let rewritten_expectations = [
+  (* 履歴を引く形へ直したもの *)
+  "algo_newton_sqrt.rplpp", [ ("root", 12); ("steps", 5) ];          (* isqrt 144 *)
+  "algo_collatz.rplpp",
+  [ ("traj[0]", 6); ("traj[1]", 3); ("traj[2]", 10); ("traj[8]", 1); ("steps", 8) ];
+  "algo_josephus.rplpp", [ ("result", 3) ];                          (* J(7,3) *)
+  "algo_floyd_warshall.rplpp",
+  [ ("dist[1]", 3); ("dist[2]", 5); ("dist[3]", 6); ("dist[4]", 5) ];
+  "algo_knapsack.rplpp", [ ("dp[44]", 10) ];                         (* 最適値 *)
+  "algo_shortest_path.rplpp",
+  [ ("dist[0]", 0); ("dist[1]", 3); ("dist[2]", 1); ("dist[3]", 4) ];
+  "algo_crc.rplpp", [ ("crc", 120) ];
+  "algo_matrix_power.rplpp",
+  [ ("result[0]", 13); ("result[1]", 8); ("result[2]", 8); ("result[3]", 5) ];
+
+  (* 増分を残す形へ直したもの *)
+  "algo_kadane.rplpp", [ ("maxSum", 6) ];
+  "algo_lis.rplpp", [ ("maxLen", 4); ("dp[6]", 4) ];
+  "algo_coin_change.rplpp", [ ("dp[63]", 6) ];                       (* 25+25+10+1+1+1 *)
+  "algo_hanoi4.rplpp", [ ("dp[4]", 9); ("dp[9]", 41) ];              (* Frame-Stewart *)
+  "algo_edit_distance.rplpp", [ ("dp[15]", 2) ];                     (* [1,2,3] vs [1,3,4] *)
+  "algo_interval_sched.rplpp",
+  [ ("count", 3); ("selected[0]", 1); ("selected[2]", 1); ("selected[4]", 1) ];
+
+  (* 入れ替え・uncall へ直したもの *)
+  "algo_extended_gcd.rplpp", [ ("a", 5); ("x", 1); ("y", -2) ];      (* 35*1+15*(-2)=5 *)
+  "algo_crt.rplpp", [ ("result", 8) ];                               (* 8%3=2, 8%5=3 *)
+  "algo_crt3.rplpp", [ ("result", 23) ];                             (* 23%3=2,%5=3,%7=2 *)
+  "algo_fast_power.rplpp", [ ("result", 1594323); ("nbits", 4) ];    (* 3^13 *)
+  "algo_miller_rabin.rplpp", [ ("isWitness", 1) ];                   (* 561 は合成数 *)
+  "algo_prefix_code.rplpp",
+  [ ("nbits", 12); ("bits[0]", 0); ("bits[1]", 1); ("bits[7]", 1); ("bits[11]", 0) ];
+
+  (* 出口の表明を書き直したもの *)
+  "algo_euler_totient.rplpp",
+  [ ("phi[1]", 1); ("phi[5]", 4); ("phi[6]", 2); ("phi[7]", 6); ("phi[8]", 4) ];
+  "algo_sieve.rplpp",
+  [ ("sieve[4]", 2); ("sieve[9]", 3); ("sieve[11]", 0); ("sieve[19]", 0) ];
+  "algo_vandermonde.rplpp",
+  [ ("v[5]", 2); ("v[6]", 4); ("v[7]", 8); ("v[15]", 64) ];          (* points^j *)
+  "algo_gauss_elim.rplpp",
+  [ ("mat[4]", 0); ("mat[8]", 0); ("mat[9]", 0) ];                   (* 上三角 *)
+  "algo_merge_sort.rplpp", [ ("a[0]", 1); ("a[7]", 8) ];
+
+  (* 商を残す・バタフライを書き直したもの *)
+  "algo_mod_matmul.rplpp",
+  [ ("c[0]", 2); ("c[1]", 1); ("c[2]", 1); ("c[3]", 1) ];
+  "algo_ntt.rplpp", [ ("out[0]", 10) ];                              (* 1+2+3+4 mod 17 *)
+  "algo_radix_sort.rplpp", [ ("a[0]", 12); ("a[7]", 98) ];
+  "algo_walsh_hadamard.rplpp", [ ("x[0]", 4) ];                      (* 総和 *)
+  "algo_fft_butterfly.rplpp", [ ("x[0]", 10) ];                      (* 総和 *)
+]
+
 let suite = "test suite for the example corpus" >::: [
       "the corpus is not empty" >:: (fun _ ->
         assert_bool "found example programs" (List.length examples > 100));
@@ -126,6 +182,11 @@ let suite = "test suite for the example corpus" >::: [
       "every example returns to its initial state after its inverse"
       >::: List.map (fun name -> name >:: (fun _ -> check_round_trip name))
              (List.filter (fun n -> not (List.mem n expected_to_fail)) examples);
+
+      (* 書き直した 30 本は、往復するだけでなく documented な答えを出す *)
+      "the rewritten examples still compute the documented answers"
+      >::: List.map (fun (name, vs) -> name >:: (fun _ -> assert_values name vs))
+             rewritten_expectations;
 
       (* 値まで固定する代表例（PyJanus 由来の移植は移植元の期待値と一致） *)
       "fib.rplpp" >:: (fun _ -> assert_values "fib.rplpp" [ ("result", 8) ]);
