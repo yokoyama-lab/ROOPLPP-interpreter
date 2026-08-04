@@ -102,9 +102,6 @@ let exact_pos raw =
       | _ -> acc)
     None (split_lines raw)
 
-(**行番号だけが要るとき*)
-let exact_line raw = Option.map fst (exact_pos raw)
-
 let split_runtime_message raw =
   let ls = split_lines raw in
   (* 位置マーカは本文にもトレースにも出さない *)
