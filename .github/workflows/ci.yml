@@ -72,22 +72,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # roopl.v は `Require Import` だけを使うので Coq 8.x でも通る
-      - uses: coq-community/docker-coq-action@v1
+      # 証明は `Require Import` だけを使うので Coq 8.x でも通る（可搬性の検査）。
+      # グループは同じシェルで続けて走る（cd が次のグループへ漏れる）ので、
+      # ディレクトリ移動は部分シェルに閉じ込める。
+      # 所有者の付け替えは custom_script の中に要る（custom_script は既定の
+      # install / before_script / script を丸ごと置き換えるため）。これが無いと
+      # チェックアウトが runner 所有のままで coqc が .vo を書けない。
+      - name: build and re-check the proof (Coq 8.20)
+        uses: coq-community/docker-coq-action@v1
         with:
           coq_version: "8.20"
           ocaml_version: "default"
-          # custom_script は既定のスクリプト一式（install / before_script /
-          # script）を丸ごと置き換えるので、既定の before_script が行う
-          # 所有者の付け替えもここに書く必要がある。チェックアウトは
-          # runner (uid 1001) の所有だが、コンテナは coq ユーザ (uid 1000) で
-          # 走るため、これが無いと coqc が .glob / .vo を書けず
-          # 「Permission denied」で最初の make から落ちる。
-          # グループは同じシェルで続けて走る（cd が次のグループへ漏れる）ので、
-          # ディレクトリ移動は部分シェルに閉じ込め、パスはリポジトリ直下から書く。
           custom_script: |
             startGroup "fix the checkout's ownership"
-              sudo chown -R coq:coq .
+              sudo chown -R "$(id -u):$(id -g)" .
             endGroup
             startGroup "build the proof"
               (cd coq && make)
@@ -95,15 +93,24 @@ jobs:
             startGroup "re-check with the independent checker"
               (cd coq && make check)
             endGroup
-            # 抽出物は「Rocq 無しでも OCaml 側がビルドできるように」コミット
-            # してある。roopl.v を変えて make extract を忘れると、差分テストは
-            # 古い抽出物に対して通ってしまい誰も気づかない。
-            # git ではなく cmp で比べる（コンテナ内の git の有無・所有者判定に
-            # 依存させない）。
+
+      # 抽出物は「Rocq 無しでも OCaml 側がビルドできるように」コミットしてある。
+      # roopl.v を変えて make extract を忘れると、差分テストは古い抽出物に対して
+      # 通ってしまい誰も気づかない。ただし**抽出結果は Rocq のバージョンに依存
+      # する**（標準ライブラリの抽出が変わる）ので、鮮度の照合はコミット済みの
+      # 抽出物を作ったのと同じ 9.1.1 で行う。前段の .vo は版が違うので捨てる。
+      - name: the committed extraction is up to date (Rocq 9.1.1)
+        uses: coq-community/docker-coq-action@v1
+        with:
+          custom_image: rocq/rocq-prover:9.1.1
+          custom_script: |
+            startGroup "fix the checkout's ownership"
+              sudo chown -R "$(id -u):$(id -g)" .
+            endGroup
             startGroup "the committed extraction is up to date"
               cp coq/extracted/rooplRun.ml /tmp/before.ml
               cp coq/extracted/rooplRun.mli /tmp/before.mli
-              (cd coq && make extract)
+              (cd coq && make clean && make && make extract)
               cmp /tmp/before.ml coq/extracted/rooplRun.ml \
                 && cmp /tmp/before.mli coq/extracted/rooplRun.mli \
                 || { echo "coq/extracted is stale -- run 'cd coq && make extract' and commit the result"; exit 1; }
