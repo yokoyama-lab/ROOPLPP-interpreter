@@ -22,16 +22,25 @@ function convertEOL(string $string, string $to = "\n")
 }
 
 $dir = dirname(__FILE__);
-// dune build -> _build/default/bin/main.exe; fall back to a legacy src/rplpp build
+// `dune build` の成果物。旧 src/rplpp へのフォールバックは廃止した:
+// src/ は dune 移行 (ab28670) で消えており、残っていたとしても可逆性の検査が
+// 一切入っていない古いインタプリタを黙って動かすことになる。
 $rplpp_path = realpath("$dir/../_build/default/bin/main.exe");
 if ($rplpp_path === false) {
-    $rplpp_path = realpath("$dir/../src/rplpp");
-}
-if ($rplpp_path === false) {
     header("HTTP/1.1 500 Internal Server Error");
-    echo json_encode(["error" => "Interpreter not found"]);
+    echo json_encode(["error" => "Interpreter not found (run `dune build` in the repository root)"]);
     exit;
 }
+
+// 実行時間の上限（秒）。ROOPL++ は停止しないプログラムを書けるので
+// （例: from i = 0 loop i += 1 until i = -1）、子プロセス側に本物の上限が要る。
+// set_time_limit は PHP スクリプト自身にしか効かず、proc_open の子は止まらない。
+// 既定は 10 秒。テストから短くできるよう環境変数で上書きできる
+$timeout_secs = (int)(getenv('ROOPLPP_WEB_TIMEOUT') ?: 10);
+if ($timeout_secs < 1) { $timeout_secs = 10; }
+// timeout(1) は既定の TERM で終了コード 124 を返す（下でその値を見ている）
+$timeout_path = is_executable('/usr/bin/timeout') ? '/usr/bin/timeout'
+              : (is_executable('/bin/timeout') ? '/bin/timeout' : false);
 
 $json_string = file_get_contents("php://input", false, null, 0, $max_input_size);
 $post = json_decode($json_string, true);
@@ -43,7 +52,9 @@ if ($post === null) {
 }
 
 // コマンド引数を配列で構築
-$cmd_args = [$rplpp_path];
+$cmd_args = $timeout_path === false
+    ? [$rplpp_path]
+    : [$timeout_path, (string)$timeout_secs, $rplpp_path];
 
 // 引数
 $invert = $post['invert'] ?? false;
