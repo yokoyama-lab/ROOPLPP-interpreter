@@ -72,3 +72,11 @@ jobs:
             startGroup "re-check with the independent checker"
               cd coq && make check
             endGroup
+            # 抽出物は「Rocq 無しでも OCaml 側がビルドできるように」コミット
+            # してある。roopl.v を変えて make extract を忘れると、差分テストは
+            # 古い抽出物に対して通ってしまい誰も気づかない。
+            startGroup "the committed extraction is up to date"
+              cd coq && make extract
+              git diff --exit-code -- extracted \
+                || { echo "coq/extracted is stale -- run 'cd coq && make extract' and commit the result"; exit 1; }
+            endGroup
