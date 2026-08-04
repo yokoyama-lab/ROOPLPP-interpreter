@@ -1,6 +1,5 @@
 {
 open Parser
-open Syntax
 open Lexing
 
 let unescapeInitTail (s:string) : string =

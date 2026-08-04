@@ -79,7 +79,7 @@ let rec pretty_exp = function
   | Binary(binOp, exp1, exp2) ->
      paren_binary exp1 ^ " " ^ pretty_binOp binOp ^ " " ^ paren_binary exp2
   | Dot(exp1, exp2) -> pretty_exp exp1 ^ "." ^ pretty_exp exp2
-(**被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）。
+(*被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）。
    位置情報の殻は括弧の判定に影響しない。 *)
 and paren_binary e =
   match strip_epos e with
@@ -170,7 +170,7 @@ let rec pretty_args = function
 (**メソッドをプリントする関数*)
 let pretty_method (MDecl(id, args, stms)) =
   "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ pretty_stms stms 2
-(**メソッドをプリントする関数(リストを受け取る)*)
+(*メソッドをプリントする関数(リストを受け取る)*)
 let rec pretty_methods = function
   | [] -> ""
   | [m] -> pretty_method m

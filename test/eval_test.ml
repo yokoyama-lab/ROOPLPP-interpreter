@@ -2,7 +2,6 @@ open OUnit2
 open Syntax
 open Value
 open Eval
-open Pretty
    
 let tests = "test suite for eval.ml" >::: [
       "Const 1"  >:: (fun _ -> assert_equal (IntVal 1) (eval_exp (Const 1) [] []) );

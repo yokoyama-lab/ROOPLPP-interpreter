@@ -126,7 +126,7 @@ let rec stm_of_formal (s : R.stm) : stm =
   | R.Souncall (x, m, args) ->
      ObjectUncall (obj_of_id x, "m" ^ string_of_int (int_of_nat m),
                    List.map arg_of_formal args)
-  | R.Sobj (cl, x, s') when is_array_class cl ->
+  | R.Sobj (cl, _x, _s') when is_array_class cl ->
      (* 配列はブロック構文が無いので new … delete の 3 文に開く *)
      failwith "array blocks are expanded by stms_of_formal"
   | R.Snew (cl, x) -> ObjectConstruction (class_name cl, obj_of_id x)

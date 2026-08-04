@@ -19,7 +19,7 @@ type binOp =
   | Add (**+*)
   | Sub (**-*)
   | Xor (**^*)
-  | Mul (**/**)
+  | Mul (*/**)
   | Div (**/ *)
   | Mod (**%*)
   | Band (**&*)

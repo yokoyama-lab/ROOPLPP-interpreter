@@ -1,5 +1,4 @@
 (**結果の表示に使用*)
-open Syntax
 open Value
 
 (**ベクトルを受け取り、文字列に変換*)
@@ -24,11 +23,11 @@ let print_result result = print_string (string_of_result result)
 let show_val_rec = function
   | IntVal(n) -> "<int> " ^ string_of_int n
   | ObjVal(x,ss) ->
-     let rec f str (s,n) = str ^ "; " ^ s ^ ":" ^ string_of_int n in
+     let f str (s,n) = str ^ "; " ^ s ^ ":" ^ string_of_int n in
      "<object> " ^ x ^ List.fold_left f "{" ss ^ "}"
   | LocsVal(n) -> "<location> " ^ string_of_int n
   | LocsVec(ls) ->
-     let rec f str n = str ^ " " ^ string_of_int n in
+     let f str n = str ^ " " ^ string_of_int n in
      "<vector>" ^ List.fold_left f " " ls
 
 (**値をプリントする関数：showなどで使用*)

@@ -1,6 +1,6 @@
 (**逆変換器：プログラムの文を逆変換する*)
 open Syntax
-(**文を逆変換する関数*)
+(*文を逆変換する関数*)
 let rec invert_stm stm = match stm with
   (* 位置は反転しても同じ文を指すので、そのまま持ち越す *)
   | Positioned(p, s) -> Positioned(p, invert_stm s)
@@ -42,17 +42,17 @@ let rec invert_stm stm = match stm with
                         ) cases in
          let cases2 =
            match cases1 with
-           | ((c1, e1), s, (c2, e2, b)) :: tl ->
+           | ((c1, e1), s, (c2, e2, _b)) :: tl ->
               List.rev(((c1, e1), s, (c2, e2, Break)) :: tl)
            | [] -> []
          in
          match cases2 with
-         | ((c1, e1), s, (c2, e2, b)) :: tl -> ((c1, e1), s, (c2, e2, NoBreak)) :: tl
+         | ((c1, e1), s, (c2, e2, _b)) :: tl -> ((c1, e1), s, (c2, e2, NoBreak)) :: tl
          | [] -> []
        in
        match cases with
        | [] | [_] -> cases
-       | ((c1, e1), s, (c2, e2, b)) as c :: tl ->
+       | ((_c1, _e1), _s, (_c2, _e2, b)) as c :: tl ->
           if b = Break then c :: invert_cases tl
           else
             let cases_k, cases_kn = append_k cases, search_kn cases in

@@ -24,6 +24,18 @@ jobs:
       - name: build
         run: opam exec -- dune build
 
+      # 警告は 2026-08-04 にゼロにした。-warn-error を恒常的に有効化すると
+      # 新しいコンパイラが増やした警告で第三者のビルドが壊れるので、
+      # 「壊す」のではなく「CI が気づく」形にしてある。
+      - name: the build must stay warning-free
+        run: |
+          opam exec -- dune clean
+          opam exec -- dune build 2>&1 | tee build.log
+          if grep -q "Warning" build.log; then
+            echo "::error::新しい警告が出ている（上のログを参照）"
+            exit 1
+          fi
+
       - name: test
         run: opam exec -- dune test --force
 
