@@ -347,6 +347,34 @@ let menv_bump : R.menv =
 let methods_bump =
   [ MDecl ("m0", [ Decl (IntegerType, "v3") ], [ Assign (VarArray ("v3", None), ModAdd, Const 1) ]) ]
 
+(* 同じ変数を 2 つの仮引数へ参照渡しする（PyJanus の alias-1 に相当）。
+   形式側は bind_args が仮引数を実引数の名前へ置き換えるので、本体 v3 += v4 は
+   v0 += v0 になり E_assign の x ∉ fv(e) で弾かれる。
+   本体が別名で壊れないもの（swap は同一セルなら恒等）は通ってよい。 *)
+let addto_self_body = R.Sassign (v 3, R.MAdd, R.Var (v 4))
+let menv_alias : R.menv =
+  { R.procs = (fun m -> if int_of_nat m = 2
+                        then Some (R.MDecl ([ v 3; v 4 ], addto_self_body))
+                        else if int_of_nat m = 3
+                        then Some (R.MDecl ([ v 3; v 4 ], R.Sswap (v 3, v 4)))
+                        else None);
+    R.classes = (fun _ -> None); R.cells = cells_of }
+let methods_alias =
+  [ MDecl ("m2", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
+           [ Assign (VarArray ("v3", None), ModAdd, Var "v4") ]);
+    MDecl ("m3", [ Decl (IntegerType, "v3"); Decl (IntegerType, "v4") ],
+           [ Swap (VarArray ("v3", None), VarArray ("v4", None)) ]) ]
+
+(* 別名で壊れる本体（v3 += v4 が v0 += v0 になる） *)
+let p_alias_add =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 5),
+          R.Scall (nat_of_int 2, [ R.Aref (v 0); R.Aref (v 0) ]))
+
+(* 別名でも壊れない本体（同一セルの swap は恒等） *)
+let p_alias_swap =
+  R.Sseq (R.Sassign (v 0, R.MAdd, c 5),
+          R.Scall (nat_of_int 3, [ R.Aref (v 0); R.Aref (v 0) ]))
+
 let p_call = R.Scall (nat_of_int 0, [ R.Aref (v 0) ])
 let p_call_uncall = R.Sseq (R.Scall (nat_of_int 0, [ R.Aref (v 0) ]),
                             R.Suncall (nat_of_int 0, [ R.Aref (v 0) ]))
@@ -749,6 +777,20 @@ let suite = "test suite for the extracted verified interpreter" >::: [
         assert_equal ~printer None (run_verified p_local_self_exit [ 0 ]);
         assert_equal ~printer None (run_verified p_local_self_entry [ 0 ]));
       agree "nested loop and local block" p_nested [ 0 ];
+      (* 同じ変数を 2 つの仮引数へ渡す（別名）。本体が別名で壊れるかどうかで
+         結果が分かれることを、両エンジンで一致させる *)
+      agree ~env:menv_alias ~methods:methods_alias
+        "an aliased call whose body would double the variable is rejected"
+        p_alias_add [ 0 ];
+      agree ~env:menv_alias ~methods:methods_alias
+        "an aliased call whose body is a self-swap is fine"
+        p_alias_swap [ 0 ];
+
+      "the formal side rejects only the harmful aliasing" >:: (fun _ ->
+        assert_equal ~printer None (run_verified ~env:menv_alias p_alias_add [ 0 ]);
+        assert_equal ~printer (Some [ 5 ])
+          (run_verified ~env:menv_alias p_alias_swap [ 0 ]));
+
       agree ~env:menv_bump ~methods:methods_bump "call" p_call [ 0 ];
       agree ~env:menv_bump ~methods:methods_bump "call then uncall" p_call_uncall [ 0 ];
 

@@ -340,18 +340,26 @@ let rec eval_state stml env map st0 =
        in
        let st2 = ext_st st lvx v' (* the right value of x *) in
        (* 可逆性の副条件。整数変数への代入は構文的に（coq/roopl.v の E_assign の
-          x ∉ fv(e)）、フィールドと配列要素は意味的に（E_fassign / E_aassign の
-          eval e b = eval e a）検査する。後者は別名を構文で近似せずに済む *)
+          x ∉ fv(e)）検査する。 *)
        (match y with
         | VarArray(x, None) ->
            if List.mem x (free_vars e) then
              fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable " ^ x ^
                          " must not occur on both sides of this assignment")
-        | _ ->
-           if eval_exp e env st2 <> v then
-             fail_stm (pretty_stms [stm] 0 ^
-                         "\nERROR:The right-hand side of this assignment must not be \
-                          changed by the assignment itself"));
+        | _ -> ());
+       (* 右辺が自分の書き込みで変わらないこと（E_fassign / E_aassign の
+          eval e b = eval e a）。フィールドと配列要素はこれが本来の副条件で、
+          別名を構文で近似せずに済む。
+
+          **整数変数にもこれを掛ける。** 名前が違っても同じ場所を指しうるため:
+          call q(x, x) のように同じ変数を 2 つの仮引数へ参照渡しすると、本体の
+          a += b は名前の上では別物なのに実質 x += x になる。形式側は
+          bind_args が仮引数を実引数の名前へ置き換えるので構文的な条件で
+          弾けるが、実装は名前ではなくロケーションで束ねるので、値で見るしかない *)
+       if eval_exp e env st2 <> v then
+         fail_stm (pretty_stms [stm] 0 ^
+                     "\nERROR:The right-hand side of this assignment must not be \
+                      changed by the assignment itself");
        check_locs_stable st2 [ (y, lvx) ];
        st2
     (*SWPVAR*) (*SWAPARRVAR*)
