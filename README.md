@@ -241,7 +241,7 @@ bisect-ppx-report summary --per-file
 ## 可逆性の機械検証（Rocq）
 
 `coq/roopl.v` に，ROOPL++ の操作的意味論と可逆性の機械検証がある
-（Rocq 9.1.1，単一ファイル 2900 行，**公理ゼロ**）。
+（Rocq 9.1.1，`roopl.v` 2920 行，**公理ゼロ**）。
 
 | 定理 | 主張 |
 |---|---|
@@ -321,4 +321,4 @@ php -S localhost:9000                  # ローカルサーバ起動
 
 ## ライセンス
 
-`LICENSE` を参照。
+MIT。`LICENSE` を参照。

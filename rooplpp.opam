@@ -10,7 +10,7 @@ in lib/, the rplpp executable in bin/, and the OUnit2 test suites in test/.
 """
 maintainer: "tetsuo-jp@users.noreply.github.com"
 authors: ["Tetsuo Yokoyama"]
-license: "GPL-3.0-only"
+license: "MIT"
 homepage: "https://github.com/yokoyama-lab/ROOPLPP-interpreter"
 bug-reports: "https://github.com/yokoyama-lab/ROOPLPP-interpreter/issues"
 dev-repo: "git+https://github.com/yokoyama-lab/ROOPLPP-interpreter.git"
