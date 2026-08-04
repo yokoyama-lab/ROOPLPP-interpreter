@@ -113,6 +113,22 @@ def test_a_program_that_never_stops_is_cut_off(web_server: int) -> None:
 
 
 @pytest.mark.integration
+def test_execution_leaves_no_files_behind(web_server: int) -> None:
+    """実行用のソースを programs/ に溜めない。
+
+    そこは share.php が共有リンク（恒久 URL）のために使う場所なので、実行の
+    たびにファイルが増えると単調に膨らんでいく。実行用は一時ファイルに置き、
+    終わったら消す。
+    """
+    programs = WEB_DIR / "programs"
+    before = set(programs.iterdir())
+    unique = CLEAN.replace("x += 7", "x += 7\n        x -= 7\n        x += 12345")
+    body = json.loads(_post(web_server, {"prog": unique}, read_timeout=30))
+    assert "x = 12345" in body[0]
+    assert set(programs.iterdir()) == before, "programs/ にファイルが残った"
+
+
+@pytest.mark.integration
 def test_invalid_json_is_rejected(web_server: int) -> None:
     conn = http.client.HTTPConnection("127.0.0.1", web_server, timeout=30)
     try:

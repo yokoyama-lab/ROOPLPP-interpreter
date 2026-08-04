@@ -73,17 +73,18 @@ if ($library) {
     }
 }
 
-$prog_hash = substr(sha1($prog_text), 0, 8);
-
-// ハッシュ形式の検証
-if (!preg_match('/^[a-f0-9]{8}$/', $prog_hash)) {
+// 実行用のソースは**一時ファイル**に置く。以前は programs/ にハッシュ名で
+// 書いていたが、そこは share.php が共有リンク（恒久 URL）のために使う場所で、
+// 実行のたびにファイルが増えて消える経路が無かった。共有を壊さずに増加を
+// 止めるには、実行用と共有用を分けるのが正しい。
+$prog_file = tempnam(sys_get_temp_dir(), 'rplpp_');
+if ($prog_file === false) {
     header("HTTP/1.1 500 Internal Server Error");
     exit;
 }
-
-$prog_file = "$dir/programs/$prog_hash.rplpp";
 $res = file_put_contents($prog_file, $prog_text);
 if ($res === FALSE) {
+    @unlink($prog_file);
     header("HTTP/1.1 500 Internal Server Error");
     exit;
 }
@@ -104,7 +105,9 @@ $process = proc_open($cmd, $descriptorspec, $pipes, $cwd, $env);
 
 if (is_resource($process)) {
 
-    fwrite($pipes[0], $prog_text);
+    // インタプリタは引数のファイルしか読まない。標準入力へ書いても誰も
+    // 読まないので、パイプのバッファ（64KB 程度）が埋まると書き込み側が
+    // 止まってしまう。閉じるだけにする
     fclose($pipes[0]);
 
     $output = stream_get_contents($pipes[1]);
@@ -119,6 +122,9 @@ if (is_resource($process)) {
       $output = "Execution timed out!\n";
     }
 }
+
+// 実行が終わったら一時ファイルは残さない
+@unlink($prog_file);
 
 header('Content-type:application/json; charset=utf8');
 
