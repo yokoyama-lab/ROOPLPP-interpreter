@@ -1,0 +1,39 @@
+// Reversible longest common prefix length
+// Compares two equal-length arrays element by element
+// a = [1, 2, 3, 4, 5], b = [1, 2, 3, 7, 8] -> lcpLen = 3
+
+class LCP
+    method find(int[] a, int[] b, int n, int lcpLen, int[] matched)
+        for i in (0..n-1) do
+            if a[i] = b[i] then
+                matched[i] ^= 1
+                lcpLen += 1
+            fi matched[i] = 1
+        end
+
+class Program
+    int[] a
+    int[] b
+    int lcpLen
+    int[] matched
+    method main()
+        new int[5] a
+        new int[5] b
+        new int[5] matched
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        b[0] += 1
+        b[1] += 2
+        b[2] += 3
+        b[3] += 7
+        b[4] += 8
+        local LCP l = nil
+        new LCP l
+        local int n = 5
+        call l::find(a, b, n, lcpLen, matched)
+        delocal int n = 5
+        delete LCP l
+        delocal LCP l = nil

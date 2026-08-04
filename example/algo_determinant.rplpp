@@ -1,0 +1,30 @@
+// Reversible matrix determinant computation
+// 3x3 matrix via Sarrus' rule (expansion)
+// A = [[1,2,3],[4,5,6],[7,8,10]] -> det = -3
+
+class Determinant
+    method det3x3(int[] m, int result)
+        // Sarrus: det = m00(m11*m22-m12*m21) - m01(m10*m22-m12*m20) + m02(m10*m21-m11*m20)
+        result += m[0] * (m[4] * m[8] - m[5] * m[7])
+        result -= m[1] * (m[3] * m[8] - m[5] * m[6])
+        result += m[2] * (m[3] * m[7] - m[4] * m[6])
+
+class Program
+    int[] m
+    int det
+    method main()
+        new int[9] m
+        m[0] += 1
+        m[1] += 2
+        m[2] += 3
+        m[3] += 4
+        m[4] += 5
+        m[5] += 6
+        m[6] += 7
+        m[7] += 8
+        m[8] += 10
+        local Determinant d = nil
+        new Determinant d
+        call d::det3x3(m, det)
+        delete Determinant d
+        delocal Determinant d = nil

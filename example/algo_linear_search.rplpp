@@ -1,0 +1,38 @@
+// Reversible linear search
+// Find the index of target in array a
+// a = [10, 20, 30, 40, 50], target = 30 -> index = 2, found = 1
+
+class LinearSearch
+    method search(int[] a, int n, int target, int index, int found)
+        from index = 0 do
+            if a[index] = target then
+                found ^= 1
+            fi a[index] = target
+            if found = 0 then
+                index += 1
+            fi found = 0
+        until found = 1 || index = n
+        if found = 0 then
+            index -= n
+        fi found = 0
+
+class Program
+    int[] a
+    int index
+    int found
+    method main()
+        new int[5] a
+        a[0] += 10
+        a[1] += 20
+        a[2] += 30
+        a[3] += 40
+        a[4] += 50
+        local LinearSearch s = nil
+        new LinearSearch s
+        local int n = 5
+        local int target = 30
+        call s::search(a, n, target, index, found)
+        delocal int target = 30
+        delocal int n = 5
+        delete LinearSearch s
+        delocal LinearSearch s = nil

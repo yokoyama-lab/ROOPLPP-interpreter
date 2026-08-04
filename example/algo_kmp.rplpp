@@ -1,0 +1,128 @@
+// Reversible Knuth-Morris-Pratt string matching (occurrence counting),
+// ported from PyJanus example/kmp.ja.
+//
+// The KMP prefix pointer j backtracks (j := f[j-1]), so it cannot serve as a
+// reversible loop assertion.  Instead both loops are driven by the monotone
+// position i, and the backtracking chain is made reversible by logging it:
+// each backtrack step stores the destroyed prefix length in gq, and the
+// number of backtracks of that step is stored right after it, so the inner
+// loop's iteration count is recoverable.  Branches that mutate their own
+// condition log one decision bit in gb.
+//
+// PyJanus uses a stack for the logs; ROOPL++ has no stack type, so the logs
+// are arrays with an explicit top-of-stack counter (gp, gbp).
+//
+// Precondition: m >= 2, n >= 1.
+// p = "aba", t = "abababaaba": occurrences at 0, 2, 4, 7, so cnt = 4 and the
+// failure function is f = [0, 0, 1].
+
+class KMP
+    method compf(int[] p, int m, int[] f, int[] gq, int gp, int[] gb, int gbp)
+        local int j = 0
+        for i in (1..m-1) do
+            // backtrack while j > 0 and p[i] != p[j]
+            local int c = 0
+            from c = 0 loop
+                local int t = f[j-1]
+                gq[gp] += j
+                j -= gq[gp]
+                gp += 1
+                j += t
+                delocal int t = j
+                c += 1
+            until j = 0 || p[i] = p[j]
+            gq[gp] += c
+            c -= gq[gp]
+            gp += 1
+            delocal int c = 0
+
+            if p[i] = p[j] then
+                j += 1
+                gb[gbp] += 1
+            fi gb[gbp] = 1
+            gbp += 1
+
+            f[i] ^= j
+        end
+        gq[gp] += j
+        j -= gq[gp]
+        gp += 1
+        delocal int j = 0
+
+    method count(int[] p, int[] t, int m, int n, int[] f, int cnt,
+                 int[] gq, int gp, int[] gb, int gbp)
+        call compf(p, m, f, gq, gp, gb, gbp)
+        local int j = 0
+        for i in (0..n-1) do
+            // backtrack while j > 0 and t[i] != p[j]
+            local int c = 0
+            from c = 0 loop
+                local int u = f[j-1]
+                gq[gp] += j
+                j -= gq[gp]
+                gp += 1
+                j += u
+                delocal int u = j
+                c += 1
+            until j = 0 || t[i] = p[j]
+            gq[gp] += c
+            c -= gq[gp]
+            gp += 1
+            delocal int c = 0
+
+            if t[i] = p[j] then
+                j += 1
+                gb[gbp] += 1
+            fi gb[gbp] = 1
+            gbp += 1
+
+            if j = m then
+                cnt += 1
+                j -= m
+                j += f[m-1]
+                gb[gbp] += 1
+            fi gb[gbp] = 1
+            gbp += 1
+        end
+        gq[gp] += j
+        j -= gq[gp]
+        gp += 1
+        delocal int j = 0
+
+class Program
+    int[] p
+    int[] t
+    int[] f
+    int cnt
+    int[] gq
+    int gp
+    int[] gb
+    int gbp
+    method main()
+        new int[3] p
+        new int[10] t
+        new int[3] f
+        new int[64] gq
+        new int[64] gb
+
+        // p = a b a  (a = 1, b = 2)
+        p[0] += 1
+        p[1] += 2
+        p[2] += 1
+        // t = a b a b a b a a b a
+        t[0] += 1
+        t[1] += 2
+        t[2] += 1
+        t[3] += 2
+        t[4] += 1
+        t[5] += 2
+        t[6] += 1
+        t[7] += 1
+        t[8] += 2
+        t[9] += 1
+
+        local KMP k = nil
+        new KMP k
+        call k::count(p, t, 3, 10, f, cnt, gq, gp, gb, gbp)
+        delete KMP k
+        delocal KMP k = nil

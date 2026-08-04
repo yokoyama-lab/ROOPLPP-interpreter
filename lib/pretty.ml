@@ -1,0 +1,195 @@
+(**プリティプリンタ：構文木を文字列に変換する*)
+open Syntax
+
+(**n回分半角4文字字下げする関数*)
+let rec indent n = if n = 0 then ""
+                   else indent (n - 1) ^ "    "
+
+(**文字列リテラルを lexer が再読込できる形にエスケープする関数。
+   lexer.mll の文字列規則は "\\\"" "\\\\" "\\'" "\\n" "\\t" と \DDD（10進3桁）を
+   受理し、それ以外のバイト（UTF-8 日本語等を含む ≥128）は生のまま受理する。
+   方針:
+   - " \ は \" \\ に、改行・タブは \n \t にする。
+   - 制御文字（< 0x20）と DEL(0x7f) は \DDD にする。生のまま出すと -inverse の
+     端末出力に ANSI エスケープ（ESC=0x1b）等が混入し、再生成ソースに NUL 等の
+     制御バイトが埋まるため。改行は raw だと lexer が文字列の途中で切るので必須。
+   - 0x20..0x7e（" \ を除く）と ≥0x80（UTF-8）は生のまま通す（日本語可読性のため）。
+   OCaml の String.escaped は ≥128 も \DDD にしてしまい日本語が壊れるので使わない。*)
+let escape_string_literal (s : string) : string =
+  let buf = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | '"'  -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | c when Char.code c < 0x20 || Char.code c = 0x7f ->
+       Buffer.add_string buf (Printf.sprintf "\\%03d" (Char.code c))
+    | c    -> Buffer.add_char buf c) s;
+  Buffer.contents buf
+
+(**型をプリントする関数*)
+let pretty_dataType = function
+  | IntegerType -> "int"
+  | ObjectType typeId -> typeId
+  | CopyType typeId -> typeId
+  | ObjectArrayType typeId -> typeId ^ "[]"
+  | IntegerArrayType -> "int[]"
+  | ArrayType -> ""
+  | ArrayElementType -> ""
+  | NilType -> ""
+
+(**演算子をプリントする関数*)
+let pretty_binOp = function
+  | Add -> "+"
+  | Sub -> "-"
+  | Xor -> "^"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%"
+  | Band -> "&"
+  | Bor -> "|"
+  | And -> "&&"
+  | Or -> "||"
+  | Lt -> "<"
+  | Gt -> ">"
+  | Eq -> "="
+  | Ne -> "!="
+  | Le -> "<="
+  | Ge -> ">="
+
+(**代入演算子をプリントする関数*)
+let pretty_modOp = function
+  | ModAdd -> "+="
+  | ModSub -> "-="
+  | ModXor -> "^="
+
+(**式をプリントする関数。
+   二項演算の被演算子が二項演算のときは括弧で囲む。こうしないと優先順位の
+   違いで再パース時にグループ化が失われる（例: i * ((a + k) / i) が
+   i * a + k / i になってしまう）。( e ) はパーサで捨てられ AST に残らない
+   ため、常に括弧を付けても parse(pretty p) = p は保たれる。*)
+let rec pretty_exp = function
+  (* 位置情報は出力しない *)
+  | EPos(_, e) -> pretty_exp e
+  | Const n -> string_of_int n
+  | Var id -> id
+  | ArrayElement(id, exp) -> id ^ "[" ^ pretty_exp exp ^ "]"
+  | Nil -> "nil"
+  | Binary(binOp, exp1, exp2) ->
+     paren_binary exp1 ^ " " ^ pretty_binOp binOp ^ " " ^ paren_binary exp2
+  | Dot(exp1, exp2) -> pretty_exp exp1 ^ "." ^ pretty_exp exp2
+(*被演算子が二項演算なら括弧で囲む（添字 e[..] や Dot は不要）。
+   位置情報の殻は括弧の判定に影響しない。 *)
+and paren_binary e =
+  match strip_epos e with
+  | Binary _ -> "(" ^ pretty_exp e ^ ")"
+  | _ -> pretty_exp e
+
+(**変数、配列、ドット演算子をプリントする関数*)
+let rec pretty_obj = function
+  | VarArray(id, None) -> id
+  | VarArray(id, Some exp) -> id ^ "[" ^ pretty_exp exp ^ "]"
+  | InstVar(obj1, obj2) ->  pretty_obj obj1 ^ "." ^ pretty_obj obj2
+
+(**メソッド呼び出しの引数をプリントする関数*)
+let rec pretty_actArgs =
+  let pretty_actArg = function
+    | Id(id) -> id
+    | Exp(e) -> pretty_exp e
+  in
+  function
+  | [] -> ""
+  | [arg] -> pretty_actArg arg
+  | hd :: tl -> pretty_actArg hd ^ ", " ^ pretty_actArgs tl
+
+(**文をプリントする関数：nを受け取り、n回分字下げする*)
+let rec pretty_stms stms n =
+  match stms with
+  | [] -> ""
+  | hd :: tl -> indent n ^ pretty_stm hd n ^ "\n" ^ pretty_stms tl n
+  and
+pretty_stm stm n =
+  let s =
+    match stm with
+    (* 位置情報は出力しない（-inverse の出力は再パースされるため） *)
+    | Positioned(_, s0) -> pretty_stm s0 n
+    | Assign(obj, modOp, exp) -> pretty_obj obj ^ " " ^ pretty_modOp modOp ^ " " ^ pretty_exp exp
+    | Swap(obj1, obj2) -> pretty_obj obj1 ^ " <=> " ^ pretty_obj obj2
+    | Conditional(exp1, stm1, stm2, exp2) -> "if " ^ pretty_exp exp1 ^ " then\n" ^ pretty_stms stm1 (n + 1) ^ indent n ^ "else\n" ^ pretty_stms stm2 (n + 1) ^ indent n ^ "fi " ^ pretty_exp exp2
+    | Loop(exp1, stm1, stm2, exp2) -> "from " ^ pretty_exp exp1 ^ " do\n" ^ pretty_stms stm1 (n + 1) ^ indent n ^  "loop\n" ^ pretty_stms stm2 (n + 1) ^ indent n ^ "until " ^ pretty_exp exp2
+    (* for追加部分 *)
+    | For(id, e1, e2, stms) -> "for " ^ id ^ " in " ^  "(" ^ pretty_exp e1 ^ ".." ^ pretty_exp e2 ^ ")" ^ " do\n" ^ pretty_stms stms (n + 1) ^ indent n ^  "end"
+      (* switch追加部分 *)
+    | Switch(obj1, cases, stml, obj2) ->
+       let rec pretty_cases =
+         let pretty_case = function | Case -> "case" | NoCase -> "" in
+         let pretty_esac = function | Esac -> "esac" | NoEsac -> "" in
+         let rec pretty_exps = function
+         | [] -> ""
+         | [e] -> pretty_exp e
+         | e::tl -> pretty_exp e ^ ":" ^ pretty_exps tl in
+         let pretty_break = function | Break -> "break " | NoBreak -> "" in
+         function
+         | [] -> ""
+         | ((c1, exps1), s, (c2, exps2, b)) :: tl -> pretty_case c1 ^ " " ^ pretty_exps exps1 ^ "\n" ^ pretty_stms s (n + 1) ^ indent (n + 1) ^ pretty_esac c2 ^ " " ^ pretty_exps exps2 ^ "\n" ^ indent (n + 1) ^ pretty_break b ^ "\n" ^ indent n ^ pretty_cases tl
+       in
+       "switch " ^ pretty_obj obj1 ^ "\n" ^ indent n ^ pretty_cases cases ^ "default\n" ^ pretty_stms stml (n + 1) ^ indent (n + 1) ^ "break\n" ^ indent n ^ "hctiws " ^ pretty_obj obj2
+    | ObjectBlock(typeId, id, stm) -> "construct " ^ typeId ^ " " ^ id ^ "\n" ^ pretty_stms stm (n + 1) ^ "\n" ^ indent n ^ "destruct " ^ id
+    | LocalBlock(dataType, id, exp1, stm, exp2) -> "local " ^ pretty_dataType dataType ^ " " ^ id ^ " = " ^ pretty_exp exp1 ^ "\n" ^ pretty_stms stm n  ^ indent n ^ "delocal " ^ pretty_dataType dataType ^ " " ^ id ^ " = " ^ pretty_exp exp2
+    | LocalCall(methodId, ids) -> "call " ^ methodId ^ "(" ^ pretty_actArgs ids ^ ")"
+    | LocalUncall(methodId, ids) -> "uncall " ^ methodId ^ "(" ^ pretty_actArgs ids ^ ")"
+    | ObjectCall(obj, methodId, ids) -> "call " ^ pretty_obj obj ^ "::" ^ methodId ^ "(" ^ pretty_actArgs ids ^ ")"
+    | ObjectUncall(obj, methodId, ids) -> "uncall " ^ pretty_obj obj ^ "::" ^ methodId ^ "(" ^ pretty_actArgs ids ^ ")"
+    | ObjectConstruction(typeId, obj) -> "new " ^ typeId ^ " " ^ pretty_obj obj
+    | ObjectDestruction(typeId, obj) -> "delete " ^ typeId ^ " " ^ pretty_obj obj
+    | CopyReference(dataType, obj1, obj2) -> "copy " ^ pretty_dataType dataType ^ " " ^ pretty_obj obj1 ^ " " ^ pretty_obj obj2
+    | UncopyReference(dataType, obj1, obj2) -> "uncopy " ^ pretty_dataType dataType ^ " " ^ pretty_obj obj1 ^ " " ^ pretty_obj obj2
+    | ArrayConstruction((typeId, exp), obj) -> "new " ^ typeId ^ "[" ^ pretty_exp exp ^ "] " ^ pretty_obj obj
+    | ArrayDestruction((typeId, exp), obj) -> "delete " ^ typeId ^ "[" ^ pretty_exp exp ^ "] " ^ pretty_obj obj
+    | Skip -> "skip"
+    | Show(exp) -> "show" ^ "(" ^ pretty_exp exp ^ ")"
+    | Print(str) -> "print" ^ "(\""  ^ escape_string_literal str ^ "\")"
+    in
+    s
+
+(**フィールドまたは引数をプリントする関数*)
+let pretty_decl (Decl(dataType, id)) = pretty_dataType dataType ^ " " ^ id
+
+(**フィールドをプリントする関数(リストを受け取る)*)
+let rec pretty_fields = function
+  | [] -> ""
+  | hd :: tl -> pretty_decl hd ^ "\n    " ^ pretty_fields tl
+
+(**引数をプリントする関数*)
+let rec pretty_args = function
+  | [] -> ""
+  | [arg] -> pretty_decl arg
+  | hd :: tl -> pretty_decl hd ^ ", " ^ pretty_args tl
+
+(**メソッドをプリントする関数*)
+let pretty_method (MDecl(id, args, stms)) =
+  "method " ^ id ^ "(" ^ pretty_args args ^ ")\n" ^ pretty_stms stms 2
+(*メソッドをプリントする関数(リストを受け取る)*)
+let rec pretty_methods = function
+  | [] -> ""
+  | [m] -> pretty_method m
+  | hd :: tl -> pretty_method hd ^ "\n    " ^ pretty_methods tl
+
+(**クラスをプリントする関数*)
+let pretty_c (CDecl(c, inherits, fields, methods)) =
+  let inher =
+  match inherits with
+  | None -> ""
+  | Some(id) -> " inherits " ^ id
+  in
+  "class " ^ c ^ inher  ^ "\n    " ^ pretty_fields fields ^ "\n    " ^ pretty_methods methods
+
+(**クラスをプリントする関数(リストを受け取る)*)
+let rec pretty_cl = function
+  | [] -> ""
+  | [cl] -> pretty_c cl
+  | hd :: tl -> pretty_c hd ^ "\n" ^ pretty_cl tl
+
+(**プログラムをプリントする関数*)
+let pretty_prog (Prog(cl)) = print_string(pretty_cl cl ^ "\n")

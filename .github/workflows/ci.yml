@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main, 'fix/**', 'feat/**' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ocaml:
+    name: build and test the interpreter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+          dune-cache: true
+
+      - name: install dependencies
+        run: opam install -y dune ounit2
+
+      - name: build
+        run: opam exec -- dune build
+
+      # 警告は 2026-08-04 にゼロにした。-warn-error を恒常的に有効化すると
+      # 新しいコンパイラが増やした警告で第三者のビルドが壊れるので、
+      # 「壊す」のではなく「CI が気づく」形にしてある。
+      - name: the build must stay warning-free
+        run: |
+          opam exec -- dune clean
+          opam exec -- dune build 2>&1 | tee build.log
+          if grep -q "Warning" build.log; then
+            echo "::error::新しい警告が出ている（上のログを参照）"
+            exit 1
+          fi
+
+      - name: test
+        run: opam exec -- dune test --force
+
+  python:
+    name: test the Python port
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install pytest
+        run: pip install pytest
+
+      # 差分テストは OCaml 実装のバイナリを使うのでここでビルドする
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+          dune-cache: true
+
+      - name: build the reference interpreter
+        run: |
+          opam install -y dune
+          opam exec -- dune build bin/main.exe
+
+      - name: test
+        run: python -m pytest python/tests -q
+
+  rocq:
+    name: check the mechanized semantics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 証明は `Require Import` だけを使うので Coq 8.x でも通る（可搬性の検査）。
+      # グループは同じシェルで続けて走る（cd が次のグループへ漏れる）ので、
+      # ディレクトリ移動は部分シェルに閉じ込める。
+      # 所有者の付け替えは custom_script の中に要る（custom_script は既定の
+      # install / before_script / script を丸ごと置き換えるため）。これが無いと
+      # チェックアウトが runner 所有のままで coqc が .vo を書けない。
+      - name: build and re-check the proof (Coq 8.20)
+        uses: coq-community/docker-coq-action@v1
+        with:
+          coq_version: "8.20"
+          ocaml_version: "default"
+          custom_script: |
+            startGroup "fix the checkout's ownership"
+              sudo chown -R "$(id -u):$(id -g)" .
+            endGroup
+            startGroup "build the proof"
+              (cd coq && make)
+            endGroup
+            startGroup "re-check with the independent checker"
+              (cd coq && make check)
+            endGroup
+
+      # 抽出物は「Rocq 無しでも OCaml 側がビルドできるように」コミットしてある。
+      # roopl.v を変えて make extract を忘れると、差分テストは古い抽出物に対して
+      # 通ってしまい誰も気づかない。ただし**抽出結果は Rocq のバージョンに依存
+      # する**（標準ライブラリの抽出が変わる）ので、鮮度の照合はコミット済みの
+      # 抽出物を作ったのと同じ 9.1.1 で行う。前段の .vo は版が違うので捨てる。
+      - name: the committed extraction is up to date (Rocq 9.1.1)
+        uses: coq-community/docker-coq-action@v1
+        with:
+          custom_image: rocq/rocq-prover:9.1.1
+          custom_script: |
+            startGroup "fix the checkout's ownership"
+              sudo chown -R "$(id -u):$(id -g)" .
+            endGroup
+            startGroup "the committed extraction is up to date"
+              cp coq/extracted/rooplRun.ml /tmp/before.ml
+              cp coq/extracted/rooplRun.mli /tmp/before.mli
+              (cd coq && make clean && make && make extract)
+              cmp /tmp/before.ml coq/extracted/rooplRun.ml \
+                && cmp /tmp/before.mli coq/extracted/rooplRun.mli \
+                || { echo "coq/extracted is stale -- run 'cd coq && make extract' and commit the result"; exit 1; }
+            endGroup

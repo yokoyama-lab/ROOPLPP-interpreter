@@ -1,0 +1,35 @@
+// Reversible count of occurrences of target in array
+// Records which positions matched for reversibility
+// a = [3, 1, 4, 1, 5, 1], target = 1 -> count = 3
+
+class CountEqual
+    method countEq(int[] a, int n, int target, int count, int[] matches)
+        for i in (0..n-1) do
+            if a[i] = target then
+                count += 1
+                matches[i] ^= 1
+            fi matches[i] = 1
+        end
+
+class Program
+    int[] a
+    int count
+    int[] matches
+    method main()
+        new int[6] a
+        new int[6] matches
+        a[0] += 3
+        a[1] += 1
+        a[2] += 4
+        a[3] += 1
+        a[4] += 5
+        a[5] += 1
+        local CountEqual c = nil
+        new CountEqual c
+        local int n = 6
+        local int target = 1
+        call c::countEq(a, n, target, count, matches)
+        delocal int target = 1
+        delocal int n = 6
+        delete CountEqual c
+        delocal CountEqual c = nil

@@ -1,0 +1,26 @@
+// Reversible Catalan numbers via DP
+// C_0=1, C_n = sum_{i=0}^{n-1} C_i * C_{n-1-i}
+// n=6 -> cat = [1, 1, 2, 5, 14, 42]
+
+class Catalan
+    method compute(int[] cat, int n)
+        cat[0] += 1
+        for i in (1..n-1) do
+            for j in (0..i-1) do
+                local int k = i - 1 - j
+                cat[i] += cat[j] * cat[k]
+                delocal int k = i - 1 - j
+            end
+        end
+
+class Program
+    int[] cat
+    method main()
+        new int[6] cat
+        local Catalan c = nil
+        new Catalan c
+        local int n = 6
+        call c::compute(cat, n)
+        delocal int n = 6
+        delete Catalan c
+        delocal Catalan c = nil

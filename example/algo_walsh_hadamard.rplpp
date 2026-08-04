@@ -1,0 +1,59 @@
+// Reversible Walsh-Hadamard Transform (integer butterfly network)
+// (a, b) -> (a+b, a-b) is naturally reversible
+// Input:  [1, 0, 1, 0, 0, 1, 1, 0]
+// Applies log2(n) stages of butterfly operations
+
+class WalshHadamard
+    method wht(int[] x, int n)
+        local int step = 1
+        from step = 1 loop
+            local int stride = step + step
+            for i in (0..n-1) do
+                local int block = i / stride
+                local int pos = i - block * stride
+                if pos < step then
+                    local int j = i + step
+                    local int sum = x[i] + x[j]
+                    local int diff = x[i] - x[j]
+                    // 古い値は sum と diff から復元できる（sum+diff = 2a,
+                    // sum-diff = 2b）ので、それを引いて 0 にする。
+                    // x[i] -= x[i] は古い値を捨ててしまう
+                    x[i] -= (sum + diff) / 2
+                    x[j] -= (sum - diff) / 2
+                    x[i] += sum
+                    x[j] += diff
+                    delocal int diff = x[j]
+                    delocal int sum = x[i]
+                    delocal int j = i + step
+                fi pos < step
+                delocal int pos = i - block * stride
+                delocal int block = i / stride
+            end
+            delocal int stride = step + step
+            local int s2 = step
+            step -= s2
+            step += s2 + s2
+            delocal int s2 = step / 2
+        until step >= n
+        // 1 から倍々にして n 以上で止まるので、n が 2 の冪なら出口は n
+        delocal int step = n
+
+class Program
+    int[] x
+    method main()
+        new int[8] x
+        x[0] += 1
+        x[1] += 0
+        x[2] += 1
+        x[3] += 0
+        x[4] += 0
+        x[5] += 1
+        x[6] += 1
+        x[7] += 0
+        local WalshHadamard w = nil
+        new WalshHadamard w
+        local int n = 8
+        call w::wht(x, n)
+        delocal int n = 8
+        delete WalshHadamard w
+        delocal WalshHadamard w = nil

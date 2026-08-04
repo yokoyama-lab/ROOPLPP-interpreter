@@ -1,0 +1,23 @@
+// Reversible triangular number: T(n) = 1 + 2 + ... + n = n*(n+1)/2
+// Also generates the partial sums
+// n=10 -> result=55, sums=[1,3,6,10,15,21,28,36,45,55]
+
+class Triangular
+    method compute(int n, int result, int[] sums)
+        for i in (1..n) do
+            result += i
+            sums[i-1] += result
+        end
+
+class Program
+    int result
+    int[] sums
+    method main()
+        new int[10] sums
+        local Triangular t = nil
+        new Triangular t
+        local int n = 10
+        call t::compute(n, result, sums)
+        delocal int n = 10
+        delete Triangular t
+        delocal Triangular t = nil

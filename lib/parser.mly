@@ -1,0 +1,338 @@
+%{
+open Syntax
+open Util
+
+(* 構文エラーの詳細は bin/main.ml が Util.Parse_error を捕まえて
+   diagnostics.ml で整形する。ocamlyacc 既定の "syntax error" は
+   その前に出てしまうので、ここでは何も表示しない。 *)
+let parse_error _ = ()
+
+(* 文に位置を付ける。n は規則右辺の何番目の記号か（ocamlyacc の規約）。
+   位置は診断（実行時エラーの行）専用で、意味論には影響しない。 *)
+let span ns ne =
+  let s = Parsing.rhs_start_pos ns and t = Parsing.rhs_end_pos ne in
+  { line = s.Lexing.pos_lnum;
+    col = s.Lexing.pos_cnum - s.Lexing.pos_bol;
+    end_line = t.Lexing.pos_lnum;
+    end_col = t.Lexing.pos_cnum - t.Lexing.pos_bol }
+
+let at_pos n s = Positioned (span n n, s)
+
+(* 式にも位置を付ける。失敗しうる形（配列要素・二項演算）だけを包めば、
+   エラーのキャレットは出せる。定数と nil は落ちないので包まない。 *)
+let at_epos ns ne e = EPos (span ns ne, e)
+
+let rec anyId2obj = function
+  | VarArray(x, None)   -> Var x
+  | VarArray(x, Some e) -> ArrayElement (x,e)
+  | InstVar(x1, x2) -> Dot(anyId2obj x1, anyId2obj x2)
+%}
+
+// リテラル
+%token <string> ID     // x, y, abc, ...
+%token <int> CONST     // 0, 1, 2, ...
+%token <string> STRING
+
+// 演算子
+%token MUL       // '*'
+%token DIV       // '/'
+%token MOD       // '%'
+%token ADD       // '+'
+%token SUB       // '-'
+%token LT        // '<'
+%token LE        // "<="
+%token GT        // '>'
+%token GE        // ">="
+%token EQ        // '='
+%token NE        // "!="
+%token BAND      // '&'
+%token XOR       // '^'
+%token BOR       // '|'
+%token AND       // "&&"
+%token OR        // "||"
+%token SWAP      // "<=>"
+%token COMMA     // ','
+// 追加部分for
+%token WDOT      // ".."
+%token WCOLON    // "::"
+%token MODADD    // "+="
+%token MODSUB    // "-="
+%token MODXOR    // "^="
+%token DOT       // '.'
+// 追加部分switch
+%token COLON     // ':'
+
+// 括弧
+%token LPAREN    // '('
+%token RPAREN    // ')'
+%token LBRA      // '['
+%token RBRA      // ']'
+
+// キーワード
+%token CLASS     // "class"
+%token INHERITS  // "inherits"
+%token METHOD    // "method"
+%token CALL      // "call"
+%token UNCALL    // "uncall"
+%token CONSTRUCT // "construct"
+%token DESTRUCT  // "destruct"
+%token SKIP      // "skip"
+%token FROM      // "from"
+%token DO        // "do"
+%token LOOP      // "loop"
+%token UNTIL     // "until"
+// 追加部分for
+%token FOR       // "for"
+%token IN        // "in"
+%token END       // "end"
+// 追加部分switch
+%token SWITCH    // "switch"
+%token HCTIWS    // "hctiws"
+%token CASE      // "case"
+%token FCASE     // "fcase"
+%token ECASE     // "ecase"
+%token ESAC      // "ESAC"
+%token BREAK     // "break"
+%token DEFAULT   // "default"
+
+%token INT       // "int"
+%token NIL       // "nil"
+%token IF        // "if"
+%token THEN      // "then"
+%token ELSE      // "else"
+%token FI        // "fi"
+%token LOCAL     // "local"
+%token DELOCAL   // "delocal"
+%token NEW       // "new"
+%token DELETE    // "delete"
+%token COPY      // "copy"
+%token UNCOPY    // "uncopy"
+%token SHOW      // "show"
+%token PRINT     // "print"
+
+// 制御記号
+%token EOF       // end_of_file
+
+// operator precedence
+%left OR                /* lowest precedence */
+%left AND
+%left BOR
+%left XOR
+%left BAND
+%nonassoc LT LE GT GE
+%nonassoc EQ NE
+%left ADD SUB
+%left MUL DIV MOD
+%nonassoc UNARY
+%left DOT               /* highest precedence */
+
+%start main
+%type <Syntax.prog> main
+
+%%
+
+// 開始記号
+main:
+  | prog EOF { Prog $1 }
+  | error { raise (Parse_error (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) };
+
+// 式
+exp:
+  | CONST        { Const $1             } // 定数
+  | anyId        { at_epos 1 1 (anyId2obj $1) } // 変数 or 配列要素
+  | NIL          { Nil                  } // nil
+  | exp MUL exp { at_epos 1 3 (Binary(Mul, $1, $3)) } // e1 * e2
+  | exp DIV exp { at_epos 1 3 (Binary(Div, $1, $3)) } // e1 / e2
+  | exp MOD exp { at_epos 1 3 (Binary(Mod, $1, $3)) } // e1 % e2
+  | exp ADD exp { at_epos 1 3 (Binary(Add, $1, $3)) } // e1 + e2
+  | exp SUB exp { at_epos 1 3 (Binary(Sub, $1, $3)) } // e1 - e2
+  | exp LT exp { at_epos 1 3 (Binary(Lt, $1, $3)) } // e1 < e2
+  | exp LE exp { at_epos 1 3 (Binary(Le, $1, $3)) } // e1 <= e2
+  | exp GT exp { at_epos 1 3 (Binary(Gt, $1, $3)) } // e1 > e2
+  | exp GE exp { at_epos 1 3 (Binary(Ge, $1, $3)) } // e1 >= e2
+  | exp EQ exp { at_epos 1 3 (Binary(Eq, $1, $3)) } // e1 = e2
+  | exp NE exp { at_epos 1 3 (Binary(Ne, $1, $3)) } // e1 != e2
+  | exp BAND exp { at_epos 1 3 (Binary(Band, $1, $3)) } // e1 & e2
+  | exp XOR exp { at_epos 1 3 (Binary(Xor, $1, $3)) } // e1 ^ e2
+  | exp BOR exp { at_epos 1 3 (Binary(Bor, $1, $3)) } // e1 | e2
+  | exp AND exp { at_epos 1 3 (Binary(And, $1, $3)) } // e1 && e2
+  | exp OR exp { at_epos 1 3 (Binary(Or, $1, $3)) } // e1 && e2
+  | LPAREN exp RPAREN { $2 }              // ( e )
+  | SUB exp %prec UNARY { at_epos 1 2 (Binary(Sub, Const 0, $2)) } // -e
+//  | exp DOT exp  { Dot($1, $3)          } // e1 . e2
+
+modop:
+  | MODADD { ModAdd }
+  | MODSUB { ModSub }
+  | MODXOR { ModXor }
+
+typeId:
+  | ID   { $1 }
+
+arrayTypeName:
+  | typeId LBRA exp RBRA { ($1, $3) }
+  | INT    LBRA exp RBRA { ("int", $3) }
+
+arg:
+  | ID  { Id $1  }
+  | exp { Exp $1 }
+
+anyIds1:
+  | anyIds1 COMMA arg { $1 @ [$3]}
+  | arg               { [$1] }
+
+anyIds:
+  | anyIds1 { $1 }
+  |         { [] }
+
+anyId:
+  | ID LBRA exp RBRA { VarArray($1, Some $3) }
+  | ID               { VarArray($1, None) }
+  | anyId DOT anyId  { InstVar($1, $3) }
+
+// 追加部分switch
+exps1:
+  | exps1 COLON exp { $1 @ [$3] }
+  | exp             { [$1] }
+
+case:
+  | CASE exps1 { Case, $2   }
+  |            { NoCase, [] }
+
+esac:
+  | ESAC exps1 BREAK  { Esac, $2, Break     }
+  | ESAC exps1        { Esac, $2, NoBreak   }
+  |                   { NoEsac, [], NoBreak }
+
+break:
+  | BREAK { Break  }
+  |       { NoBreak }
+
+switchs1:
+  | switchs1 switch { $1 @ [$2] }
+  | switch          { [$1] }
+
+switch:
+  | case stms1 esac
+    { $1, $2, $3 }
+
+// statement
+stms1:
+  | stms1 stm { $1 @ [ at_pos 2 $2 ] }
+  | stm       { [ at_pos 1 $1 ] }
+
+stm:
+  | anyId modop exp
+    { Assign($1, $2, $3) } // x (+,-,^)= e
+  | IF exp THEN stms1 else_opt FI exp
+    { Conditional($2, $4, $5, $7) } // if e then s else s fi e  or  if e then s fi e
+  | FROM exp do_opt loop_opt UNTIL exp
+    { Loop($2, $3, $4, $6) } // from e do s loop s until e or   or  from e do s until e  or  from e loop s until e
+  //追加部分for
+  | FOR ID IN LPAREN exp WDOT exp RPAREN DO stms1 END // for x in (e..e) do s end
+    { For($2, $5, $7, $10 ) }
+  // 追加部分switch
+  | SWITCH anyId switchs1 DEFAULT stms1 BREAK HCTIWS anyId
+    { Switch($2, $3, $5, $8) }
+  | CALL methodName LPAREN anyIds RPAREN
+    { LocalCall($2, $4) } // call q(x, ... , x)
+  | UNCALL methodName LPAREN anyIds RPAREN
+    { LocalUncall($2, $4) } // uncall q(x, ... , x)
+  | CALL anyId WCOLON methodName LPAREN anyIds RPAREN
+    { ObjectCall($2, $4, $6) } // call x::q(x, ..., x)
+  | UNCALL anyId WCOLON methodName LPAREN anyIds RPAREN
+    { ObjectUncall($2, $4, $6) } // uncall x::q(x, ..., x)
+  | LOCAL dataType ID EQ exp stms1 DELOCAL dataType ID EQ exp
+    { if $3 <> $9 then Printf.eprintf "Warning: LOCAL/DELOCAL variable names do not match: %s vs %s\n" $3 $9;
+      if $2 <> $8 then Printf.eprintf "Warning: LOCAL/DELOCAL types do not match for variable %s\n" $3;
+      LocalBlock($2, $3, $5, $6, $11) }
+  | CONSTRUCT typeId ID stms1 DESTRUCT ID
+    { if $3 <> $6 then Printf.eprintf "Warning: CONSTRUCT/DESTRUCT variable names do not match: %s vs %s\n" $3 $6;
+      ObjectBlock($2, $3, $4) }
+  | NEW arrayTypeName anyId
+    { ArrayConstruction($2, $3) } // new Foo[length] fooList
+  | NEW typeId anyId
+    { ObjectConstruction($2, $3) } // new Foo foo
+  | DELETE arrayTypeName anyId
+    { ArrayDestruction($2, $3) } // delete Foo[length] fooList
+  | DELETE typeId anyId
+    { ObjectDestruction($2, $3) } // delete Foo foo
+  | COPY dataType anyId anyId
+    { CopyReference($2, $3, $4) } // copy t x y
+  | UNCOPY dataType anyId anyId
+    { UncopyReference($2, $3, $4) } // uncopy int x y
+  | SKIP
+    { Skip } // skip
+  | anyId SWAP anyId
+    { Swap($1, $3) } // x <=> x
+  | SHOW LPAREN exp RPAREN
+    { Show($3) }
+  | PRINT LPAREN STRING RPAREN
+      { Print($3) }
+
+else_opt:
+  | ELSE stms1 { $2 }
+  |            { [Skip] }
+
+do_opt:
+  | DO stms1 { $2 }
+  |          { [Skip] }
+
+loop_opt:
+  | LOOP stms1 { $2 }
+  |            { [Skip] }
+
+dataType:
+  | INT LBRA RBRA    { IntegerArrayType   } // int[]
+  | INT              { IntegerType        } // int
+  | typeId LBRA RBRA { ObjectArrayType $1 } // Foo[]
+  | typeId           { ObjectType $1      } // Foo
+
+// method
+methodName:
+  | ID { $1 }
+
+methDec:
+  | METHOD methodName LPAREN varDecCommas RPAREN stms1
+    { MDecl($2, $4, $6) } // method q(t x, ... , t x) s
+
+methDecs:
+  | methDecs methDec { $1 @ [$2] }
+  | methDec          { [$1]      }
+
+inherits:
+  | INHERITS typeId { Some $2 }
+  |                 { None }
+
+varDec:
+  | dataType ID { Decl($1,$2) }
+
+varDecCommas1:
+  | varDecCommas1 COMMA varDec { $1 @ [$3] }
+  | varDec                     { [$1]      }
+
+varDecCommas:
+  | varDecCommas1 { $1 }
+  |               { [] }
+
+varDecs1:
+  | varDecs1 varDec { $1 @ [$2] }
+  | varDec          { [$1] }
+
+varDecs:
+  | varDecs1 { $1 }
+  |          { [] }
+
+// class decfinition
+aClass:
+  | CLASS typeId inherits varDecs methDecs { CDecl($2, $3, $4, $5) }
+
+classList:
+  | classList aClass  { $1 @ [$2] }
+  |                   { [] }
+
+// program
+prog:
+  | classList     { $1 }
+
+%%

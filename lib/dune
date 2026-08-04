@@ -1,0 +1,14 @@
+; ROOPL++ interpreter library: AST, lexer, parser, evaluator, inverter, printers.
+; Unwrapped so the executable and tests can `open Eval` / `open Syntax` etc.
+; and refer to Parser/Lexer directly, as the original code does.
+(library
+ (name rooplpp)
+ (wrapped false)
+ ; カバレッジ計測は既定では無効。`dune test --instrument-with bisect_ppx` を
+ ; 付けたときだけ有効になるので、ふだんのビルドは bisect_ppx を要求しない。
+ (instrumentation
+  (backend bisect_ppx)))
+
+(ocamllex lexer)
+
+(ocamlyacc parser)

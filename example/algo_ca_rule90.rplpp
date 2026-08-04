@@ -1,0 +1,42 @@
+// Second-order reversible cellular automaton (Rule 90R), ported from
+// PyJanus example/reversible_ca_rule90.ja.
+//
+//   new[i] = cur[i-1] XOR cur[i+1] XOR prev[i]
+//
+// Because the previous generation is XOR-ed in, the update is its own
+// inverse: `uncall step` runs the automaton backwards in time.  Two arrays
+// hold the two most recent generations and are updated alternately, so no
+// history has to be stored.  Cells 0 and n-1 are zero boundary guards.
+//
+// Three steps forward, then one step backward, leaving generations
+// t = 2 and t = 3 in the store.
+
+class Rule90R
+    method step(int[] dst, int[] src, int n)
+        for i in (1..n-2) do
+            dst[i] ^= src[i-1]
+            dst[i] ^= src[i+1]
+        end
+
+class Program
+    int[] a
+    int[] b
+    method main()
+        new int[7] a
+        new int[7] b
+
+        // generation t = 0 in b, generation t = 1 in a
+        b[1] += 1
+        b[4] += 1
+        a[1] += 1
+        a[2] += 1
+        a[5] += 1
+
+        local Rule90R r = nil
+        new Rule90R r
+        call r::step(b, a, 7)     // b becomes t = 2
+        call r::step(a, b, 7)     // a becomes t = 3
+        call r::step(b, a, 7)     // b becomes t = 4
+        uncall r::step(b, a, 7)   // back to t = 2
+        delete Rule90R r
+        delocal Rule90R r = nil

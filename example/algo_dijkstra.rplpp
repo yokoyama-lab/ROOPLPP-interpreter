@@ -1,0 +1,117 @@
+// Reversible Dijkstra (single-source shortest paths, O(V^2)), ported from
+// PyJanus example/dijkstra.ja.
+//
+// Two things destroy information in ordinary Dijkstra: picking the minimum
+// unvisited vertex, and overwriting dist[v] during relaxation.  The first is
+// made clean with Bennett's compute-copy-uncompute (selectMin), the second is
+// logged: dlog keeps the overwritten distances and the selected vertices,
+// blog keeps one decision bit per examined edge (the branch mutates its own
+// condition, so a value-level exit assertion is impossible).
+//
+// CLRS figure 24.6, source 0: dist = [0, 8, 9, 5, 7].
+// Unreachable vertices would keep the "infinity" value.
+//
+// ROOPL++ evaluates || strictly, so the "no candidate yet" sentinel cannot be
+// an out-of-range index guarded by a disjunct.  Instead dist has one extra
+// cell dist[vn] holding a value larger than any real distance, and the
+// candidate u simply starts at vn.
+
+class Dijkstra
+    // u := index of the unvisited vertex with minimum dist (u = vn on entry
+    // means "no candidate yet"); lg logs the superseded candidates
+    method minvSub(int[] dist, int[] visited, int vn, int u,
+                   int[] lg, int lc, int[] bl, int bc)
+        for j in (0..vn-1) do
+            if visited[j] = 0 && dist[j] < dist[u] then
+                lg[lc] += u
+                u -= lg[lc]
+                u += j
+                lc += 1
+                bl[bc] += 1
+            fi bl[bc] = 1
+            bc += 1
+        end
+
+    // clean selection: res := argmin, all scratch space restored and freed
+    method selectMin(int[] dist, int[] visited, int vn, int res)
+        local int[] lg = nil
+        new int[vn] lg
+        local int[] bl = nil
+        new int[vn] bl
+        local int u = vn
+        local int lc = 0
+        local int bc = 0
+        call minvSub(dist, visited, vn, u, lg, lc, bl, bc)
+        res ^= u
+        uncall minvSub(dist, visited, vn, u, lg, lc, bl, bc)
+        delocal int bc = 0
+        delocal int lc = 0
+        delocal int u = vn
+        delete int[vn] bl
+        delocal int[] bl = nil
+        delete int[vn] lg
+        delocal int[] lg = nil
+
+    method run(int[] w, int vn, int[] dist, int[] visited,
+               int[] dlog, int dc, int[] blog, int bc)
+        for round in (0..vn-1) do
+            local int u = 0
+            call selectMin(dist, visited, vn, u)
+            visited[u] += 1
+            for v in (0..vn-1) do
+                if w[u * vn + v] > 0 && visited[v] = 0
+                   && dist[u] + w[u * vn + v] < dist[v] then
+                    local int nd = dist[u] + w[u * vn + v]
+                    dlog[dc] += dist[v]
+                    dist[v] -= dlog[dc]
+                    dist[v] += nd
+                    dc += 1
+                    delocal int nd = dist[v]
+                    blog[bc] += 1
+                fi blog[bc] = 1
+                bc += 1
+            end
+            dlog[dc] += u
+            u -= dlog[dc]
+            dc += 1
+            delocal int u = 0
+        end
+
+class Program
+    int[] w
+    int[] dist
+    int[] visited
+    int[] dlog
+    int dc
+    int[] blog
+    int bc
+    method main()
+        new int[25] w
+        new int[6] dist     // dist[5] is the "no candidate" sentinel
+        new int[5] visited
+        new int[30] dlog
+        new int[25] blog
+
+        // edges: 0->1:10 0->3:5 1->2:1 3->1:3 3->2:9 3->4:2 4->2:6 2->4:4
+        w[1] += 10
+        w[3] += 5
+        w[7] += 1
+        w[16] += 3
+        w[17] += 9
+        w[19] += 2
+        w[22] += 6
+        w[14] += 4
+
+        local int inf = 100000
+        dist[1] += inf
+        dist[2] += inf
+        dist[3] += inf
+        dist[4] += inf
+        dist[5] += 10 * inf     // sentinel: larger than any real distance
+        delocal int inf = 100000
+
+        local Dijkstra d = nil
+        new Dijkstra d
+        call d::run(w, 5, dist, visited, dlog, dc, blog, bc)
+        delete Dijkstra d
+        delocal Dijkstra d = nil

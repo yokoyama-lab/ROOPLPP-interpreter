@@ -1,0 +1,31 @@
+// Reversible cumulative product
+// a = [2, 3, 4, 5] -> prod = [2, 6, 24, 120]
+// Each prod[i] = product of a[0..i]
+
+class CumProduct
+    method compute(int[] a, int[] prod, int n)
+        prod[0] += a[0]
+        for i in (1..n-1) do
+            local int tmp = prod[i-1]
+            prod[i] -= prod[i]
+            prod[i] += tmp * a[i]
+            delocal int tmp = prod[i] / a[i]
+        end
+
+class Program
+    int[] a
+    int[] prod
+    method main()
+        new int[4] a
+        new int[4] prod
+        a[0] += 2
+        a[1] += 3
+        a[2] += 4
+        a[3] += 5
+        local CumProduct c = nil
+        new CumProduct c
+        local int n = 4
+        call c::compute(a, prod, n)
+        delocal int n = 4
+        delete CumProduct c
+        delocal CumProduct c = nil

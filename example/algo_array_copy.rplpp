@@ -1,0 +1,26 @@
+// Reversible array arrayCopy: dst += src (element-wise)
+// uncall subtracts, restoring dst to zero
+// src = [10, 20, 30] -> dst = [10, 20, 30]
+
+class ArrayCopy
+    method arrayCopy(int[] src, int[] dst, int n)
+        for i in (0..n-1) do
+            dst[i] += src[i]
+        end
+
+class Program
+    int[] src
+    int[] dst
+    method main()
+        new int[3] src
+        new int[3] dst
+        src[0] += 10
+        src[1] += 20
+        src[2] += 30
+        local ArrayCopy c = nil
+        new ArrayCopy c
+        local int n = 3
+        call c::arrayCopy(src, dst, n)
+        delocal int n = 3
+        delete ArrayCopy c
+        delocal ArrayCopy c = nil

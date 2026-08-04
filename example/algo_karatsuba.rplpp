@@ -1,0 +1,43 @@
+// Reversible Karatsuba multiplication for 2-digit numbers
+// Split x = x1*B + x0, y = y1*B + y0 where B = base
+// x*y = z2*B^2 + z1*B + z0
+// z0 = x0*y0, z2 = x1*y1, z1 = (x0+x1)*(y0+y1) - z0 - z2
+// Only 3 multiplications instead of 4
+
+class Karatsuba
+    method multiply(int x, int y, int base, int result,
+                    int x0, int x1, int y0, int y1,
+                    int z0, int z1, int z2)
+        // Split x and y
+        x0 += x % base
+        x1 += x / base
+        y0 += y % base
+        y1 += y / base
+        // Three multiplications (Karatsuba's key insight)
+        z0 += x0 * y0
+        z2 += x1 * y1
+        z1 += (x0 + x1) * (y0 + y1) - z0 - z2
+        // Combine: result = z2 * base^2 + z1 * base + z0
+        result += z2 * base * base + z1 * base + z0
+
+class Program
+    int result
+    int x0
+    int x1
+    int y0
+    int y1
+    int z0
+    int z1
+    int z2
+    method main()
+        local Karatsuba k = nil
+        new Karatsuba k
+        local int x = 1234
+        local int y = 5678
+        local int base = 100
+        call k::multiply(x, y, base, result, x0, x1, y0, y1, z0, z1, z2)
+        delocal int base = 100
+        delocal int y = 5678
+        delocal int x = 1234
+        delete Karatsuba k
+        delocal Karatsuba k = nil

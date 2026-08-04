@@ -1,0 +1,43 @@
+// Reversible matrix transpose (flattened NxN matrix)
+// Swap is self-inverse, so transpose is naturally reversible
+// Matrix stored as 1D array: m[i*n + j] = element at row i, col j
+//
+// Input (3x3):       Output:
+// 1 2 3              1 4 7
+// 4 5 6    ->        2 5 8
+// 7 8 9              3 6 9
+
+class Transpose
+    method transpose(int[] m, int n)
+        for i in (0..n-2) do
+            local int j0 = i + 1
+            for j in (j0..n-1) do
+                local int ij = i * n + j
+                local int ji = j * n + i
+                m[ij] <=> m[ji]
+                delocal int ji = j * n + i
+                delocal int ij = i * n + j
+            end
+            delocal int j0 = i + 1
+        end
+
+class Program
+    int[] m
+    method main()
+        new int[9] m
+        m[0] += 1
+        m[1] += 2
+        m[2] += 3
+        m[3] += 4
+        m[4] += 5
+        m[5] += 6
+        m[6] += 7
+        m[7] += 8
+        m[8] += 9
+        local Transpose t = nil
+        new Transpose t
+        local int n = 3
+        call t::transpose(m, n)
+        delocal int n = 3
+        delete Transpose t
+        delocal Transpose t = nil

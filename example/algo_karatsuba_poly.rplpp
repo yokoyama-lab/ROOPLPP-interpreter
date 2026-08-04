@@ -1,0 +1,91 @@
+// Reversible Karatsuba polynomial multiplication
+// Split p = p0 + p1*x^k, q = q0 + q1*x^k
+// p*q = z0 + z1*x^k + z2*x^(2k)
+// z0 = p0*q0, z2 = p1*q1, z1 = (p0+p1)*(q0+q1) - z0 - z2
+// p = [1, 2, 3, 4], q = [5, 6, 7, 8] (degree 3 polynomials)
+// Result has degree 6
+
+class KaratsubaPoly
+    // Standard polynomial multiply for small sizes
+    method baseMul(int[] a, int[] b, int na, int nb, int[] c)
+        for i in (0..na-1) do
+            for j in (0..nb-1) do
+                local int k = i + j
+                c[k] += a[i] * b[j]
+                delocal int k = i + j
+            end
+        end
+
+    // Karatsuba: split at half, use 3 multiplications
+    method karatsubaMul(int[] a, int[] b, int n, int[] c,
+                        int[] z0, int[] z1, int[] z2,
+                        int[] sumA, int[] sumB)
+        local int half = n / 2
+        // z0 = a_low * b_low
+        call baseMul(a, b, half, half, z0)
+        // z2 = a_high * b_high (need offset arrays)
+        // Use shifted indices manually
+        for i in (0..half-1) do
+            for j in (0..half-1) do
+                local int ai = i + half
+                local int bj = j + half
+                local int k = i + j
+                z2[k] += a[ai] * b[bj]
+                delocal int k = i + j
+                delocal int bj = j + half
+                delocal int ai = i + half
+            end
+        end
+        // sumA = a_low + a_high, sumB = b_low + b_high
+        for i in (0..half-1) do
+            sumA[i] += a[i] + a[i + half]
+            sumB[i] += b[i] + b[i + half]
+        end
+        // z1 = sumA * sumB - z0 - z2
+        call baseMul(sumA, sumB, half, half, z1)
+        for i in (0..n-2) do
+            z1[i] -= z0[i] + z2[i]
+        end
+        // Combine: c = z0 + z1*x^half + z2*x^(2*half)
+        for i in (0..n-2) do
+            c[i] += z0[i]
+            c[i + half] += z1[i]
+            local int i2h = i + half + half
+            c[i2h] += z2[i]
+            delocal int i2h = i + half + half
+        end
+        delocal int half = n / 2
+
+class Program
+    int[] a
+    int[] b
+    int[] c
+    int[] z0
+    int[] z1
+    int[] z2
+    int[] sumA
+    int[] sumB
+    method main()
+        new int[4] a
+        new int[4] b
+        new int[7] c
+        new int[3] z0
+        new int[3] z1
+        new int[3] z2
+        new int[2] sumA
+        new int[2] sumB
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        b[0] += 5
+        b[1] += 6
+        b[2] += 7
+        b[3] += 8
+        local KaratsubaPoly kp = nil
+        new KaratsubaPoly kp
+        local int n = 4
+        call kp::karatsubaMul(a, b, n, c, z0, z1, z2, sumA, sumB)
+        delocal int n = 4
+        delete KaratsubaPoly kp
+        delocal KaratsubaPoly kp = nil

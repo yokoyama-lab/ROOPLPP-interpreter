@@ -1,0 +1,50 @@
+// Reversible bit-reversal permutation (used in FFT)
+// For n=8 (3 bits): index i is swapped with its bit-reversal
+// [0,1,2,3,4,5,6,7] -> [0,4,2,6,1,5,3,7]
+// Only swaps where i < rev(i) to avoid double-swap
+
+class BitRevPerm
+    method reverse3bits(int x, int result)
+        // Reverse 3 bits of x
+        local int b0 = x % 2
+        local int x1 = (x - b0) / 2
+        local int b1 = x1 % 2
+        local int x2 = (x1 - b1) / 2
+        local int b2 = x2 % 2
+        result += b0 * 4 + b1 * 2 + b2
+        delocal int b2 = x2 % 2
+        delocal int x2 = (x1 - b1) / 2
+        delocal int b1 = x1 % 2
+        delocal int x1 = (x - b0) / 2
+        delocal int b0 = x % 2
+
+    method permute(int[] a, int n)
+        for i in (0..n-1) do
+            local int rev = 0
+            call reverse3bits(i, rev)
+            if i < rev then
+                a[i] <=> a[rev]
+            fi i < rev
+            uncall reverse3bits(i, rev)
+            delocal int rev = 0
+        end
+
+class Program
+    int[] a
+    method main()
+        new int[8] a
+        a[0] += 10
+        a[1] += 20
+        a[2] += 30
+        a[3] += 40
+        a[4] += 50
+        a[5] += 60
+        a[6] += 70
+        a[7] += 80
+        local BitRevPerm b = nil
+        new BitRevPerm b
+        local int n = 8
+        call b::permute(a, n)
+        delocal int n = 8
+        delete BitRevPerm b
+        delocal BitRevPerm b = nil

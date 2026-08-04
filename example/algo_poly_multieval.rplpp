@@ -1,0 +1,44 @@
+// Reversible polynomial evaluation at multiple points using Horner's method
+// p(x) = 2 + 3x + x^2, evaluate at x = [1, 2, 3, 4, 5]
+// p(1)=6, p(2)=12, p(3)=20, p(4)=30, p(5)=42
+
+class PolyMultiEval
+    method evalAll(int[] coeffs, int degree, int[] points, int npts, int[] results)
+        for p in (0..npts-1) do
+            results[p] += coeffs[degree]
+            for i in (1..degree) do
+                local int tmp = results[p]
+                results[p] -= tmp
+                results[p] += tmp * points[p]
+                delocal int tmp = results[p] / points[p]
+                local int idx = degree - i
+                results[p] += coeffs[idx]
+                delocal int idx = degree - i
+            end
+        end
+
+class Program
+    int[] coeffs
+    int[] points
+    int[] results
+    method main()
+        new int[3] coeffs
+        new int[5] points
+        new int[5] results
+        coeffs[0] += 2
+        coeffs[1] += 3
+        coeffs[2] += 1
+        points[0] += 1
+        points[1] += 2
+        points[2] += 3
+        points[3] += 4
+        points[4] += 5
+        local PolyMultiEval pe = nil
+        new PolyMultiEval pe
+        local int degree = 2
+        local int npts = 5
+        call pe::evalAll(coeffs, degree, points, npts, results)
+        delocal int npts = 5
+        delocal int degree = 2
+        delete PolyMultiEval pe
+        delocal PolyMultiEval pe = nil

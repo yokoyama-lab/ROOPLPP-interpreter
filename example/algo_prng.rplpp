@@ -1,0 +1,31 @@
+// Reversible pseudo-random number generator (Linear Congruential)
+// x_{n+1} = (a * x_n + c) mod m
+// Records sequence for reversibility
+// a=5, c=3, m=16, seed=7 -> sequence: 7,6,1,8,11,10,5,12,15,14,...
+
+class PRNG
+    method generate(int seed, int a, int c, int m, int n, int[] seq)
+        seq[0] += seed
+        for i in (1..n-1) do
+            seq[i] += (a * seq[i-1] + c) % m
+        end
+
+class Program
+    int[] seq
+    method main()
+        new int[10] seq
+        local PRNG p = nil
+        new PRNG p
+        local int seed = 7
+        local int a = 5
+        local int c = 3
+        local int m = 16
+        local int n = 10
+        call p::generate(seed, a, c, m, n, seq)
+        delocal int n = 10
+        delocal int m = 16
+        delocal int c = 3
+        delocal int a = 5
+        delocal int seed = 7
+        delete PRNG p
+        delocal PRNG p = nil

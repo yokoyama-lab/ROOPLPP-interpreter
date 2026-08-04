@@ -1,0 +1,23 @@
+// Reversible factorial: n! computed iteratively
+// n=7 -> result=5040
+
+class Factorial
+    method fact(int n, int result)
+        result ^= 1
+        for i in (1..n) do
+            local int tmp = result
+            result -= tmp
+            result += tmp * i
+            delocal int tmp = result / i
+        end
+
+class Program
+    int result
+    method main()
+        local Factorial f = nil
+        new Factorial f
+        local int n = 7
+        call f::fact(n, result)
+        delocal int n = 7
+        delete Factorial f
+        delocal Factorial f = nil

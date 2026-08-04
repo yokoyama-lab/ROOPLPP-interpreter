@@ -1,0 +1,31 @@
+// Reversible weighted sum
+// result = sum(weights[i] * values[i]) for i = 0..n-1
+// weights = [1, 2, 3], values = [10, 20, 30]
+// result = 10 + 40 + 90 = 140
+
+class WeightedSum
+    method compute(int[] weights, int[] values, int n, int result)
+        for i in (0..n-1) do
+            result += weights[i] * values[i]
+        end
+
+class Program
+    int[] weights
+    int[] values
+    int result
+    method main()
+        new int[3] weights
+        new int[3] values
+        weights[0] += 1
+        weights[1] += 2
+        weights[2] += 3
+        values[0] += 10
+        values[1] += 20
+        values[2] += 30
+        local WeightedSum w = nil
+        new WeightedSum w
+        local int n = 3
+        call w::compute(weights, values, n, result)
+        delocal int n = 3
+        delete WeightedSum w
+        delocal WeightedSum w = nil

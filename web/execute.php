@@ -22,12 +22,25 @@ function convertEOL(string $string, string $to = "\n")
 }
 
 $dir = dirname(__FILE__);
-$rplpp_path = realpath("$dir/../src/rplpp");
+// `dune build` の成果物。旧 src/rplpp へのフォールバックは廃止した:
+// src/ は dune 移行 (ab28670) で消えており、残っていたとしても可逆性の検査が
+// 一切入っていない古いインタプリタを黙って動かすことになる。
+$rplpp_path = realpath("$dir/../_build/default/bin/main.exe");
 if ($rplpp_path === false) {
     header("HTTP/1.1 500 Internal Server Error");
-    echo json_encode(["error" => "Interpreter not found"]);
+    echo json_encode(["error" => "Interpreter not found (run `dune build` in the repository root)"]);
     exit;
 }
+
+// 実行時間の上限（秒）。ROOPL++ は停止しないプログラムを書けるので
+// （例: from i = 0 loop i += 1 until i = -1）、子プロセス側に本物の上限が要る。
+// set_time_limit は PHP スクリプト自身にしか効かず、proc_open の子は止まらない。
+// 既定は 10 秒。テストから短くできるよう環境変数で上書きできる
+$timeout_secs = (int)(getenv('ROOPLPP_WEB_TIMEOUT') ?: 10);
+if ($timeout_secs < 1) { $timeout_secs = 10; }
+// timeout(1) は既定の TERM で終了コード 124 を返す（下でその値を見ている）
+$timeout_path = is_executable('/usr/bin/timeout') ? '/usr/bin/timeout'
+              : (is_executable('/bin/timeout') ? '/bin/timeout' : false);
 
 $json_string = file_get_contents("php://input", false, null, 0, $max_input_size);
 $post = json_decode($json_string, true);
@@ -39,7 +52,9 @@ if ($post === null) {
 }
 
 // コマンド引数を配列で構築
-$cmd_args = [$rplpp_path];
+$cmd_args = $timeout_path === false
+    ? [$rplpp_path]
+    : [$timeout_path, (string)$timeout_secs, $rplpp_path];
 
 // 引数
 $invert = $post['invert'] ?? false;
@@ -58,17 +73,18 @@ if ($library) {
     }
 }
 
-$prog_hash = substr(sha1($prog_text), 0, 8);
-
-// ハッシュ形式の検証
-if (!preg_match('/^[a-f0-9]{8}$/', $prog_hash)) {
+// 実行用のソースは**一時ファイル**に置く。以前は programs/ にハッシュ名で
+// 書いていたが、そこは share.php が共有リンク（恒久 URL）のために使う場所で、
+// 実行のたびにファイルが増えて消える経路が無かった。共有を壊さずに増加を
+// 止めるには、実行用と共有用を分けるのが正しい。
+$prog_file = tempnam(sys_get_temp_dir(), 'rplpp_');
+if ($prog_file === false) {
     header("HTTP/1.1 500 Internal Server Error");
     exit;
 }
-
-$prog_file = "$dir/programs/$prog_hash.rplpp";
 $res = file_put_contents($prog_file, $prog_text);
 if ($res === FALSE) {
+    @unlink($prog_file);
     header("HTTP/1.1 500 Internal Server Error");
     exit;
 }
@@ -89,7 +105,9 @@ $process = proc_open($cmd, $descriptorspec, $pipes, $cwd, $env);
 
 if (is_resource($process)) {
 
-    fwrite($pipes[0], $prog_text);
+    // インタプリタは引数のファイルしか読まない。標準入力へ書いても誰も
+    // 読まないので、パイプのバッファ（64KB 程度）が埋まると書き込み側が
+    // 止まってしまう。閉じるだけにする
     fclose($pipes[0]);
 
     $output = stream_get_contents($pipes[1]);
@@ -104,6 +122,9 @@ if (is_resource($process)) {
       $output = "Execution timed out!\n";
     }
 }
+
+// 実行が終わったら一時ファイルは残さない
+@unlink($prog_file);
 
 header('Content-type:application/json; charset=utf8');
 

@@ -1,0 +1,43 @@
+// Reversible matrix-vector multiplication
+// y += A * x  (y must be zero-initialized for fresh result)
+// A is a 3x3 matrix (flattened), x and y are 3-vectors
+// A = [[1,2,3],[4,5,6],[7,8,9]], x = [1,1,1]
+// y = [6, 15, 24]
+
+class MatVec
+    method multiply(int[] a, int[] x, int[] y, int n)
+        for i in (0..n-1) do
+            for j in (0..n-1) do
+                local int idx = i * n + j
+                y[i] += a[idx] * x[j]
+                delocal int idx = i * n + j
+            end
+        end
+
+class Program
+    int[] a
+    int[] x
+    int[] y
+    method main()
+        new int[9] a
+        new int[3] x
+        new int[3] y
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        a[5] += 6
+        a[6] += 7
+        a[7] += 8
+        a[8] += 9
+        x[0] += 1
+        x[1] += 1
+        x[2] += 1
+        local MatVec m = nil
+        new MatVec m
+        local int n = 3
+        call m::multiply(a, x, y, n)
+        delocal int n = 3
+        delete MatVec m
+        delocal MatVec m = nil

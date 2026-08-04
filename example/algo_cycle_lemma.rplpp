@@ -1,0 +1,70 @@
+// Cycle lemma (Dvoretzky-Motzkin), ported from PyJanus example/cycle_lemma.ja.
+//
+// For a sequence of +1/-1 summing to 1 there is exactly one rotation whose
+// every prefix sum is positive.  The program normalises the sequence to that
+// rotation and reports the rotation amount r, so injectivity of the map is
+// precisely the uniqueness statement of the lemma.
+//
+// The candidate test is run with Bennett's pattern (call / copy / uncall),
+// so scanning leaves no garbage; only r -- which cannot be recovered from
+// the normalised sequence alone -- is kept.
+//
+// a = [-1, 1, 1, -1, 1] -> a = [1, 1, -1, 1, -1], r = 1
+
+class CycleLemma
+    // bad += number of non-positive prefix sums of the rotation starting at k
+    method countBad(int[] a, int n, int k, int bad)
+        local int s = 0
+        for i in (0..n-1) do
+            s += a[(i + k) % n]
+            bad += (s < 1)
+        end
+        for i in (n-1..0) do
+            s -= a[(i + k) % n]
+        end
+        delocal int s = 0
+
+    method check(int[] a, int n, int k, int ok)
+        local int bad = 0
+        call countBad(a, n, k, bad)
+        ok += (bad = 0)
+        uncall countBad(a, n, k, bad)
+        delocal int bad = 0
+
+    // rotate one position to the left
+    method rot1(int[] a, int n)
+        for i in (0..n-2) do
+            a[i] <=> a[i+1]
+        end
+
+    method normalize(int[] a, int n, int r)
+        for k in (0..n-1) do
+            local int ok = 0
+            call check(a, n, k, ok)
+            r += k * ok
+            uncall check(a, n, k, ok)
+            delocal int ok = 0
+        end
+        local int j = 0
+        from j = 0 loop
+            call rot1(a, n)
+            j += 1
+        until j = r
+        delocal int j = r
+
+class Program
+    int[] a
+    int r
+    method main()
+        new int[5] a
+        a[0] -= 1
+        a[1] += 1
+        a[2] += 1
+        a[3] -= 1
+        a[4] += 1
+
+        local CycleLemma c = nil
+        new CycleLemma c
+        call c::normalize(a, 5, r)
+        delete CycleLemma c
+        delocal CycleLemma c = nil

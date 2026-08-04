@@ -1,0 +1,56 @@
+// Bennett's compute-copy-uncompute trick, ported from PyJanus
+// example/injective_bennett.ja.
+//
+// A "natural" reversible routine often consumes its input.  Division by
+// repeated subtraction is the classic case: it turns x into x mod d while
+// building the quotient.  The Bennett pattern restores cleanliness:
+//
+//   1. take a fresh copy of the input
+//   2. call the destructive routine on the copy
+//   3. copy the answer out
+//   4. uncall the destructive routine, clearing the copy again
+//
+// 17 = 3*5 + 2, so divmod(17,5) leaves q = 3, r = 2 with x untouched;
+// 3 = 0*5 + 3 exercises the x < d case.
+
+class DivMod
+    // Destructive: (x, d, q=0) -> (x mod d, d, x / d).  Requires x >= 0, d > 0.
+    // Reversible because the entry assertion q = 0 marks the first iteration.
+    method destructive(int x, int d, int q)
+        from q = 0 loop
+            x -= d
+            q += 1
+        until x < d
+
+    // Bennett wrapper: x is preserved, quotient and remainder are copied out.
+    method clean(int x, int d, int quotient, int remainder)
+        local int xc = x
+        local int q = 0
+        call destructive(xc, d, q)
+        quotient += q
+        remainder += xc
+        uncall destructive(xc, d, q)
+        delocal int q = 0
+        delocal int xc = x
+
+class Program
+    int x
+    int d
+    int q
+    int r
+    int x2
+    int q2
+    int r2
+    method main()
+        local DivMod m = nil
+        new DivMod m
+
+        x += 17
+        d += 5
+        call m::clean(x, d, q, r)
+
+        x2 += 3
+        call m::clean(x2, d, q2, r2)
+
+        delete DivMod m
+        delocal DivMod m = nil

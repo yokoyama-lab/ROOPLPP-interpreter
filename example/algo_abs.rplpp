@@ -1,0 +1,26 @@
+// Reversible absolute value
+// sign tracks whether the number was negated (garbage bit for reversibility)
+// n=-5, sign=0 -> n=5, sign=1
+
+class AbsVal
+    method abs(int n, int sign)
+        if n < 0 then
+            sign ^= 1
+            local int tmp = n
+            n -= tmp
+            n -= tmp
+            delocal int tmp = 0 - n
+        else
+            skip
+        fi sign = 1
+
+class Program
+    int n
+    int sign
+    method main()
+        n -= 5
+        local AbsVal a = nil
+        new AbsVal a
+        call a::abs(n, sign)
+        delete AbsVal a
+        delocal AbsVal a = nil

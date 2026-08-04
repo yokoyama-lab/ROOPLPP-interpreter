@@ -1,0 +1,44 @@
+// Reversible matrix multiplication C += A * B
+// A, B, C are NxN matrices stored as flattened 1D arrays
+// A = [[1,2],[3,4]], B = [[5,6],[7,8]]
+// C = [[19,22],[43,50]]
+
+class MatMul
+    method multiply(int[] a, int[] b, int[] c, int n)
+        for i in (0..n-1) do
+            for j in (0..n-1) do
+                for k in (0..n-1) do
+                    local int ci = i * n + j
+                    local int ai = i * n + k
+                    local int bi = k * n + j
+                    c[ci] += a[ai] * b[bi]
+                    delocal int bi = k * n + j
+                    delocal int ai = i * n + k
+                    delocal int ci = i * n + j
+                end
+            end
+        end
+
+class Program
+    int[] a
+    int[] b
+    int[] c
+    method main()
+        new int[4] a
+        new int[4] b
+        new int[4] c
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        b[0] += 5
+        b[1] += 6
+        b[2] += 7
+        b[3] += 8
+        local MatMul m = nil
+        new MatMul m
+        local int n = 2
+        call m::multiply(a, b, c, n)
+        delocal int n = 2
+        delete MatMul m
+        delocal MatMul m = nil

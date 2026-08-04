@@ -1,0 +1,38 @@
+// Reversible element-wise maximum of two arrays
+// Records which array provided the max for reversibility
+// a = [3, 7, 2], b = [5, 1, 8] -> out = [5, 7, 8], src = [1, 0, 1]
+
+class ArrayMax
+    method maxArrays(int[] a, int[] b, int n, int[] out, int[] src)
+        for i in (0..n-1) do
+            if a[i] >= b[i] then
+                out[i] += a[i]
+            else
+                out[i] += b[i]
+                src[i] ^= 1
+            fi src[i] = 0
+        end
+
+class Program
+    int[] a
+    int[] b
+    int[] out
+    int[] src
+    method main()
+        new int[3] a
+        new int[3] b
+        new int[3] out
+        new int[3] src
+        a[0] += 3
+        a[1] += 7
+        a[2] += 2
+        b[0] += 5
+        b[1] += 1
+        b[2] += 8
+        local ArrayMax m = nil
+        new ArrayMax m
+        local int n = 3
+        call m::maxArrays(a, b, n, out, src)
+        delocal int n = 3
+        delete ArrayMax m
+        delocal ArrayMax m = nil

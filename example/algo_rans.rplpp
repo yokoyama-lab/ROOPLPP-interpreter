@@ -1,0 +1,64 @@
+// Streaming rANS encoder, ported from PyJanus example/rans_encode.ja.
+//
+// Binary alphabet with frequencies f = [1, 3], M = 4 and the state kept in
+// [4, 8).  Entropy coding is a bijection between (symbol stream) and (final
+// state, bit stream), which is why the encoder can be written reversibly:
+// `uncall encode` is exactly the decoder, reading bits from the end.
+//
+// ROOPL++ has no /=, so the halving inside the renormalisation loop is
+// written as a local plus a compensating delocal assertion.
+//
+// s = [2,2,1,2,2,2] -> s all consumed, x = 7, bits = [0,1,0,0,...], nbits = 4
+
+class RANS
+    method encode(int[] s, int n, int x, int[] bits, int nbits)
+        x += 4
+        for i in (0..n-1) do
+            local int sym = s[i]
+            s[i] -= sym
+            local int f = 1 + 2 * (sym - 1)
+            local int c = sym - 1
+
+            // renormalise: emit low bits until the state fits the interval
+            from x >= 4 loop
+                bits[nbits] += x % 2
+                x -= bits[nbits]
+                local int h = x / 2
+                x -= h
+                delocal int h = x
+                nbits += 1
+            until x < 2 * f
+
+            // state update x := (x / f) * M + c + (x % f)
+            local int q = x / f
+            local int r = x % f
+            x -= q * f + r
+            x += q * 4 + c + r
+            delocal int r = x % 4 - c
+            delocal int q = x / 4
+
+            delocal int c = sym - 1
+            delocal int f = 1 + 2 * (sym - 1)
+            delocal int sym = 1 + (x % 4 != 0)
+        end
+
+class Program
+    int[] s
+    int x
+    int[] bits
+    int nbits
+    method main()
+        new int[6] s
+        new int[12] bits
+        s[0] += 2
+        s[1] += 2
+        s[2] += 1
+        s[3] += 2
+        s[4] += 2
+        s[5] += 2
+
+        local RANS r = nil
+        new RANS r
+        call r::encode(s, 6, x, bits, nbits)
+        delete RANS r
+        delocal RANS r = nil

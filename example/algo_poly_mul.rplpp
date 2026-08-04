@@ -1,0 +1,37 @@
+// Reversible polynomial multiplication
+// p(x) = 1 + 2x + 3x^2  (coeffs [1,2,3])
+// q(x) = 4 + 5x          (coeffs [4,5])
+// p*q = 4 + 13x + 22x^2 + 15x^3 (coeffs [4,13,22,15])
+
+class PolyMul
+    method multiply(int[] p, int np, int[] q, int nq, int[] r)
+        for i in (0..np-1) do
+            for j in (0..nq-1) do
+                local int k = i + j
+                r[k] += p[i] * q[j]
+                delocal int k = i + j
+            end
+        end
+
+class Program
+    int[] p
+    int[] q
+    int[] r
+    method main()
+        new int[3] p
+        new int[2] q
+        new int[4] r
+        p[0] += 1
+        p[1] += 2
+        p[2] += 3
+        q[0] += 4
+        q[1] += 5
+        local PolyMul pm = nil
+        new PolyMul pm
+        local int np = 3
+        local int nq = 2
+        call pm::multiply(p, np, q, nq, r)
+        delocal int nq = 2
+        delocal int np = 3
+        delete PolyMul pm
+        delocal PolyMul pm = nil

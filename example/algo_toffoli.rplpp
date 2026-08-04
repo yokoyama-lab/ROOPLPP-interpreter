@@ -1,0 +1,51 @@
+// Universal reversible logic gates, ported from PyJanus
+// example/reversible_gates.ja.
+//
+//   toffoli(a, b, t) : t ^= a * b        flip the target iff both controls are 1
+//   fredkin(c, x, y) : if c then x <=> y  swap the pair iff the control is 1
+//
+// Both preserve their controls and are their own inverses, so `uncall` and
+// `call` do the same thing; together they are universal for reversible
+// computation.  Array elements cannot be reference arguments in ROOPL++, so
+// the gates take the arrays plus the lane index.
+//
+// Lanes 0 and 2 have their control set, so those lanes swap p and q; the
+// Toffoli then sets ctrl[3] = ctrl[0] * ctrl[2] = 1.
+
+class Gates
+    method toffoli(int[] c, int i, int j, int k)
+        c[k] ^= c[i] * c[j]
+
+    method fredkin(int[] c, int i, int[] x, int[] y, int k)
+        if c[i] = 1 then
+            x[k] <=> y[k]
+        fi c[i] = 1
+
+class Program
+    int[] ctrl
+    int[] p
+    int[] q
+    method main()
+        new int[4] ctrl
+        new int[4] p
+        new int[4] q
+
+        ctrl[0] += 1
+        ctrl[2] += 1
+        p[0] += 5
+        p[1] += 6
+        p[2] += 7
+        p[3] += 8
+        q[0] += 50
+        q[1] += 60
+        q[2] += 70
+        q[3] += 80
+
+        local Gates g = nil
+        new Gates g
+        for i in (0..3) do
+            call g::fredkin(ctrl, i, p, q, i)
+        end
+        call g::toffoli(ctrl, 0, 2, 3)
+        delete Gates g
+        delocal Gates g = nil

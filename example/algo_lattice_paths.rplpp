@@ -1,0 +1,44 @@
+// Reversible lattice path counting (grid paths from (0,0) to (m,n))
+// Only right (R) and down (D) moves allowed
+// dp[i*(n+1)+j] = number of paths from (0,0) to (i,j)
+// m=4, n=4 -> C(8,4) = 70 paths
+
+class LatticePaths
+    method count(int m, int n, int[] dp)
+        local int cols = n + 1
+        // First row and column = 1
+        for i in (0..m) do
+            local int idx = i * cols
+            dp[idx] += 1
+            delocal int idx = i * cols
+        end
+        for j in (1..n) do
+            dp[j] += 1
+        end
+        // Fill: dp[i][j] = dp[i-1][j] + dp[i][j-1]
+        for i in (1..m) do
+            for j in (1..n) do
+                local int idx = i * cols + j
+                local int up = (i - 1) * cols + j
+                local int left = i * cols + (j - 1)
+                dp[idx] += dp[up] + dp[left]
+                delocal int left = i * cols + (j - 1)
+                delocal int up = (i - 1) * cols + j
+                delocal int idx = i * cols + j
+            end
+        end
+        delocal int cols = n + 1
+
+class Program
+    int[] dp
+    method main()
+        new int[25] dp
+        local LatticePaths lp = nil
+        new LatticePaths lp
+        local int m = 4
+        local int n = 4
+        call lp::count(m, n, dp)
+        delocal int n = 4
+        delocal int m = 4
+        delete LatticePaths lp
+        delocal LatticePaths lp = nil

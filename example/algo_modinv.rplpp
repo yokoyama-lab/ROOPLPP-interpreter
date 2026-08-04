@@ -1,0 +1,36 @@
+// Reversible modular inverse via Fermat's little theorem
+// a^(-1) ≡ a^(p-2) mod p (when p is prime)
+// a=3, p=11 -> inv=4 (because 3*4 = 12 ≡ 1 mod 11)
+
+class ModInv
+    method modpow(int base, int exp, int p, int result, int[] hist)
+        result ^= 1
+        if exp >= 1 then
+            for i in (1..exp) do
+                hist[i-1] += result
+                local int tmp = result
+                result -= tmp
+                result += (tmp * base) % p
+                delocal int tmp = hist[i-1]
+            end
+        fi exp >= 1
+
+    method modinverse(int a, int p, int result, int[] hist)
+        local int exp = p - 2
+        call modpow(a, exp, p, result, hist)
+        delocal int exp = p - 2
+
+class Program
+    int result
+    int[] hist
+    method main()
+        new int[9] hist
+        local ModInv mi = nil
+        new ModInv mi
+        local int a = 3
+        local int p = 11
+        call mi::modinverse(a, p, result, hist)
+        delocal int p = 11
+        delocal int a = 3
+        delete ModInv mi
+        delocal ModInv mi = nil

@@ -1,0 +1,73 @@
+// Glaisher's bijection for Euler's partition theorem, ported from PyJanus
+// example/glaisher.ja.
+//
+// A partition into odd parts is turned into a partition into distinct parts:
+// the multiplicity of the odd part 2i+1 is expanded in binary, and every set
+// bit k contributes the distinct part (2i+1) * 2^k.  Uniqueness of the
+// factorisation m = odd * 2^k is what makes the map a bijection, so the
+// program is reversible with no logging at all.
+//
+// odd[i]     = multiplicity of the odd part 2i+1
+// dist[m-1]  = 1 iff m occurs in the resulting partition
+//
+// Input 1+1+1+5 (odd[0] = 3, odd[2] = 1) -> distinct parts 1 + 2 + 5.
+//
+// ROOPL++ has no *= or /=, so doubling and halving are written with a local
+// and a compensating delocal assertion.
+
+class Glaisher
+    // t := t * 2^k  (destructive, and its own inverse under uncall)
+    method doubleK(int t, int k)
+        for j in (0..k) do
+            if j > 0 then
+                local int h = t
+                t += h
+                delocal int h = t / 2
+            fi j > 0
+        end
+
+    // p += 2^k, computed with Bennett's compute-copy-uncompute pattern
+    method pow2(int k, int p)
+        local int t = 1
+        call doubleK(t, k)
+        p += t
+        uncall doubleK(t, k)
+        delocal int t = 1
+
+    method transform(int[] odd, int[] dist, int limit, int nOdd, int nBits)
+        for i in (0..nOdd-1) do
+            for k in (0..nBits-1) do
+                local int p = 0
+                call pow2(k, p)
+                local int m = (2 * i + 1) * p
+                if m <= limit then
+                    if odd[i] % 2 = 1 then
+                        odd[i] -= 1
+                        dist[m-1] += 1
+                    fi dist[m-1] = 1
+                fi m <= limit
+                delocal int m = (2 * i + 1) * p
+                uncall pow2(k, p)
+                delocal int p = 0
+                // odd[i] := odd[i] / 2  (exact: the low bit was just consumed)
+                local int h = odd[i] / 2
+                odd[i] -= h
+                delocal int h = odd[i]
+            end
+        end
+
+class Program
+    int[] odd
+    int[] dist
+    method main()
+        new int[6] odd
+        new int[12] dist
+
+        odd[0] += 3     // three parts equal to 1
+        odd[2] += 1     // one part equal to 5
+
+        local Glaisher g = nil
+        new Glaisher g
+        call g::transform(odd, dist, 12, 6, 4)
+        delete Glaisher g
+        delocal Glaisher g = nil

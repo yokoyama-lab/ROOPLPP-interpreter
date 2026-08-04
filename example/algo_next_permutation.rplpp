@@ -1,0 +1,74 @@
+// Reversible next permutation (lexicographic successor), ported from PyJanus
+// example/next_permutation.ja.
+//
+// The two index searches are performed on the original array and each scan
+// variable is delocalised against its own result, so they leave no garbage.
+// The pivot i and the successor index j are not recoverable from the result
+// alone, so they -- and only they -- are logged in glog: two words per call,
+// exactly the destroyed information.
+//
+// Precondition: p is not the last (descending) permutation.
+// [6,7,3,5,4,2,1,0] -> [6,7,4,0,1,2,3,5], glog = [4, 2]
+
+class NextPermutation
+    // ii := largest index with p[ii] < p[ii+1]
+    method findPivot(int[] p, int n, int ii)
+        local int k = n - 2
+        from k = n - 2 loop
+            k -= 1
+        until p[k] < p[k+1]
+        ii ^= k
+        delocal int k = ii
+
+    // jj := largest index with p[jj] > p[i]
+    method findSucc(int[] p, int n, int i, int jj)
+        local int k = n - 1
+        from k = n - 1 loop
+            k -= 1
+        until p[k] > p[i]
+        jj ^= k
+        delocal int k = jj
+
+    method nextPerm(int[] p, int n, int[] glog)
+        local int i = 0
+        call findPivot(p, n, i)
+
+        local int j = 0
+        call findSucc(p, n, i, j)
+        p[i] <=> p[j]
+        glog[0] += j
+        j -= glog[0]
+        delocal int j = 0
+
+        // reverse the suffix p[i+1 .. n-1]
+        local int k = 0
+        from k = 0 loop
+            p[i+1+k] <=> p[n-1-k]
+            k += 1
+        until k = (n - 1 - i) / 2
+        delocal int k = (n - 1 - i) / 2
+
+        glog[1] += i
+        i -= glog[1]
+        delocal int i = 0
+
+class Program
+    int[] d
+    int[] glog
+    method main()
+        new int[8] d
+        new int[2] glog
+        d[0] += 6
+        d[1] += 7
+        d[2] += 3
+        d[3] += 5
+        d[4] += 4
+        d[5] += 2
+        d[6] += 1
+        d[7] += 0
+
+        local NextPermutation np = nil
+        new NextPermutation np
+        call np::nextPerm(d, 8, glog)
+        delete NextPermutation np
+        delocal NextPermutation np = nil

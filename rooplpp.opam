@@ -1,0 +1,25 @@
+opam-version: "2.0"
+name: "rooplpp"
+version: "1.0.0"
+synopsis: "Interpreter for ROOPL++, a reversible object-oriented language"
+description: """
+An OCaml interpreter for ROOPL++ (Cservenka 2018), a reversible
+object-oriented programming language. Programs can be run forwards and, with
+-inverse, emitted as their inverse program. Built with dune; the library lives
+in lib/, the rplpp executable in bin/, and the OUnit2 test suites in test/.
+"""
+maintainer: "tetsuo-jp@users.noreply.github.com"
+authors: ["Tetsuo Yokoyama"]
+license: "GPL-3.0-only"
+homepage: "https://github.com/yokoyama-lab/ROOPLPP-interpreter"
+bug-reports: "https://github.com/yokoyama-lab/ROOPLPP-interpreter/issues"
+dev-repo: "git+https://github.com/yokoyama-lab/ROOPLPP-interpreter.git"
+depends: [
+  "ocaml" {>= "4.04"}
+  "dune" {>= "3.0"}
+  "ounit2" {with-test}
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]

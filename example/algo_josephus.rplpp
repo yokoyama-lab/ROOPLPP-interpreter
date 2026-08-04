@@ -11,7 +11,9 @@ class Josephus
             hist[i-2] += result
             local int tmp = result + k
             local int r = tmp % i
-            result -= result
+            // 古い result は hist[i-2] に写してある（result -= result は
+            // 逆向きに戻せない）
+            result -= hist[i-2]
             result += r
             delocal int r = result
             delocal int tmp = result + i * ((hist[i-2] + k) / i)

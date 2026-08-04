@@ -1,0 +1,12 @@
+// XOR Swap: swap two integers using only XOR (self-inverse)
+// x=3, y=7 -> x=7, y=3
+
+class Program
+    int x
+    int y
+    method main()
+        x ^= 3
+        y ^= 7
+        x ^= y
+        y ^= x
+        x ^= y

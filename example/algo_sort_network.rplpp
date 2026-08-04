@@ -1,0 +1,57 @@
+// Reversible sorting network, ported from PyJanus
+// example/injective_sort_network.ja.
+//
+// A bare compare-and-swap is not reversible: after it, "swapped" and
+// "not swapped" both end with a <= b, so the decision is lost.  Logging one
+// bit per comparator and turning the exit assertion into a test on that bit
+// makes the comparator -- and hence the whole network -- reversible.
+//
+// The optimal 5-comparator network for 4 elements is used:
+//   (0,1) (2,3) (0,2) (1,3) (1,2)
+//
+// a = [4,2,3,1] is fully reversed, so all five comparators fire (log all 1);
+// b = [1,2,3,4] is already sorted, so no comparator fires (log all 0).
+
+// Array elements cannot be passed as reference arguments in ROOPL++, so the
+// comparator takes the array plus the two indices to compare.
+class SortNetwork
+    method cswap(int[] arr, int i, int j, int[] log, int k)
+        if arr[i] > arr[j] then
+            arr[i] <=> arr[j]
+            log[k] += 1
+        fi log[k] = 1
+
+    method sort4(int[] arr, int[] log)
+        call cswap(arr, 0, 1, log, 0)
+        call cswap(arr, 2, 3, log, 1)
+        call cswap(arr, 0, 2, log, 2)
+        call cswap(arr, 1, 3, log, 3)
+        call cswap(arr, 1, 2, log, 4)
+
+class Program
+    int[] a
+    int[] logA
+    int[] b
+    int[] logB
+    method main()
+        new int[4] a
+        new int[5] logA
+        new int[4] b
+        new int[5] logB
+
+        a[0] += 4
+        a[1] += 2
+        a[2] += 3
+        a[3] += 1
+
+        b[0] += 1
+        b[1] += 2
+        b[2] += 3
+        b[3] += 4
+
+        local SortNetwork s = nil
+        new SortNetwork s
+        call s::sort4(a, logA)
+        call s::sort4(b, logB)
+        delete SortNetwork s
+        delocal SortNetwork s = nil

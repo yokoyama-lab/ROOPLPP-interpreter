@@ -1,0 +1,26 @@
+// Reversible sum of squares: result = sum(a[i]^2)
+// a = [1, 2, 3, 4, 5] -> result = 1+4+9+16+25 = 55
+
+class SumSquares
+    method compute(int[] a, int n, int result)
+        for i in (0..n-1) do
+            result += a[i] * a[i]
+        end
+
+class Program
+    int[] a
+    int result
+    method main()
+        new int[5] a
+        a[0] += 1
+        a[1] += 2
+        a[2] += 3
+        a[3] += 4
+        a[4] += 5
+        local SumSquares s = nil
+        new SumSquares s
+        local int n = 5
+        call s::compute(a, n, result)
+        delocal int n = 5
+        delete SumSquares s
+        delocal SumSquares s = nil

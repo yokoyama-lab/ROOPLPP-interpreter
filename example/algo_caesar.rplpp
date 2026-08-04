@@ -1,0 +1,45 @@
+// Reversible Caesar cipher
+// Encrypts by shifting each element by key (mod 26)
+// call encrypts, uncall decrypts (natural reversibility!)
+// data = [0, 1, 2, 25], key = 3 -> data = [3, 4, 5, 2]
+
+class Caesar
+    method encrypt(int[] data, int n, int key)
+        for i in (0..n-1) do
+            data[i] += key
+            // Wrap around: if >= 26, subtract 26
+            if data[i] >= 26 then
+                data[i] -= 26
+            fi data[i] < key
+        end
+
+class Program
+    int[] data
+    method main()
+        new int[4] data
+        data[0] += 0
+        data[1] += 1
+        data[2] += 2
+        data[3] += 25
+        local Caesar c = nil
+        new Caesar c
+        local int n = 4
+        local int key = 3
+        print("encrypt: ")
+        call c::encrypt(data, n, key)
+        show(data[0]) print(" ")
+        show(data[1]) print(" ")
+        show(data[2]) print(" ")
+        show(data[3]) print("\n")
+        print("decrypt: ")
+        uncall c::encrypt(data, n, key)
+        show(data[0]) print(" ")
+        show(data[1]) print(" ")
+        show(data[2]) print(" ")
+        show(data[3]) print("\n")
+        // Re-encrypt for final state
+        call c::encrypt(data, n, key)
+        delocal int key = 3
+        delocal int n = 4
+        delete Caesar c
+        delocal Caesar c = nil

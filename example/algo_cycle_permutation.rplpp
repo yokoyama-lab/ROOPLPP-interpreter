@@ -1,0 +1,33 @@
+// Reversible cyclic permutation
+// Applies a permutation cycle (p[0] -> p[1] -> ... -> p[k-1] -> p[0])
+// a = [10, 20, 30, 40, 50], perm = [0, 3, 1] (cycle: pos 0->3->1->0)
+// Result: a[0]=40, a[3]=20, a[1]=10, rest unchanged
+// i.e. a = [40, 10, 30, 20, 50]
+
+class CyclePerm
+    method apply(int[] a, int[] perm, int k)
+        for i in (0..k-2) do
+            a[perm[i]] <=> a[perm[i+1]]
+        end
+
+class Program
+    int[] a
+    int[] perm
+    method main()
+        new int[5] a
+        new int[3] perm
+        a[0] += 10
+        a[1] += 20
+        a[2] += 30
+        a[3] += 40
+        a[4] += 50
+        perm[0] += 0
+        perm[1] += 3
+        perm[2] += 1
+        local CyclePerm c = nil
+        new CyclePerm c
+        local int k = 3
+        call c::apply(a, perm, k)
+        delocal int k = 3
+        delete CyclePerm c
+        delocal CyclePerm c = nil

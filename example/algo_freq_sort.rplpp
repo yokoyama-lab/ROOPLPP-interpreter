@@ -1,0 +1,63 @@
+// Reversible frequency counting + sorting by frequency
+// Input data, count frequencies, sort by frequency (descending)
+// data = [3,1,4,1,5,9,2,6,5,3,5] -> freq-sorted symbols
+
+class FreqSort
+    // Count frequencies
+    method countFreq(int[] data, int n, int[] freq, int maxVal)
+        for i in (0..n-1) do
+            freq[data[i]] += 1
+        end
+
+    // Pair-based bubble sort by frequency (descending) with swap history
+    method sortByFreq(int[] symbols, int[] freq, int nsym, int[] hist)
+        local int h = 0
+        for pass in (1..nsym-1) do
+            for j in (0..nsym-2) do
+                if freq[j] < freq[j+1] then
+                    hist[h] ^= 1
+                    freq[j] <=> freq[j+1]
+                    symbols[j] <=> symbols[j+1]
+                fi hist[h] = 1
+                h += 1
+            end
+        end
+        delocal int h = (nsym - 1) * (nsym - 1)
+
+class Program
+    int[] data
+    int[] freq
+    int[] symbols
+    int[] hist
+    method main()
+        new int[11] data
+        new int[10] freq
+        new int[10] symbols
+        new int[81] hist
+        data[0] += 3
+        data[1] += 1
+        data[2] += 4
+        data[3] += 1
+        data[4] += 5
+        data[5] += 9
+        data[6] += 2
+        data[7] += 6
+        data[8] += 5
+        data[9] += 3
+        data[10] += 5
+        // Initialize symbol identities
+        for i in (0..9) do
+            symbols[i] += i
+        end
+        local FreqSort fs = nil
+        new FreqSort fs
+        local int n = 11
+        local int maxVal = 9
+        local int nsym = 10
+        call fs::countFreq(data, n, freq, maxVal)
+        call fs::sortByFreq(symbols, freq, nsym, hist)
+        delocal int nsym = 10
+        delocal int maxVal = 9
+        delocal int n = 11
+        delete FreqSort fs
+        delocal FreqSort fs = nil

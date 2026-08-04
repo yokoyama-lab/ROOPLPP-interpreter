@@ -1,0 +1,26 @@
+// Reversible exponentiation: computes base^exp iteratively
+// result = base^exp (using repeated multiplication)
+// base=2, exp=10 -> result=1024
+
+class Power
+    method pow(int base, int exp, int result)
+        result ^= 1
+        for i in (1..exp) do
+            local int tmp = result
+            result -= tmp
+            result += tmp * base
+            delocal int tmp = result / base
+        end
+
+class Program
+    int result
+    method main()
+        local Power p = nil
+        new Power p
+        local int base = 2
+        local int exp = 10
+        call p::pow(base, exp, result)
+        delocal int exp = 10
+        delocal int base = 2
+        delete Power p
+        delocal Power p = nil

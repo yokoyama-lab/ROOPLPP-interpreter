@@ -1,0 +1,38 @@
+// Reversible Tower of Hanoi
+// Records all moves: move[i] = (src_peg * 10 + dst_peg)
+// n=3 discs: 7 moves
+
+class Hanoi
+    method solve(int n, int src, int dst, int aux, int[] moves, int step)
+        if n = 1 then
+            moves[step] += src * 10 + dst
+            step += 1
+        else
+            n -= 1
+            call solve(n, src, aux, dst, moves, step)
+            n += 1
+            moves[step] += src * 10 + dst
+            step += 1
+            n -= 1
+            call solve(n, aux, dst, src, moves, step)
+            n += 1
+        fi n = 1
+
+class Program
+    int[] moves
+    int step
+    method main()
+        new int[7] moves
+        local Hanoi h = nil
+        new Hanoi h
+        local int n = 3
+        local int src = 1
+        local int dst = 3
+        local int aux = 2
+        call h::solve(n, src, dst, aux, moves, step)
+        delocal int aux = 2
+        delocal int dst = 3
+        delocal int src = 1
+        delocal int n = 3
+        delete Hanoi h
+        delocal Hanoi h = nil
