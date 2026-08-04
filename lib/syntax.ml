@@ -63,17 +63,30 @@ type arg =
   | Id of id (**変数*)
   | Exp of exp (**式*)
 
-(**case文で使われる*)
+(* ------------------------------------------------------------------ *)
+(* switch の枝を組み立てる部品                                          *)
+(*                                                                      *)
+(* switch は二重ガードの条件分岐の入れ子と同じで、枝ごとに**入口の値**と *)
+(* **出口の値**を持つ（coq/roopl.v の rev_switch）。入口の値で枝を選び、  *)
+(* 出口の値で「どの枝を通ったか」を逆向きの実行が判別する。だから出口の  *)
+(* 値が枝どうしで重複してはならない（eval.ml が検査する）。              *)
+(*                                                                      *)
+(* 次の 3 つは「キーワードが書かれていたか」を表すだけの印で、意味は     *)
+(* 持たない。default 節には case も esac も付かないので NoCase/NoEsac、  *)
+(* break を省いた枝は次の枝へ流れる。                                    *)
+(* ------------------------------------------------------------------ *)
+
+(**[case e] が書かれていたか（default 節は [NoCase]）*)
 type case =
   | Case
   | NoCase
 
-(**case文で使われる*)
+(**[esac e] が書かれていたか（default 節は [NoEsac]）*)
 type esac =
   | Esac
   | NoEsac
 
-(**case文で使われるbreak*)
+(**[break] が書かれていたか。無い枝は次の枝へ流れる*)
 type break =
   | Break
   | NoBreak (**breakなし*)
@@ -86,7 +99,18 @@ type stm =
   | Conditional of exp * stm list * stm list * exp (**if e then s else s fi e  or  if e then s fi e*)
   | Loop of exp * stm list * stm list * exp (**from e do s loop s until e or   or  from e do s until e  or  from e loop s until e*)
   | For of id * exp * exp * stm list  (**for x in (e..e) do s end*)(*追加部分for*)
-  | Switch of obj * ((case * exp list) * stm list * (esac * exp list * break)) list * stm list * obj (**switch y case e s esac e break hctiws y*) (*追加部分switch*) 
+  (* switch x  case e.. s esac e.. break  …  default s break  hctiws y
+
+     第 1 引数が入口で見る l 値 x、第 2 引数が枝の並び、第 3 引数が default 節の
+     本体、第 4 引数が出口で見る l 値 y。枝ひとつは
+
+         ((case が書かれていたか, 入口の値の並び),
+          本体,
+          (esac が書かれていたか, 出口の値の並び, break が書かれていたか))
+
+     入口の値の並びに x が一致した枝を通り、出口では y がその枝の出口の値に
+     一致することを表明する（通らなかった枝の出口の値に一致してはならない）。 *)
+  | Switch of obj * ((case * exp list) * stm list * (esac * exp list * break)) list * stm list * obj
   | ObjectBlock of typeId * id * stm list (**construct c x  s  destruct x*)
   | LocalBlock of dataType * id * exp * stm list * exp (**local t x = e s delocal t x = e*)
   | LocalCall of methodId * arg list (**call q(e, ... , e)*)
