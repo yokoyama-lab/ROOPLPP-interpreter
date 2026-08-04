@@ -231,12 +231,18 @@ cd python && python3 -m pytest tests -q     # 219 件（差分163 / 診断22 / �
 
 OCaml 側のバイナリ（`_build/default/bin/main.exe`）が無い場合、差分テストはスキップされる。
 
-カバレッジは bisect_ppx で測れる（`opam install bisect_ppx` が必要）。
+カバレッジは bisect_ppx で測れる（`opam install bisect_ppx` が必要）。計測は
+`lib/dune` の `(instrumentation (backend bisect_ppx))` で用意してあり、**既定では
+無効**（`--instrument-with` を付けたときだけ有効になるので、ふだんのビルドは
+bisect_ppx を要求しない）。
 
 ```
-dune test --force --instrument-with bisect_ppx   # lib/dune に (instrumentation (backend bisect_ppx)) を追加して実行
+dune test --force --instrument-with bisect_ppx
 bisect-ppx-report summary --per-file
 ```
+
+2026-08-04 時点で **88.3%**（1885/2136）。内訳は `diagnostics.ml` 77.8% /
+`eval.ml` 89.6% / `parser.ml` 91.8% / `invert.ml` 95.2% / `pretty.ml` 95.9%。
 
 ## 可逆性の機械検証（Rocq）
 
