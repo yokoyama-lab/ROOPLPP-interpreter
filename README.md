@@ -321,4 +321,4 @@ php -S localhost:9000                  # ローカルサーバ起動
 
 ## ライセンス
 
-MIT。`LICENSE` を参照。
+GPL-3.0-only。`LICENSE` を参照。
