@@ -78,6 +78,11 @@ CASES = [
     # ドットの右側の添字は呼び出し側のスコープで解決する
     ("an out-of-bounds index through a field", "Array index xs[5] is out of bounds",
      "class Box\n int[] xs\n int k\n method init()\n  new int[3] xs\n  k += 2\n  xs[0] += 100\n  xs[1] += 200\n  xs[2] += 300\n\nclass Program\n int r\n int k\n Box b\n method main()\n  new Box b\n  call b::init()\n  k += 1\n  r += b.xs[5]\n"),
+    # 内部的なメッセージが漏れていた経路
+    ("field access on an integer", "Field access needs an object on the left of the dot",
+     "class Box\n int f\n method noop()\n  skip\n\nclass Program\n int x\n method main()\n  x += x.f\n"),
+    ("delete on a nil object", "delete needs an allocated object",
+     "class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n method main()\n  delete Box b\n"),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",

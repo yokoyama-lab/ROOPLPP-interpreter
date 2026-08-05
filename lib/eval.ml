@@ -104,8 +104,8 @@ let rec eval_exp exp env st =
                (* 名前は env' で引くが、添字は ienv のまま *)
                let li, v = lval_val_in ienv xi env' in
                li, v
-            | _ -> failwith "ERROR:expected object value for dot access")
-       | _ -> failwith "ERROR:expected location value for dot access")
+            | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but it holds no object here")
+       | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
     | _ -> failwith "ERROR:not an l-value expression"
   in
   let lval_val y env = lval_val_in env y env in
@@ -217,7 +217,7 @@ let lookup_meth x vl meth =
 (**マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
 let lookup_map id map =
   try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith ("ERROR:class " ^ id ^ " is not valid")
+  with Not_found -> failwith ("ERROR:Class " ^ id ^ " is not declared in this program")
 
 (**環境に指定されたメソッドのフィールドを使われていないロケーションに追加する．eval_stateのOBJBLOKで使用*)
 let rec ext_env_field f n =
@@ -286,8 +286,8 @@ let rec eval_state stml env map st0 =
                (* 名前は env' で引くが、添字は呼び出し側の ienv のまま *)
                let li, v = lval_val_in ~ienv st xi env' in
                li, v
-            | _ -> failwith "ERROR:expected object value for instance variable access")
-       | _ -> failwith "ERROR:expected location value for instance variable access")
+            | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but it holds no object here")
+       | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
     in
     let lval_val y env = lval_val_in st y env in
     (* 書き込みで l 値のロケーションが動いていないことを確認する。
@@ -528,22 +528,22 @@ let rec eval_state stml env map st0 =
     (*LocalCALL*)
     | LocalCall(_mid, _args) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 0
     (*LocalUNCALL*)
     | LocalUncall(_mid, _args) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 1
     (*CALLOBJ*)
     | ObjectCall(obj, _mid, _args) (* call x0::q(a1,...,an) *)->
        let locs, v = lval_val obj env in
-       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object call" in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 0
     (*UNCALLOBJ*)
     | ObjectUncall(obj, _mid, _args) (* uncall x0::q(a1,...,an) *)->
        let locs, v = lval_val obj env in
-       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object uncall" in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 1
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
@@ -587,8 +587,8 @@ let rec eval_state stml env map st0 =
        let (fl, _) = try lookup_map tid map with
          | Failure str -> fail_stm (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
-       let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location for object destruction" in
-       let envf = match lookup_st locs0 st with ObjVal(_, e) -> e | _ -> failwith "ERROR:expected object value for destruction" in
+       let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:delete needs an allocated object, but the variable is nil or not an object" in
+       let envf = match lookup_st locs0 st with ObjVal(_, e) -> e | _ -> failwith "ERROR:delete needs an allocated object, but the variable does not refer to one" in
        let locs1 = if List.length envf = 0 then 0
                    else List.hd (List.map snd envf) in      (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)

@@ -120,6 +120,19 @@ let suite = "test suite for runtime error paths" >::: [
   case "an out-of-bounds index through a field" "Array index xs[5] is out of bounds"
     ("class Box\n int[] xs\n int k\n method init()\n  new int[3] xs\n  k += 2\n  xs[0] += 100\n  xs[1] += 200\n  xs[2] += 300\n\nclass Program\n int r\n int k\n Box b\n method main()\n  new Box b\n  call b::init()\n  k += 1\n  r += b.xs[5]\n");
 
+  (* ---- 内部的なメッセージが漏れていた経路（利用者向けに書き直した） ---- *)
+  case "field access on an integer" "Field access needs an object on the left of the dot"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n int x\n method main()\n  x += x.f\n");
+
+  case "field access on a nil object" "Field access needs an object on the left of the dot"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n int x\n method main()\n  x += b.f\n");
+
+  case "delete on a nil object" "delete needs an allocated object"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n method main()\n  delete Box b\n");
+
+  case "delete on an array variable" "delete needs an allocated object"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n int[] a\n method main()\n  new int[2] a\n  delete Box a\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");
@@ -184,7 +197,7 @@ let suite = "test suite for runtime error paths" >::: [
     ("class T\n method two(int m, int n)\n  m += n\n\n"
      ^ prog "  local T t = nil\n  new T t\n  call t::two(x)\n  delete T t\n  delocal T t = nil\n");
 
-  case "method call on a nil object" "expected location value for object call"
+  case "method call on a nil object" "The receiver of this call is nil or not an object"
     ("class T\n method noop()\n  skip\n\n"
      ^ prog "  local T t = nil\n  call t::noop()\n  delocal T t = nil\n");
 
@@ -195,7 +208,7 @@ let suite = "test suite for runtime error paths" >::: [
   case "no main method" "was not found"
     "class C\n int v\n method notMain()\n  v += 1\n";
 
-  case "unknown class in new" "is not valid"
+  case "unknown class in new" "is not declared in this program"
     (prog "  local Missing m = nil\n  new Missing m\n  delocal Missing m = nil\n");
 
   (* ---- for --------------------------------------------------------- *)

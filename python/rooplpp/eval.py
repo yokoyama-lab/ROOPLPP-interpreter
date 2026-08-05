@@ -149,9 +149,9 @@ def eval_exp(exp: Exp, env: Env, st: State) -> Value:
                                 # 名前は env2 で引くが、添字は ienv のまま
                                 return lval_val(xi, env2, ienv)
                             case _:
-                                raise RuntimeError("ERROR:expected object value for dot access")
+                                raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but it holds no object here")
                     case _:
-                        raise RuntimeError("ERROR:expected location value for dot access")
+                        raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
             case _:
                 raise RuntimeError("ERROR:not an l-value expression")
 
@@ -320,7 +320,7 @@ def lookup_map(id: str, map_: list) -> tuple:
     for cid, fm in map_:
         if cid == id:
             return fm
-    raise RuntimeError(f"ERROR:class {id} is not valid")
+    raise RuntimeError(f"ERROR:Class {id} is not declared in this program")
 
 
 def ext_env_field(fields: list[Decl], n: int) -> Env:
@@ -406,9 +406,9 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                                 # 名前は env2 で引くが、添字は ienv のまま
                                 return lval_val_in(st_, xi, env2, ienv)
                             case _:
-                                raise RuntimeError("ERROR:expected object value for instance variable access")
+                                raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but it holds no object here")
                     case _:
-                        raise RuntimeError("ERROR:expected location value for instance variable access")
+                        raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
 
     def lval_val(y: Obj, env: Env) -> tuple[Locs, Value]:
         return lval_val_in(st, y, env)
@@ -643,12 +643,14 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             except RuntimeError as e:
                 raise StmError(pretty_stms([stm], 0) + "\n" + str(e) + " in this statement")
             l, _ = lval_val(obj, env)
-            l0 = match_locsval(lookup_st(l, st))
+            l0 = match_locsval(
+                lookup_st(l, st),
+                "delete needs an allocated object, but the variable is nil or not an object")
             match lookup_st(l0, st):
                 case ObjVal(_, envf):
                     pass
                 case _:
-                    raise RuntimeError("ERROR:expected object value for destruction")
+                    raise RuntimeError("ERROR:delete needs an allocated object, but the variable does not refer to one")
             l1 = list(envf.values())[0] if envf else 0
             if is_field_zero(st, l1, len(fl)):
                 st2 = st
@@ -723,10 +725,11 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 f"\nERROR: Variable {name} = {Printer.show_val(lookup_st(l, st3))}, But it should be {Printer.show_val(v2)} in this statement")
 
 
-def match_locsval(v: Value) -> Locs:
+def match_locsval(v: Value, msg: str = "The receiver of this call is nil or not an object") -> Locs:
+    """オブジェクト参照を取り出す。msg は文脈ごとに変える（OCaml 側と同じ文面）。"""
     match v:
         case LocsVal(l): return l
-        case _: raise RuntimeError("ERROR:expected location value for 'this'")
+        case _: raise RuntimeError(f"ERROR:{msg}")
 
 
 # --- Switch evaluator ---
