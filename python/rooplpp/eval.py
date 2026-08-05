@@ -499,8 +499,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:Integer value expected in this statement")
             st2 = ext_st(st, lvx, v2)
             # 可逆性の副条件。整数変数への代入は構文的に（coq/roopl.v の E_assign の
-            # x ∉ fv(e)）、フィールドと配列要素は意味的に（E_fassign / E_aassign の
-            # eval e b = eval e a）検査する。後者は別名を構文で近似せずに済む
+            # x ∉ fv(e)）検査する
             match y:
                 case VarArray(x, None):
                     if x in free_vars(e):
@@ -509,11 +508,17 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                             + f"\nERROR:Variable {x} must not occur on both sides"
                               " of this assignment")
                 case _:
-                    if eval_exp(e, env, st2) != v:
-                        raise StmError(
-                            pretty_stms([stm], 0)
-                            + "\nERROR:The right-hand side of this assignment must not be"
-                              " changed by the assignment itself")
+                    pass
+            # 右辺が自分の書き込みで変わらないこと（E_fassign / E_aassign の
+            # eval e b = eval e a）。**整数変数にも掛ける**: 名前が違っても同じ
+            # 場所を指しうる（call q(x, x) のような参照渡しの別名。形式側は
+            # bind_args の改名で構文的に弾けるが、実装はロケーションで束ねるので
+            # 値で見るしかない）
+            if eval_exp(e, env, st2) != v:
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + "\nERROR:The right-hand side of this assignment must not be"
+                      " changed by the assignment itself")
             check_locs_stable(st2, [(y, lvx)])
             return st2
 
