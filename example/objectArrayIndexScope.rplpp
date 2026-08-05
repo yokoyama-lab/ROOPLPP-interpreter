@@ -1,0 +1,33 @@
+// ドットの右側の添字は「呼び出し側」のスコープで解決する。
+// Box も Program も k を持つが、b.xs[k] の k は Program の k (= 1) である。
+// b.xs = [100, 200, 300] なので r = 200 になる（内側の k = 2 を使うと 300）。
+class Box
+    int[] xs
+    int k
+    method init()
+        new int[3] xs
+        k += 2
+        xs[0] += 100
+        xs[1] += 200
+        xs[2] += 300
+    method fin()
+        xs[0] -= 100
+        xs[1] -= 200
+        xs[2] -= 300
+        k -= 2
+        delete int[3] xs
+
+class Program
+    int r
+    int k
+    Box b
+    method main()
+        new Box b
+        call b::init()
+        k += 1
+        r += b.xs[k]
+        b.xs[k] += 5
+        b.xs[k] -= 5
+        k -= 1
+        call b::fin()
+        delete Box b

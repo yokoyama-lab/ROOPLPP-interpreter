@@ -113,6 +113,13 @@ let suite = "test suite for runtime error paths" >::: [
   case "a loop condition that is not an integer" "Integer value expected in the condition"
     (prog "  new int[2] a\n  from a loop\n   skip\n  until a\n");
 
+  (* ---- ドットの右側の添字はどのスコープか ----------------------------
+     o.xs[k] の添字 k は**呼び出し側**の k であって、オブジェクトのフィールド k
+     ではない。以前は l 値の解決がフィールド側の環境で右辺全体を評価していて、
+     内側の k を拾っていた *)
+  case "an out-of-bounds index through a field" "Array index xs[5] is out of bounds"
+    ("class Box\n int[] xs\n int k\n method init()\n  new int[3] xs\n  k += 2\n  xs[0] += 100\n  xs[1] += 200\n  xs[2] += 300\n\nclass Program\n int r\n int k\n Box b\n method main()\n  new Box b\n  call b::init()\n  k += 1\n  r += b.xs[5]\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");

@@ -4,8 +4,6 @@ open Value
 open Pretty
 open Invert
 
-let myassert (cond, msg) = if not cond then failwith msg
-
 (**すでに「どの文で起きたか」を含む実行時エラーを投げる。
    Failure ではなく Util.Runtime_error を使うことで、文を包むラッパが
    同じ文を二重に付けないようにする。 *)
@@ -76,31 +74,41 @@ let comp_op f v1 v2 = IntVal(if f v1 v2 then 1 else 0)
 
 (**式expressionを評価するための関数：環境、ストアを受け取り、値を返す．*)
 let rec eval_exp exp env st =
-  let rec lval_val y env =
+  (* [ienv] は**添字の式**を評価する環境。名前の解決 [env] とは別に持ち回る:
+     ドットの右側（o.xs[i]）では、フィールド名 xs はオブジェクト側の環境で
+     引くが、添字 i は呼び出し側のスコープの変数である。両方を env' にすると
+     o.xs[k] の k がオブジェクトのフィールド k を指してしまう *)
+  let rec lval_val_in ienv y env =
     match strip_epos y with
     | Var(x) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | ArrayElement(x, e) ->
-       let x_index = match eval_exp e env st with
+       let x_index = match eval_exp e ienv st with
          | IntVal(n) -> n
          | _ -> failwith "ERROR:array index must be an integer" in
        let locsvecx = match lookup_val x env st with
          | LocsVec(v) -> v
          | _ -> failwith "ERROR:expected array value" in
-       let locsx' = lookup_vec x_index locsvecx in
+       let locsx' =
+         if x_index >= 0 && x_index < List.length locsvecx
+         then x_index + List.hd locsvecx
+         else failwith ("ERROR:Array index " ^ x ^ "[" ^ string_of_int x_index
+                        ^ "] is out of bounds in this statement") in
        let v = lookup_st locsx' st in
        locsx', v
     | Dot(x, xi) ->
-       let _, locs = lval_val x env in
+       let _, locs = lval_val_in ienv x env in
        (match locs with
        | LocsVal(l)->
           (match lookup_st l st with
             | ObjVal(_c, env') ->
-               let li, v = lval_val xi env' in
+               (* 名前は env' で引くが、添字は ienv のまま *)
+               let li, v = lval_val_in ienv xi env' in
                li, v
             | _ -> failwith "ERROR:expected object value for dot access")
        | _ -> failwith "ERROR:expected location value for dot access")
     | _ -> failwith "ERROR:not an l-value expression"
   in
+  let lval_val y env = lval_val_in env y env in
   match exp with
   (* 位置つきの式：中で落ちたらいちばん内側の位置を例外に載せる *)
   | EPos(p, e) ->
@@ -252,11 +260,11 @@ let rec eval_state stml env map st0 =
     (* y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す。
         ストアを引数に取るのは、書き込んだ後の状態でもう一度解決して
         「l 値が自分の書き込みで動いていないか」を確かめるため *)
-    let rec lval_val_in st y env =
+    let rec lval_val_in ?(ienv = env) st y env =
     match y with
     | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | VarArray(x, Some e) ->
-       let x_index = match eval_exp e env st with
+       let x_index = match eval_exp e ienv st with
          | IntVal(n) -> n
          | _ -> failwith "ERROR:array index must be an integer" in
        let locsvecx = match lookup_val x env st with
@@ -270,12 +278,13 @@ let rec eval_state stml env map st0 =
        let v = lookup_st locsx' st in (*the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->
-       let _, locs = lval_val_in st x env in
+       let _, locs = lval_val_in ~ienv st x env in
        (match locs with
          LocsVal(l) ->
           (match lookup_st l st with
             | ObjVal(_c, env') ->
-               let li, v = lval_val_in st xi env' in
+               (* 名前は env' で引くが、添字は呼び出し側の ienv のまま *)
+               let li, v = lval_val_in ~ienv st xi env' in
                li, v
             | _ -> failwith "ERROR:expected object value for instance variable access")
        | _ -> failwith "ERROR:expected location value for instance variable access")

@@ -119,24 +119,35 @@ def comp_op_eq(f, v1: Value, v2: Value) -> Value:
 # --- Expression evaluation ---
 
 def eval_exp(exp: Exp, env: Env, st: State) -> Value:
-    def lval_val(y: Exp, env: Env):
-        """Return (location, value) for an l-value expression."""
+    def lval_val(y: Exp, env: Env, ienv: Env | None = None):
+        """l 値のロケーションと値を返す。
+
+        ienv は**添字の式**を評価する環境。名前の解決 env とは別に持ち回る:
+        ドットの右側（o.xs[i]）ではフィールド名 xs をオブジェクト側の環境で
+        引くが、添字 i は呼び出し側のスコープの変数である。両方を env2 にすると
+        o.xs[k] の k がオブジェクトのフィールド k を指してしまう。"""
+        if ienv is None:
+            ienv = env
         match strip_epos(y):
             case Var(x):
                 lv = lookup_envs(x, env)
                 return lv, lookup_st(lv, st)
             case ArrayElement(x, e):
-                x_index = match_int(eval_exp(e, env, st), "array index must be an integer")
+                x_index = match_int(eval_exp(e, ienv, st), "array index must be an integer")
                 locsvecx = match_locsvec(lookup_val(x, env, st))
-                locsx = lookup_vec(x_index, locsvecx)
+                if not (0 <= x_index < len(locsvecx)):
+                    raise RuntimeError(
+                        f"ERROR:Array index {x}[{x_index}] is out of bounds in this statement")
+                locsx = x_index + locsvecx[0]
                 return locsx, lookup_st(locsx, st)
             case Dot(x, xi):
-                _, locs = lval_val(x, env)
+                _, locs = lval_val(x, env, ienv)
                 match locs:
                     case LocsVal(l):
                         match lookup_st(l, st):
                             case ObjVal(_, env2):
-                                return lval_val(xi, env2)
+                                # 名前は env2 で引くが、添字は ienv のまま
+                                return lval_val(xi, env2, ienv)
                             case _:
                                 raise RuntimeError("ERROR:expected object value for dot access")
                     case _:
@@ -366,15 +377,19 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             ModOp.ModXor: lambda a, b: a ^ b,
         }[op]
 
-    def lval_val_in(st_: State, y: Obj, env: Env) -> tuple[Locs, Value]:
+    def lval_val_in(st_: State, y: Obj, env: Env,
+                    ienv: Env | None = None) -> tuple[Locs, Value]:
         """l 値のロケーションと値を返す。ストアを引数に取るのは、書き込んだ後の
-        状態でもう一度解決して「l 値が自分の書き込みで動いていないか」を見るため。"""
+        状態でもう一度解決して「l 値が自分の書き込みで動いていないか」を見るため。
+        ienv は添字の式を評価する環境（eval_exp 側の lval_val と同じ理由）。"""
+        if ienv is None:
+            ienv = env
         match y:
             case VarArray(x, None):
                 lv = lookup_envs(x, env)
                 return lv, lookup_st(lv, st_)
             case VarArray(x, idx):
-                x_index = match_int(eval_exp(idx, env, st_), "array index must be an integer")
+                x_index = match_int(eval_exp(idx, ienv, st_), "array index must be an integer")
                 locsvecx = match_locsvec(lookup_val(x, env, st_))
                 if x_index >= 0 and x_index < len(locsvecx):
                     locsx = x_index + locsvecx[0]
@@ -383,12 +398,13 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                         pretty_stms([stm], 0) + f"\nERROR:Array index {x}[{x_index}] is out of bounds in this statement")
                 return locsx, lookup_st(locsx, st_)
             case InstVar(x, xi):
-                _, locs = lval_val_in(st_, x, env)
+                _, locs = lval_val_in(st_, x, env, ienv)
                 match locs:
                     case LocsVal(l):
                         match lookup_st(l, st_):
                             case ObjVal(_, env2):
-                                return lval_val_in(st_, xi, env2)
+                                # 名前は env2 で引くが、添字は ienv のまま
+                                return lval_val_in(st_, xi, env2, ienv)
                             case _:
                                 raise RuntimeError("ERROR:expected object value for instance variable access")
                     case _:
