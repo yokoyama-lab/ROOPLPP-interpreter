@@ -24,7 +24,10 @@ open OUnit2
    新しい構文や検査を足したときは、退化させた入力をここへ追加する。 *)
 
 let dir =
-  let candidates = [ "../degenerate"; "test/degenerate"; "../../test/degenerate" ] in
+  (* dune test は _build/default/test を、dune exec はリポジトリ直下を CWD に
+     するので、両方から見つかる候補を並べる *)
+  let candidates =
+    [ "degenerate"; "test/degenerate"; "../test/degenerate"; "../../test/degenerate" ] in
   try List.find (fun d -> Sys.file_exists (Filename.concat d "div_by_zero.rplpp"))
         candidates
   with Not_found -> assert_failure "test/degenerate/ が見つからない"
