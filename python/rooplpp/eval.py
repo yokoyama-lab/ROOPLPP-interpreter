@@ -413,6 +413,20 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
     def lval_val(y: Obj, env: Env) -> tuple[Locs, Value]:
         return lval_val_in(st, y, env)
 
+    def check_not_same_var(o1: Obj, o2: Obj) -> None:
+        """copy / uncopy の両辺が同じ変数でないこと（coq/roopl.v の x ≠ y）。
+
+        uncopy x x は値を消してしまい逆向きに戻せない。別の変数が同じ
+        オブジェクトを指すのは uncopy の正当な使い方なので、値ではなく
+        ロケーションで比べる。"""
+        l1, _ = lval_val_in(st, o1, env)
+        l2, _ = lval_val_in(st, o2, env)
+        if l1 == l2:
+            raise StmError(
+                pretty_stms([stm], 0)
+                + "\nERROR:copy and uncopy need two different variables;"
+                  " uncopy of a variable with itself would erase its value")
+
     def check_locs_stable(st_: State, targets: list[tuple[Obj, Locs]]) -> None:
         """書き込みで l 値のロケーションが動いていないことを確認する。
 
@@ -691,6 +705,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             raise StmError(pretty_stms([stm], 0) + "\nERROR:All array elements is not zero-cleared in this statement")
 
         case CopyReference(dt, obj1, obj2):
+            check_not_same_var(obj1, obj2)
             locsx2, v = lval_val(obj2, env)
             if v != IntVal(0):
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:variable of right is not nil in this statement")
@@ -698,6 +713,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             return ext_st(st, locsx2, vx)
 
         case UncopyReference(dt, obj1, obj2):
+            check_not_same_var(obj1, obj2)
             _, v1 = lval_val(obj1, env)
             l, v2 = lval_val(obj2, env)
             if v1 == v2:

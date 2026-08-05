@@ -83,6 +83,11 @@ CASES = [
      "class Box\n int f\n method noop()\n  skip\n\nclass Program\n int x\n method main()\n  x += x.f\n"),
     ("delete on a nil object", "delete needs an allocated object",
      "class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n method main()\n  delete Box b\n"),
+    ("uncopy of an integer variable with itself", "two different variables",
+     prog("  x += 1\n  uncopy int x x\n")),
+    ("uncopy of an object with itself", "two different variables",
+     "class Box\n int f\n method noop()\n  skip\n\n"
+     "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n"),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",

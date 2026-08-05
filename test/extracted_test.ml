@@ -725,6 +725,10 @@ let p_copy_not_nil =
 (* 同じ変数への複製（別名禁止の規則そのもの） *)
 let p_copy_self = R.Sobj (nat_of_int 0, v 5, R.Scopy (v 5, v 5))
 
+(* 同じ変数の uncopy。形式側は E_uncopy の x ≠ y で弾く。実装はこれを通して
+   しまい、値を消して往復しなくなっていた（2026-08-05 修正） *)
+let p_uncopy_self = R.Sobj (nat_of_int 0, v 5, R.Suncopy (v 5, v 5))
+
 (* uncopy の両者が別の参照（両方で落ちるはず） *)
 let p_uncopy_mismatch =
   R.Sobj (nat_of_int 0, v 5,
@@ -927,12 +931,14 @@ let suite = "test suite for the extracted verified interpreter" >::: [
       agree "copy and uncopy of a reference" p_copy_uncopy [ 0 ];
       agree "copy onto a variable that is not nil is rejected" p_copy_not_nil [ 0 ];
       agree "copy onto itself is rejected" p_copy_self [ 0 ];
+      agree "uncopy of a variable with itself is rejected" p_uncopy_self [ 0 ];
       agree "uncopy of two different references is rejected" p_uncopy_mismatch [ 0 ];
 
       "the verified interpreter runs copy and uncopy" >:: (fun _ ->
         assert_equal ~printer (Some [ 3 ]) (run_verified p_copy_uncopy [ 0 ]);
         assert_equal ~printer None (run_verified p_copy_not_nil [ 0 ]);
         assert_equal ~printer None (run_verified p_copy_self [ 0 ]);
+        assert_equal ~printer None (run_verified p_uncopy_self [ 0 ]);
         assert_equal ~printer None (run_verified p_uncopy_mismatch [ 0 ]));
 
       (* ゼロクリアを忘れたオブジェクトブロックは意味論どおり落ちる *)

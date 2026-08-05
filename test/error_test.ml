@@ -133,6 +133,21 @@ let suite = "test suite for runtime error paths" >::: [
   case "delete on an array variable" "delete needs an allocated object"
     ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n int[] a\n method main()\n  new int[2] a\n  delete Box a\n");
 
+  (* ---- copy / uncopy の自己別名（E_copy / E_uncopy の x ≠ y） ----------
+     uncopy int x x は x の値を消してしまい、逆向きに走らせても戻らない。
+     オブジェクトだと参照が消えて、確保済みのオブジェクトが回収不能になる
+     （しかもゼロクリア検査は「garbage なし」と報告してしまう） *)
+  case "uncopy of an integer variable with itself" "two different variables"
+    (prog "  x += 1\n  uncopy int x x\n");
+
+  case "copy of a variable with itself" "two different variables"
+    ("class Box\n int f\n method noop()\n  skip\n\n"
+     ^ "class Program\n Box b\n method main()\n  new Box b\n  copy Box b b\n");
+
+  case "uncopy of an object with itself" "two different variables"
+    ("class Box\n int f\n method noop()\n  skip\n\n"
+     ^ "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");

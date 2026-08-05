@@ -294,6 +294,16 @@ let rec eval_state stml env map st0 =
         coq/roopl.v の E_aassign / E_aswap の前提「eval ei b = eval ei a」
         （添字が自分の書き込みで変わらない）にあたる。添字を含まない l 値は
         動きようがないので調べない *)
+    (* copy / uncopy の両辺が同じ変数でないこと。ロケーションで比べるので、
+       別の変数が同じオブジェクトを指す（uncopy の正当な使い方）は通る *)
+    let check_not_same_var o1 o2 =
+      let l1, _ = lval_val_in st o1 env in
+      let l2, _ = lval_val_in st o2 env in
+      if l1 = l2 then
+        fail_stm (pretty_stms [stm] 0 ^
+                    "\nERROR:copy and uncopy need two different variables; \
+                     uncopy of a variable with itself would erase its value")
+    in
     let check_locs_stable st' targets =
       List.iter
         (fun (y, lv) ->
@@ -626,6 +636,11 @@ let rec eval_state stml env map st0 =
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:All array elements is not zero-cleared in this statement")
     (*COPY*)
     | CopyReference(_dt, obj1, obj2) ->      (* copy c x x' *)
+       (* 同じ変数どうしは禁止（coq/roopl.v の E_copy / E_uncopy の x ≠ y）。
+          uncopy x x は値を消してしまい逆向きに戻せない。別の変数が同じ
+          オブジェクトを指すのは uncopy の正当な使い方なので、値ではなく
+          **ロケーション**で比べる *)
+       check_not_same_var obj1 obj2;
        let locsx',v = lval_val obj2 env in  (* v=μ(γ(x)) *)
        if v <> IntVal(0) then               (* x'がnilか確認 *)
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:variable of right is not nil in this statement")
@@ -634,6 +649,7 @@ let rec eval_state stml env map st0 =
        ext_st st locsx' vx                  (* ストア更新μ[l'->v] *)
     (*UNCOPY*)
     | UncopyReference(_dt, obj1, obj2) -> (* uncopy c x x' *)
+       check_not_same_var obj1 obj2;
        let _, v1 = lval_val obj1 env in (* 変数xの値を求める *)
        let locs, v2 = lval_val obj2 env in (* 変数x'の値を求める *)
        if v1 = v2 then                   (* 同じ領域を指しているか確認 *)
