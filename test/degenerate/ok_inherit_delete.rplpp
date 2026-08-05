@@ -1,0 +1,15 @@
+class Base
+    int f
+    method noop()
+        skip
+
+class Derived inherits Base
+    int g
+    method noop2()
+        skip
+
+class Program
+    Base b
+    method main()
+        new Derived b
+        delete Derived b

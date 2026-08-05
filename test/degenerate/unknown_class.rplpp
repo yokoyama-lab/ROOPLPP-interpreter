@@ -1,0 +1,4 @@
+class Program
+    Box b
+    method main()
+        new Box b

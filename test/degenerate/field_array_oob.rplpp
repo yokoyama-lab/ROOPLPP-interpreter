@@ -1,0 +1,12 @@
+class Box
+    int[] xs
+    method init()
+        new int[3] xs
+
+class Program
+    int r
+    Box b
+    method main()
+        new Box b
+        call b::init()
+        r += b.xs[5]

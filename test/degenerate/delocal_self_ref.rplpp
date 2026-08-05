@@ -1,0 +1,9 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        local int t = 0
+        t += 3
+        x += t
+        delocal int t = t
