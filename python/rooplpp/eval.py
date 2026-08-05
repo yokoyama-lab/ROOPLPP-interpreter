@@ -661,8 +661,16 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 lookup_st(l, st),
                 "delete needs an allocated object, but the variable is nil or not an object")
             match lookup_st(l0, st):
-                case ObjVal(_, envf):
-                    pass
+                case ObjVal(acls, envf):
+                    # 解放するクラスが実際のクラスと一致すること
+                    # （coq/roopl.v の E_delete の hc a l = cl）。これが無いと
+                    # フィールド数の違うクラス名で delete したときに消す
+                    # ロケーション数がずれてストアが壊れる
+                    if acls != tid:
+                        raise StmError(
+                            pretty_stms([stm], 0)
+                            + f"\nERROR:This deletes a {acls} as if it were a {tid};"
+                              " the class must match in this statement")
                 case _:
                     raise RuntimeError("ERROR:delete needs an allocated object, but the variable does not refer to one")
             l1 = list(envf.values())[0] if envf else 0

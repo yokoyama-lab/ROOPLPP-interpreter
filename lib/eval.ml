@@ -598,7 +598,15 @@ let rec eval_state stml env map st0 =
          | Failure str -> fail_stm (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
        let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:delete needs an allocated object, but the variable is nil or not an object" in
-       let envf = match lookup_st locs0 st with ObjVal(_, e) -> e | _ -> failwith "ERROR:delete needs an allocated object, but the variable does not refer to one" in
+       let acls, envf = match lookup_st locs0 st with
+         | ObjVal(c, e) -> c, e
+         | _ -> failwith "ERROR:delete needs an allocated object, but the variable does not refer to one" in
+       (* 解放するクラスが実際のクラスと一致すること（coq/roopl.v の E_delete /
+          E_obj の hc a l = cl）。これが無いと、フィールド数の違うクラス名で
+          delete したときに消すロケーション数がずれてストアが壊れる *)
+       if acls <> tid then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:This deletes a " ^ acls ^
+                     " as if it were a " ^ tid ^ "; the class must match in this statement");
        let locs1 = if List.length envf = 0 then 0
                    else List.hd (List.map snd envf) in      (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)

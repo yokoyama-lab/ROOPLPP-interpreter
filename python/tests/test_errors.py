@@ -88,6 +88,10 @@ CASES = [
     ("uncopy of an object with itself", "two different variables",
      "class Box\n int f\n method noop()\n  skip\n\n"
      "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n"),
+    ("delete with a different class", "the class must match",
+     "class A\n int f\n method noop()\n  skip\n\n"
+     "class B\n int g\n int h\n method noop()\n  skip\n\n"
+     "class Program\n A a\n method main()\n  new A a\n  delete B a\n"),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",

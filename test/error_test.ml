@@ -148,6 +148,19 @@ let suite = "test suite for runtime error paths" >::: [
     ("class Box\n int f\n method noop()\n  skip\n\n"
      ^ "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n");
 
+  (* ---- delete のクラスが実際のクラスと一致すること（E_delete の hc a l = cl）
+     一致を見ていなかったので、フィールド数の違うクラス名で delete すると
+     消すロケーション数がずれてストアが壊れ、あとで unbound locations になった *)
+  case "delete with a different class" "the class must match"
+    ("class A\n int f\n method noop()\n  skip\n\n"
+     ^ "class B\n int g\n int h\n method noop()\n  skip\n\n"
+     ^ "class Program\n A a\n method main()\n  new A a\n  delete B a\n");
+
+  case "delete a subclass instance as its superclass" "the class must match"
+    ("class Base\n int f\n method noop()\n  skip\n\n"
+     ^ "class Derived inherits Base\n int g\n method noop2()\n  skip\n\n"
+     ^ "class Program\n Base b\n method main()\n  new Derived b\n  delete Base b\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");
