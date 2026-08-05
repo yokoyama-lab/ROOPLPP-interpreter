@@ -92,6 +92,21 @@ let suite = "test suite for runtime error paths" >::: [
     (prog "  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
      ^ "  delocal int i = 0\n");
 
+  (* ---- 参照渡しの別名（PyJanus の alias-1 / alias-2 に相当） ----------
+     同じ変数を 2 つの仮引数へ渡すと、名前は違っても同じ場所を指す。本体の
+     `a += b` は実質 `x += x` で、逆向きに戻せない（uncall しても元へ戻らない）。
+     形式側は bind_args が仮引数を実引数の名前へ置き換えるので構文的な副条件で
+     弾けるが、実装はロケーションで束ねるので値で見る *)
+  case "the same variable passed to two reference parameters"
+    "must not be changed by the assignment itself"
+    ("class Program\n int x\n method bump(int a, int b)\n  a += b\n"
+     ^ " method main()\n  x += 5\n  call bump(x, x)\n");
+
+  case "the same array passed to two reference parameters"
+    "must not be changed by the assignment itself"
+    ("class Program\n int[] a\n method bump(int[] p, int[] q)\n  p[1] += q[1]\n"
+     ^ " method main()\n  new int[3] a\n  a[1] += 4\n  call bump(a, a)\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");
@@ -224,6 +239,12 @@ let suite = "test suite for runtime error paths" >::: [
   "control: an assignment reading another cell raises nothing" >:: (fun _ ->
     assert_ok (prog ("  new int[2] a\n  a[1] += 5\n  a[0] += a[1]\n"
                      ^ "  a[0] -= 5\n  a[1] -= 5\n  delete int[2] a\n")));
+
+  (* 別名でも壊れない本体は通る。形式側も同じ（同一セルの swap は恒等）ので、
+     「別名だから一律に拒否」ではなく「壊れるときだけ拒否」になっている *)
+  "control: an aliased call whose body is a self-swap raises nothing" >:: (fun _ ->
+    assert_ok ("class Program\n int x\n method sw(int a, int b)\n  a <=> b\n"
+               ^ " method main()\n  x += 5\n  call sw(x, x)\n  x -= 5\n"));
 
   "control: an assignment whose index mentions a variable raises nothing" >:: (fun _ ->
     assert_ok (prog ("  new int[2] a\n  x += 1\n  a[x] += x\n"

@@ -64,6 +64,16 @@ CASES = [
      "must not mention the loop variable",
      prog("  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
           "  delocal int i = 0\n")),
+    # 参照渡しの別名（PyJanus の alias-1 / alias-2 に相当）。同じ変数を 2 つの
+    # 仮引数へ渡すと名前は違っても同じ場所を指し、本体の a += b が実質 x += x になる
+    ("the same variable passed to two reference parameters",
+     "must not be changed by the assignment itself",
+     "class Program\n int x\n method bump(int a, int b)\n  a += b\n"
+     " method main()\n  x += 5\n  call bump(x, x)\n"),
+    ("the same array passed to two reference parameters",
+     "must not be changed by the assignment itself",
+     "class Program\n int[] a\n method bump(int[] p, int[] q)\n  p[1] += q[1]\n"
+     " method main()\n  new int[3] a\n  a[1] += 4\n  call bump(a, a)\n"),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",
@@ -117,6 +127,10 @@ CONTROLS = [
     ("assignment reading another cell",
      prog("  new int[2] a\n  a[1] += 5\n  a[0] += a[1]\n  a[0] -= 5\n  a[1] -= 5\n"
           "  delete int[2] a\n")),
+    # 別名でも壊れない本体は通る（同一セルの swap は恒等）
+    ("aliased call whose body is a self-swap",
+     "class Program\n int x\n method sw(int a, int b)\n  a <=> b\n"
+     " method main()\n  x += 5\n  call sw(x, x)\n  x -= 5\n"),
     ("assignment whose index mentions a variable",
      prog("  new int[2] a\n  x += 1\n  a[x] += x\n  a[x] -= 1\n  x -= 1\n"
           "  delete int[2] a\n")),
