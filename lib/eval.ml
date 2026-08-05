@@ -19,7 +19,8 @@ let ext_st st x v = List.sort (fun x y -> compare (fst x) (fst y)) ((x,v) :: (Li
 
 (**eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
 let rec ext_st_zero st locs n =
-  if n <> 0 then
+  (* n > 0 で止める（gen_locsvec と同じ理由） *)
+  if n > 0 then
     ext_st (ext_st_zero st (locs + 1) (n - 1)) locs (IntVal(0))
   else
     st
@@ -157,7 +158,8 @@ let rec eval_exp exp env st =
 
 (**ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る*)
 let rec gen_locsvec n locs =
-  if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
+  (* n > 0 で止める。n <> 0 だと負の要素数で無限再帰して Stack_overflow になる *)
+  if n > 0 then locs :: gen_locsvec (n - 1) (locs + 1)
   else []
 
 (** callの意味論の関数search_aに相当 *)
@@ -240,7 +242,7 @@ let rec eval_state stml env map st0 =
   let isTrue = function
     | IntVal(0) -> false
     | IntVal(_) -> true
-    | _ -> failwith "ERROR in isTrue" in
+    | _ -> failwith "ERROR:Integer value expected in the condition of this statement" in
   let isFalse x = not (isTrue x) in
   let f = function
     | ModAdd -> (+)
@@ -593,11 +595,17 @@ let rec eval_state stml env map st0 =
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable is not nil in this statement")
        else
        let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
+       if n < 1 then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Array size must be at least 1, but it is "
+                   ^ string_of_int n ^ " in this statement");
        let st2 = ext_st st locs (LocsVec(gen_locsvec n (max_locs st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
        ext_st_zero st2 (max_locs st2 + 1)  n                                  (* ストア拡張 μ[l'1->0,...,l'n->0 *)
     (*ARRDELETE*)
     | ArrayDestruction((_tid, e), obj) ->           (* delete a[e] x *)
        let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
+       if n < 1 then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Array size must be at least 1, but it is "
+                   ^ string_of_int n ^ " in this statement");
        let veclocs,_ = lval_val obj env in         (* l=γ(x) *)
        let vec = match lookup_st veclocs st with LocsVec(v) -> v | _ -> failwith "ERROR:expected array value for deletion" in
        let locs = lookup_vec 0 vec in              (* locs = l'1 *)

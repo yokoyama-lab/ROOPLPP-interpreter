@@ -354,7 +354,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
         match v:
             case IntVal(0): return False
             case IntVal(_): return True
-            case _: raise RuntimeError("ERROR in isTrue")
+            case _: raise RuntimeError("ERROR:Integer value expected in the condition of this statement")
 
     def isFalse(v: Value) -> bool:
         return not isTrue(v)
@@ -647,12 +647,21 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             if v != IntVal(0):
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:Variable is not nil in this statement")
             n = match_int(eval_exp(e, env, st), "array size must be integer")
+            # 要素数 0 以下は degenerate（OCaml 側は負で無限再帰していた）
+            if n < 1:
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + f"\nERROR:Array size must be at least 1, but it is {n} in this statement")
             ml_ = max_locs(st)
             st2 = ext_st(st, l, LocsVec(gen_locsvec(n, ml_ + 1)))
             return ext_st_zero(st2, max_locs(st2) + 1, n)
 
         case ArrayDestruction(tid, e, obj):
             n = match_int(eval_exp(e, env, st), "array size must be integer")
+            if n < 1:
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + f"\nERROR:Array size must be at least 1, but it is {n} in this statement")
             veclocs, _ = lval_val(obj, env)
             vec = match_locsvec(lookup_st(veclocs, st))
             l = lookup_vec(0, vec)

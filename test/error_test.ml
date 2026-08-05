@@ -92,6 +92,27 @@ let suite = "test suite for runtime error paths" >::: [
     (prog "  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
      ^ "  delocal int i = 0\n");
 
+  (* ---- 配列の要素数と条件式（内部メッセージが漏れていた経路） ----------
+     new int[-1] は gen_locsvec が n <> 0 で再帰していたため Stack_overflow で
+     クラッシュしていた（終了コード 2）。new int[0] は lookup_vec の内部
+     メッセージが出ていた *)
+  case "array size is negative" "Array size must be at least 1"
+    (prog "  new int[-1] a\n");
+
+  case "array size is zero" "Array size must be at least 1"
+    (prog "  new int[0] a\n");
+
+  case "delete with a non-positive size" "Array size must be at least 1"
+    (prog "  new int[2] a\n  delete int[0] a\n");
+
+  (* 条件式に整数でない値（配列やオブジェクト）を置くと isTrue の内部
+     メッセージが出ていた *)
+  case "a condition that is not an integer" "Integer value expected in the condition"
+    (prog "  new int[2] a\n  if a then\n   skip\n  fi a\n");
+
+  case "a loop condition that is not an integer" "Integer value expected in the condition"
+    (prog "  new int[2] a\n  from a loop\n   skip\n  until a\n");
+
   (* ---- 算術 -------------------------------------------------------- *)
   case "division by zero" "division by zero"
     (prog "  x += 1 / y\n");

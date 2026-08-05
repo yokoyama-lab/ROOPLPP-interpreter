@@ -64,6 +64,17 @@ CASES = [
      "must not mention the loop variable",
      prog("  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
           "  delocal int i = 0\n")),
+    # 配列の要素数と条件式（内部メッセージが漏れていた経路）
+    ("array size is negative", "Array size must be at least 1",
+     prog("  new int[-1] a\n")),
+    ("array size is zero", "Array size must be at least 1",
+     prog("  new int[0] a\n")),
+    ("delete with a non-positive size", "Array size must be at least 1",
+     prog("  new int[2] a\n  delete int[0] a\n")),
+    ("a condition that is not an integer", "Integer value expected in the condition",
+     prog("  new int[2] a\n  if a then\n   skip\n  fi a\n")),
+    ("a loop condition that is not an integer", "Integer value expected in the condition",
+     prog("  new int[2] a\n  from a loop\n   skip\n  until a\n")),
     ("division by zero", "division by zero", prog("  x += 1 / y\n")),
     ("modulo by zero", "modulo by zero", prog("  x += 1 % y\n")),
     ("conditional exit assertion (then)", "Assertion should be true",
