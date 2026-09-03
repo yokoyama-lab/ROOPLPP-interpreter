@@ -1,0 +1,8 @@
+class Program
+    int x
+    method sw(int p, int q)
+        p <=> q
+    method main()
+        x += 5
+        call sw(x, x)
+        x -= 5

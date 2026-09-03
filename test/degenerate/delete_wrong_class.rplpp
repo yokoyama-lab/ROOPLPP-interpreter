@@ -1,0 +1,16 @@
+class A
+    int f
+    method noop()
+        skip
+
+class B
+    int g
+    int h
+    method noop()
+        skip
+
+class Program
+    A a
+    method main()
+        new A a
+        delete B a

@@ -119,28 +119,39 @@ def comp_op_eq(f, v1: Value, v2: Value) -> Value:
 # --- Expression evaluation ---
 
 def eval_exp(exp: Exp, env: Env, st: State) -> Value:
-    def lval_val(y: Exp, env: Env):
-        """Return (location, value) for an l-value expression."""
+    def lval_val(y: Exp, env: Env, ienv: Env | None = None):
+        """l 値のロケーションと値を返す。
+
+        ienv は**添字の式**を評価する環境。名前の解決 env とは別に持ち回る:
+        ドットの右側（o.xs[i]）ではフィールド名 xs をオブジェクト側の環境で
+        引くが、添字 i は呼び出し側のスコープの変数である。両方を env2 にすると
+        o.xs[k] の k がオブジェクトのフィールド k を指してしまう。"""
+        if ienv is None:
+            ienv = env
         match strip_epos(y):
             case Var(x):
                 lv = lookup_envs(x, env)
                 return lv, lookup_st(lv, st)
             case ArrayElement(x, e):
-                x_index = match_int(eval_exp(e, env, st), "array index must be an integer")
+                x_index = match_int(eval_exp(e, ienv, st), "array index must be an integer")
                 locsvecx = match_locsvec(lookup_val(x, env, st))
-                locsx = lookup_vec(x_index, locsvecx)
+                if not (0 <= x_index < len(locsvecx)):
+                    raise RuntimeError(
+                        f"ERROR:Array index {x}[{x_index}] is out of bounds in this statement")
+                locsx = x_index + locsvecx[0]
                 return locsx, lookup_st(locsx, st)
             case Dot(x, xi):
-                _, locs = lval_val(x, env)
+                _, locs = lval_val(x, env, ienv)
                 match locs:
                     case LocsVal(l):
                         match lookup_st(l, st):
                             case ObjVal(_, env2):
-                                return lval_val(xi, env2)
+                                # 名前は env2 で引くが、添字は ienv のまま
+                                return lval_val(xi, env2, ienv)
                             case _:
-                                raise RuntimeError("ERROR:expected object value for dot access")
+                                raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but it holds no object here")
                     case _:
-                        raise RuntimeError("ERROR:expected location value for dot access")
+                        raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
             case _:
                 raise RuntimeError("ERROR:not an l-value expression")
 
@@ -309,7 +320,7 @@ def lookup_map(id: str, map_: list) -> tuple:
     for cid, fm in map_:
         if cid == id:
             return fm
-    raise RuntimeError(f"ERROR:class {id} is not valid")
+    raise RuntimeError(f"ERROR:Class {id} is not declared in this program")
 
 
 def ext_env_field(fields: list[Decl], n: int) -> Env:
@@ -354,7 +365,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
         match v:
             case IntVal(0): return False
             case IntVal(_): return True
-            case _: raise RuntimeError("ERROR in isTrue")
+            case _: raise RuntimeError("ERROR:Integer value expected in the condition of this statement")
 
     def isFalse(v: Value) -> bool:
         return not isTrue(v)
@@ -366,15 +377,19 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             ModOp.ModXor: lambda a, b: a ^ b,
         }[op]
 
-    def lval_val_in(st_: State, y: Obj, env: Env) -> tuple[Locs, Value]:
+    def lval_val_in(st_: State, y: Obj, env: Env,
+                    ienv: Env | None = None) -> tuple[Locs, Value]:
         """l 値のロケーションと値を返す。ストアを引数に取るのは、書き込んだ後の
-        状態でもう一度解決して「l 値が自分の書き込みで動いていないか」を見るため。"""
+        状態でもう一度解決して「l 値が自分の書き込みで動いていないか」を見るため。
+        ienv は添字の式を評価する環境（eval_exp 側の lval_val と同じ理由）。"""
+        if ienv is None:
+            ienv = env
         match y:
             case VarArray(x, None):
                 lv = lookup_envs(x, env)
                 return lv, lookup_st(lv, st_)
             case VarArray(x, idx):
-                x_index = match_int(eval_exp(idx, env, st_), "array index must be an integer")
+                x_index = match_int(eval_exp(idx, ienv, st_), "array index must be an integer")
                 locsvecx = match_locsvec(lookup_val(x, env, st_))
                 if x_index >= 0 and x_index < len(locsvecx):
                     locsx = x_index + locsvecx[0]
@@ -383,19 +398,34 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                         pretty_stms([stm], 0) + f"\nERROR:Array index {x}[{x_index}] is out of bounds in this statement")
                 return locsx, lookup_st(locsx, st_)
             case InstVar(x, xi):
-                _, locs = lval_val_in(st_, x, env)
+                _, locs = lval_val_in(st_, x, env, ienv)
                 match locs:
                     case LocsVal(l):
                         match lookup_st(l, st_):
                             case ObjVal(_, env2):
-                                return lval_val_in(st_, xi, env2)
+                                # 名前は env2 で引くが、添字は ienv のまま
+                                return lval_val_in(st_, xi, env2, ienv)
                             case _:
-                                raise RuntimeError("ERROR:expected object value for instance variable access")
+                                raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but it holds no object here")
                     case _:
-                        raise RuntimeError("ERROR:expected location value for instance variable access")
+                        raise RuntimeError("ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
 
     def lval_val(y: Obj, env: Env) -> tuple[Locs, Value]:
         return lval_val_in(st, y, env)
+
+    def check_not_same_var(o1: Obj, o2: Obj) -> None:
+        """copy / uncopy の両辺が同じ変数でないこと（coq/roopl.v の x ≠ y）。
+
+        uncopy x x は値を消してしまい逆向きに戻せない。別の変数が同じ
+        オブジェクトを指すのは uncopy の正当な使い方なので、値ではなく
+        ロケーションで比べる。"""
+        l1, _ = lval_val_in(st, o1, env)
+        l2, _ = lval_val_in(st, o2, env)
+        if l1 == l2:
+            raise StmError(
+                pretty_stms([stm], 0)
+                + "\nERROR:copy and uncopy need two different variables;"
+                  " uncopy of a variable with itself would erase its value")
 
     def check_locs_stable(st_: State, targets: list[tuple[Obj, Locs]]) -> None:
         """書き込みで l 値のロケーションが動いていないことを確認する。
@@ -632,12 +662,22 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             except RuntimeError as e:
                 raise StmError(pretty_stms([stm], 0) + "\n" + str(e) + " in this statement")
             l, _ = lval_val(obj, env)
-            l0 = match_locsval(lookup_st(l, st))
+            l0 = match_locsval(
+                lookup_st(l, st),
+                "delete needs an allocated object, but the variable is nil or not an object")
             match lookup_st(l0, st):
-                case ObjVal(_, envf):
-                    pass
+                case ObjVal(acls, envf):
+                    # 解放するクラスが実際のクラスと一致すること
+                    # （coq/roopl.v の E_delete の hc a l = cl）。これが無いと
+                    # フィールド数の違うクラス名で delete したときに消す
+                    # ロケーション数がずれてストアが壊れる
+                    if acls != tid:
+                        raise StmError(
+                            pretty_stms([stm], 0)
+                            + f"\nERROR:This deletes a {acls} as if it were a {tid};"
+                              " the class must match in this statement")
                 case _:
-                    raise RuntimeError("ERROR:expected object value for destruction")
+                    raise RuntimeError("ERROR:delete needs an allocated object, but the variable does not refer to one")
             l1 = list(envf.values())[0] if envf else 0
             if is_field_zero(st, l1, len(fl)):
                 st2 = st
@@ -652,12 +692,21 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             if v != IntVal(0):
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:Variable is not nil in this statement")
             n = match_int(eval_exp(e, env, st), "array size must be integer")
+            # 要素数 0 以下は degenerate（OCaml 側は負で無限再帰していた）
+            if n < 1:
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + f"\nERROR:Array size must be at least 1, but it is {n} in this statement")
             ml_ = max_locs(st)
             st2 = ext_st(st, l, LocsVec(gen_locsvec(n, ml_ + 1)))
             return ext_st_zero(st2, max_locs(st2) + 1, n)
 
         case ArrayDestruction(tid, e, obj):
             n = match_int(eval_exp(e, env, st), "array size must be integer")
+            if n < 1:
+                raise StmError(
+                    pretty_stms([stm], 0)
+                    + f"\nERROR:Array size must be at least 1, but it is {n} in this statement")
             veclocs, _ = lval_val(obj, env)
             vec = match_locsvec(lookup_st(veclocs, st))
             l = lookup_vec(0, vec)
@@ -669,6 +718,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             raise StmError(pretty_stms([stm], 0) + "\nERROR:All array elements is not zero-cleared in this statement")
 
         case CopyReference(dt, obj1, obj2):
+            check_not_same_var(obj1, obj2)
             locsx2, v = lval_val(obj2, env)
             if v != IntVal(0):
                 raise StmError(pretty_stms([stm], 0) + "\nERROR:variable of right is not nil in this statement")
@@ -676,6 +726,7 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
             return ext_st(st, locsx2, vx)
 
         case UncopyReference(dt, obj1, obj2):
+            check_not_same_var(obj1, obj2)
             _, v1 = lval_val(obj1, env)
             l, v2 = lval_val(obj2, env)
             if v1 == v2:
@@ -703,10 +754,11 @@ def _update(stm: Stm, env: Env, map_: list, st: State) -> State:
                 f"\nERROR: Variable {name} = {Printer.show_val(lookup_st(l, st3))}, But it should be {Printer.show_val(v2)} in this statement")
 
 
-def match_locsval(v: Value) -> Locs:
+def match_locsval(v: Value, msg: str = "The receiver of this call is nil or not an object") -> Locs:
+    """オブジェクト参照を取り出す。msg は文脈ごとに変える（OCaml 側と同じ文面）。"""
     match v:
         case LocsVal(l): return l
-        case _: raise RuntimeError("ERROR:expected location value for 'this'")
+        case _: raise RuntimeError(f"ERROR:{msg}")
 
 
 # --- Switch evaluator ---

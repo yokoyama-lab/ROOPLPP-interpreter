@@ -120,6 +120,8 @@ let assert_values name expected =
    ファイル冒頭のコメントが主張している答え（手計算で確認済み）。 *)
 let rewritten_expectations = [
   (* 履歴を引く形へ直したもの *)
+  (* ドットの右側の添字は呼び出し側のスコープ（Box の k=2 ではなく Program の k=1）*)
+  "objectArrayIndexScope.rplpp", [ ("r", 200) ];
   "algo_newton_sqrt.rplpp", [ ("root", 12); ("steps", 5) ];          (* isqrt 144 *)
   "algo_collatz.rplpp",
   [ ("traj[0]", 6); ("traj[1]", 3); ("traj[2]", 10); ("traj[8]", 1); ("steps", 8) ];

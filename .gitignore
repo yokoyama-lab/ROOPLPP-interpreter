@@ -38,3 +38,6 @@ web/dist
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# bisect_ppx のカバレッジ生成物
+*.coverage

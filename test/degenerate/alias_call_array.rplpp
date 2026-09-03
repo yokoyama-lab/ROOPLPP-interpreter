@@ -1,0 +1,8 @@
+class Program
+    int[] a
+    method bump(int[] p, int[] q)
+        p[1] += q[1]
+    method main()
+        new int[3] a
+        a[1] += 4
+        call bump(a, a)
