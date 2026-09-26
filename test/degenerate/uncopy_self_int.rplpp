@@ -1,0 +1,7 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        x += 1
+        uncopy int x x

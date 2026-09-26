@@ -1,0 +1,7 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        x += 3
+        x += x

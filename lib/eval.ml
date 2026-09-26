@@ -4,8 +4,6 @@ open Value
 open Pretty
 open Invert
 
-let myassert (cond, msg) = if not cond then failwith msg
-
 (**すでに「どの文で起きたか」を含む実行時エラーを投げる。
    Failure ではなく Util.Runtime_error を使うことで、文を包むラッパが
    同じ文を二重に付けないようにする。 *)
@@ -19,7 +17,8 @@ let ext_st st x v = List.sort (fun x y -> compare (fst x) (fst y)) ((x,v) :: (Li
 
 (**eval_stateで使用：locsからn-1までのロケーションに対応する値をすべてIntVal(0)にする関数*)
 let rec ext_st_zero st locs n =
-  if n <> 0 then
+  (* n > 0 で止める（gen_locsvec と同じ理由） *)
+  if n > 0 then
     ext_st (ext_st_zero st (locs + 1) (n - 1)) locs (IntVal(0))
   else
     st
@@ -75,31 +74,41 @@ let comp_op f v1 v2 = IntVal(if f v1 v2 then 1 else 0)
 
 (**式expressionを評価するための関数：環境、ストアを受け取り、値を返す．*)
 let rec eval_exp exp env st =
-  let rec lval_val y env =
+  (* [ienv] は**添字の式**を評価する環境。名前の解決 [env] とは別に持ち回る:
+     ドットの右側（o.xs[i]）では、フィールド名 xs はオブジェクト側の環境で
+     引くが、添字 i は呼び出し側のスコープの変数である。両方を env' にすると
+     o.xs[k] の k がオブジェクトのフィールド k を指してしまう *)
+  let rec lval_val_in ienv y env =
     match strip_epos y with
     | Var(x) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | ArrayElement(x, e) ->
-       let x_index = match eval_exp e env st with
+       let x_index = match eval_exp e ienv st with
          | IntVal(n) -> n
          | _ -> failwith "ERROR:array index must be an integer" in
        let locsvecx = match lookup_val x env st with
          | LocsVec(v) -> v
          | _ -> failwith "ERROR:expected array value" in
-       let locsx' = lookup_vec x_index locsvecx in
+       let locsx' =
+         if x_index >= 0 && x_index < List.length locsvecx
+         then x_index + List.hd locsvecx
+         else failwith ("ERROR:Array index " ^ x ^ "[" ^ string_of_int x_index
+                        ^ "] is out of bounds in this statement") in
        let v = lookup_st locsx' st in
        locsx', v
     | Dot(x, xi) ->
-       let _, locs = lval_val x env in
+       let _, locs = lval_val_in ienv x env in
        (match locs with
        | LocsVal(l)->
           (match lookup_st l st with
             | ObjVal(_c, env') ->
-               let li, v = lval_val xi env' in
+               (* 名前は env' で引くが、添字は ienv のまま *)
+               let li, v = lval_val_in ienv xi env' in
                li, v
-            | _ -> failwith "ERROR:expected object value for dot access")
-       | _ -> failwith "ERROR:expected location value for dot access")
+            | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but it holds no object here")
+       | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
     | _ -> failwith "ERROR:not an l-value expression"
   in
+  let lval_val y env = lval_val_in env y env in
   match exp with
   (* 位置つきの式：中で落ちたらいちばん内側の位置を例外に載せる *)
   | EPos(p, e) ->
@@ -157,7 +166,8 @@ let rec eval_exp exp env st =
 
 (**ロケーションのベクトルを生成する関数：第一引数に要素数、第二引数に使われてないロケーションの場所を受け取る*)
 let rec gen_locsvec n locs =
-  if n <> 0 then locs :: gen_locsvec (n - 1) (locs + 1)
+  (* n > 0 で止める。n <> 0 だと負の要素数で無限再帰して Stack_overflow になる *)
+  if n > 0 then locs :: gen_locsvec (n - 1) (locs + 1)
   else []
 
 (** callの意味論の関数search_aに相当 *)
@@ -207,7 +217,7 @@ let lookup_meth x vl meth =
 (**マップのリストから指定されたクラス名のfieldとメソッドのタプルを返す*)
 let lookup_map id map =
   try snd (List.find (fun (x , _) -> x = id) map)
-  with Not_found -> failwith ("ERROR:class " ^ id ^ " is not valid")
+  with Not_found -> failwith ("ERROR:Class " ^ id ^ " is not declared in this program")
 
 (**環境に指定されたメソッドのフィールドを使われていないロケーションに追加する．eval_stateのOBJBLOKで使用*)
 let rec ext_env_field f n =
@@ -240,7 +250,7 @@ let rec eval_state stml env map st0 =
   let isTrue = function
     | IntVal(0) -> false
     | IntVal(_) -> true
-    | _ -> failwith "ERROR in isTrue" in
+    | _ -> failwith "ERROR:Integer value expected in the condition of this statement" in
   let isFalse x = not (isTrue x) in
   let f = function
     | ModAdd -> (+)
@@ -250,11 +260,11 @@ let rec eval_state stml env map st0 =
     (* y (= x or x[n] or y.y) を受けとりそのロケーションと値を返す。
         ストアを引数に取るのは、書き込んだ後の状態でもう一度解決して
         「l 値が自分の書き込みで動いていないか」を確かめるため *)
-    let rec lval_val_in st y env =
+    let rec lval_val_in ?(ienv = env) st y env =
     match y with
     | VarArray(x, None) -> let lv = lookup_envs x env in lv, lookup_st lv st
     | VarArray(x, Some e) ->
-       let x_index = match eval_exp e env st with
+       let x_index = match eval_exp e ienv st with
          | IntVal(n) -> n
          | _ -> failwith "ERROR:array index must be an integer" in
        let locsvecx = match lookup_val x env st with
@@ -268,21 +278,32 @@ let rec eval_state stml env map st0 =
        let v = lookup_st locsx' st in (*the value of x[e1]*)
        locsx', v
     | InstVar(x, xi) ->
-       let _, locs = lval_val_in st x env in
+       let _, locs = lval_val_in ~ienv st x env in
        (match locs with
          LocsVal(l) ->
           (match lookup_st l st with
             | ObjVal(_c, env') ->
-               let li, v = lval_val_in st xi env' in
+               (* 名前は env' で引くが、添字は呼び出し側の ienv のまま *)
+               let li, v = lval_val_in ~ienv st xi env' in
                li, v
-            | _ -> failwith "ERROR:expected object value for instance variable access")
-       | _ -> failwith "ERROR:expected location value for instance variable access")
+            | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but it holds no object here")
+       | _ -> failwith "ERROR:Field access needs an object on the left of the dot, but the value is nil or an integer")
     in
     let lval_val y env = lval_val_in st y env in
     (* 書き込みで l 値のロケーションが動いていないことを確認する。
         coq/roopl.v の E_aassign / E_aswap の前提「eval ei b = eval ei a」
         （添字が自分の書き込みで変わらない）にあたる。添字を含まない l 値は
         動きようがないので調べない *)
+    (* copy / uncopy の両辺が同じ変数でないこと。ロケーションで比べるので、
+       別の変数が同じオブジェクトを指す（uncopy の正当な使い方）は通る *)
+    let check_not_same_var o1 o2 =
+      let l1, _ = lval_val_in st o1 env in
+      let l2, _ = lval_val_in st o2 env in
+      if l1 = l2 then
+        fail_stm (pretty_stms [stm] 0 ^
+                    "\nERROR:copy and uncopy need two different variables; \
+                     uncopy of a variable with itself would erase its value")
+    in
     let check_locs_stable st' targets =
       List.iter
         (fun (y, lv) ->
@@ -525,22 +546,22 @@ let rec eval_state stml env map st0 =
     (*LocalCALL*)
     | LocalCall(_mid, _args) (* call q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 0
     (*LocalUNCALL*)
     | LocalUncall(_mid, _args) (* uncall q(y1,...,yn) *)->
        let locs = lookup_envs "this" env in                   (* γ(this) = l *)
-       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for 'this'" in
+       let locs2 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 1
     (*CALLOBJ*)
     | ObjectCall(obj, _mid, _args) (* call x0::q(a1,...,an) *)->
        let locs, v = lval_val obj env in
-       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object call" in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 0
     (*UNCALLOBJ*)
     | ObjectUncall(obj, _mid, _args) (* uncall x0::q(a1,...,an) *)->
        let locs, v = lval_val obj env in
-       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:expected location value for object uncall" in
+       let locs2 = match v with LocsVal(l) -> l | _ -> failwith "ERROR:The receiver of this call is nil or not an object" in
        mycall locs locs2 1
     (*OBJBLOCK*)
     | ObjectBlock(tid, id, stml) (* construct c x  s destruct x *)->
@@ -584,8 +605,16 @@ let rec eval_state stml env map st0 =
        let (fl, _) = try lookup_map tid map with
          | Failure str -> fail_stm (pretty_stms [stm] 0 ^ "\n" ^ str ^ " in this statement") in
        let locs, _ = lval_val obj env in                    (* l=γ(y) *)
-       let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:expected location for object destruction" in
-       let envf = match lookup_st locs0 st with ObjVal(_, e) -> e | _ -> failwith "ERROR:expected object value for destruction" in
+       let locs0 = match lookup_st locs st with LocsVal(l) -> l | _ -> failwith "ERROR:delete needs an allocated object, but the variable is nil or not an object" in
+       let acls, envf = match lookup_st locs0 st with
+         | ObjVal(c, e) -> c, e
+         | _ -> failwith "ERROR:delete needs an allocated object, but the variable does not refer to one" in
+       (* 解放するクラスが実際のクラスと一致すること（coq/roopl.v の E_delete /
+          E_obj の hc a l = cl）。これが無いと、フィールド数の違うクラス名で
+          delete したときに消すロケーション数がずれてストアが壊れる *)
+       if acls <> tid then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:This deletes a " ^ acls ^
+                     " as if it were a " ^ tid ^ "; the class must match in this statement");
        let locs1 = if List.length envf = 0 then 0
                    else List.hd (List.map snd envf) in      (* locs1=l1 *)
        if is_field_zero st locs1 (List.length fl) then      (* インスタンスフィールドがゼロクリアされているか確認 *)
@@ -601,11 +630,17 @@ let rec eval_state stml env map st0 =
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Variable is not nil in this statement")
        else
        let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
+       if n < 1 then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Array size must be at least 1, but it is "
+                   ^ string_of_int n ^ " in this statement");
        let st2 = ext_st st locs (LocsVec(gen_locsvec n (max_locs st + 1))) in (* ベクトルを生成({l'1,...,l'n}しストアに格納 *)
        ext_st_zero st2 (max_locs st2 + 1)  n                                  (* ストア拡張 μ[l'1->0,...,l'n->0 *)
     (*ARRDELETE*)
     | ArrayDestruction((_tid, e), obj) ->           (* delete a[e] x *)
        let n = match eval_exp e env st with IntVal(n) -> n | _ -> failwith "ERROR:array size must be integer" in
+       if n < 1 then
+         fail_stm (pretty_stms [stm] 0 ^ "\nERROR:Array size must be at least 1, but it is "
+                   ^ string_of_int n ^ " in this statement");
        let veclocs,_ = lval_val obj env in         (* l=γ(x) *)
        let vec = match lookup_st veclocs st with LocsVec(v) -> v | _ -> failwith "ERROR:expected array value for deletion" in
        let locs = lookup_vec 0 vec in              (* locs = l'1 *)
@@ -617,6 +652,11 @@ let rec eval_state stml env map st0 =
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:All array elements is not zero-cleared in this statement")
     (*COPY*)
     | CopyReference(_dt, obj1, obj2) ->      (* copy c x x' *)
+       (* 同じ変数どうしは禁止（coq/roopl.v の E_copy / E_uncopy の x ≠ y）。
+          uncopy x x は値を消してしまい逆向きに戻せない。別の変数が同じ
+          オブジェクトを指すのは uncopy の正当な使い方なので、値ではなく
+          **ロケーション**で比べる *)
+       check_not_same_var obj1 obj2;
        let locsx',v = lval_val obj2 env in  (* v=μ(γ(x)) *)
        if v <> IntVal(0) then               (* x'がnilか確認 *)
          fail_stm (pretty_stms [stm] 0 ^ "\nERROR:variable of right is not nil in this statement")
@@ -625,6 +665,7 @@ let rec eval_state stml env map st0 =
        ext_st st locsx' vx                  (* ストア更新μ[l'->v] *)
     (*UNCOPY*)
     | UncopyReference(_dt, obj1, obj2) -> (* uncopy c x x' *)
+       check_not_same_var obj1 obj2;
        let _, v1 = lval_val obj1 env in (* 変数xの値を求める *)
        let locs, v2 = lval_val obj2 env in (* 変数x'の値を求める *)
        if v1 = v2 then                   (* 同じ領域を指しているか確認 *)

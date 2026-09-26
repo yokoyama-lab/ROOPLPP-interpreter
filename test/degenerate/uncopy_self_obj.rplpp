@@ -1,0 +1,10 @@
+class Box
+    int f
+    method noop()
+        skip
+
+class Program
+    Box b
+    method main()
+        new Box b
+        uncopy Box b b

@@ -1,0 +1,7 @@
+class Program
+    int x
+    method bump(int p, int q)
+        p += q
+    method main()
+        x += 5
+        call bump(x, x)

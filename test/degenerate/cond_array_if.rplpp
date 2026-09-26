@@ -1,0 +1,9 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        new int[2] a
+        if a then
+         skip
+        fi a

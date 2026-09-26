@@ -1,0 +1,11 @@
+class Box
+    int f
+    method noop()
+        skip
+
+class Program
+    int[] a
+    int x
+    method main()
+        new int[2] a
+        x += a.f

@@ -1,0 +1,7 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        new int[2] a
+        delete int[0] a

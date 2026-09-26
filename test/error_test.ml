@@ -92,6 +92,74 @@ let suite = "test suite for runtime error paths" >::: [
     (prog "  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
      ^ "  delocal int i = 0\n");
 
+  (* ---- 配列の要素数と条件式（内部メッセージが漏れていた経路） ----------
+     new int[-1] は gen_locsvec が n <> 0 で再帰していたため Stack_overflow で
+     クラッシュしていた（終了コード 2）。new int[0] は lookup_vec の内部
+     メッセージが出ていた *)
+  case "array size is negative" "Array size must be at least 1"
+    (prog "  new int[-1] a\n");
+
+  case "array size is zero" "Array size must be at least 1"
+    (prog "  new int[0] a\n");
+
+  case "delete with a non-positive size" "Array size must be at least 1"
+    (prog "  new int[2] a\n  delete int[0] a\n");
+
+  (* 条件式に整数でない値（配列やオブジェクト）を置くと isTrue の内部
+     メッセージが出ていた *)
+  case "a condition that is not an integer" "Integer value expected in the condition"
+    (prog "  new int[2] a\n  if a then\n   skip\n  fi a\n");
+
+  case "a loop condition that is not an integer" "Integer value expected in the condition"
+    (prog "  new int[2] a\n  from a loop\n   skip\n  until a\n");
+
+  (* ---- ドットの右側の添字はどのスコープか ----------------------------
+     o.xs[k] の添字 k は**呼び出し側**の k であって、オブジェクトのフィールド k
+     ではない。以前は l 値の解決がフィールド側の環境で右辺全体を評価していて、
+     内側の k を拾っていた *)
+  case "an out-of-bounds index through a field" "Array index xs[5] is out of bounds"
+    ("class Box\n int[] xs\n int k\n method init()\n  new int[3] xs\n  k += 2\n  xs[0] += 100\n  xs[1] += 200\n  xs[2] += 300\n\nclass Program\n int r\n int k\n Box b\n method main()\n  new Box b\n  call b::init()\n  k += 1\n  r += b.xs[5]\n");
+
+  (* ---- 内部的なメッセージが漏れていた経路（利用者向けに書き直した） ---- *)
+  case "field access on an integer" "Field access needs an object on the left of the dot"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n int x\n method main()\n  x += x.f\n");
+
+  case "field access on a nil object" "Field access needs an object on the left of the dot"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n int x\n method main()\n  x += b.f\n");
+
+  case "delete on a nil object" "delete needs an allocated object"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n method main()\n  delete Box b\n");
+
+  case "delete on an array variable" "delete needs an allocated object"
+    ("class Box\n int f\n method noop()\n  skip\n\nclass Program\n int[] a\n method main()\n  new int[2] a\n  delete Box a\n");
+
+  (* ---- copy / uncopy の自己別名（E_copy / E_uncopy の x ≠ y） ----------
+     uncopy int x x は x の値を消してしまい、逆向きに走らせても戻らない。
+     オブジェクトだと参照が消えて、確保済みのオブジェクトが回収不能になる
+     （しかもゼロクリア検査は「garbage なし」と報告してしまう） *)
+  case "uncopy of an integer variable with itself" "two different variables"
+    (prog "  x += 1\n  uncopy int x x\n");
+
+  case "copy of a variable with itself" "two different variables"
+    ("class Box\n int f\n method noop()\n  skip\n\n"
+     ^ "class Program\n Box b\n method main()\n  new Box b\n  copy Box b b\n");
+
+  case "uncopy of an object with itself" "two different variables"
+    ("class Box\n int f\n method noop()\n  skip\n\n"
+     ^ "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n");
+
+  (* ---- delete のクラスが実際のクラスと一致すること（E_delete の hc a l = cl）
+     一致を見ていなかったので、フィールド数の違うクラス名で delete すると
+     消すロケーション数がずれてストアが壊れ、あとで unbound locations になった *)
+  case "delete with a different class" "the class must match"
+    ("class A\n int f\n method noop()\n  skip\n\n"
+     ^ "class B\n int g\n int h\n method noop()\n  skip\n\n"
+     ^ "class Program\n A a\n method main()\n  new A a\n  delete B a\n");
+
+  case "delete a subclass instance as its superclass" "the class must match"
+    ("class Base\n int f\n method noop()\n  skip\n\n"
+     ^ "class Derived inherits Base\n int g\n method noop2()\n  skip\n\n"
+     ^ "class Program\n Base b\n method main()\n  new Derived b\n  delete Base b\n");
   (* ---- 参照渡しの別名（PyJanus の alias-1 / alias-2 に相当） ----------
      同じ変数を 2 つの仮引数へ渡すと、名前は違っても同じ場所を指す。本体の
      `a += b` は実質 `x += x` で、逆向きに戻せない（uncall しても元へ戻らない）。
@@ -171,7 +239,7 @@ let suite = "test suite for runtime error paths" >::: [
     ("class T\n method two(int m, int n)\n  m += n\n\n"
      ^ prog "  local T t = nil\n  new T t\n  call t::two(x)\n  delete T t\n  delocal T t = nil\n");
 
-  case "method call on a nil object" "expected location value for object call"
+  case "method call on a nil object" "The receiver of this call is nil or not an object"
     ("class T\n method noop()\n  skip\n\n"
      ^ prog "  local T t = nil\n  call t::noop()\n  delocal T t = nil\n");
 
@@ -182,7 +250,7 @@ let suite = "test suite for runtime error paths" >::: [
   case "no main method" "was not found"
     "class C\n int v\n method notMain()\n  v += 1\n";
 
-  case "unknown class in new" "is not valid"
+  case "unknown class in new" "is not declared in this program"
     (prog "  local Missing m = nil\n  new Missing m\n  delocal Missing m = nil\n");
 
   (* ---- for --------------------------------------------------------- *)

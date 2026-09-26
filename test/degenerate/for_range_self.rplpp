@@ -1,0 +1,10 @@
+class Program
+    int x
+    int y
+    int[] a
+    method main()
+        local int i = 3
+        for i in (0..i) do
+         x += 1
+        end
+        delocal int i = 3

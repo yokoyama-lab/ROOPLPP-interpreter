@@ -1,0 +1,9 @@
+class Box
+    int f
+    method noop()
+        skip
+
+class Program
+    Box b
+    method main()
+        call b::noop()

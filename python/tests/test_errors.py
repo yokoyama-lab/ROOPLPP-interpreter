@@ -64,6 +64,34 @@ CASES = [
      "must not mention the loop variable",
      prog("  local int i = 0\n  for i in (i..3) do\n   x += 1\n  end\n"
           "  delocal int i = 0\n")),
+    # 配列の要素数と条件式（内部メッセージが漏れていた経路）
+    ("array size is negative", "Array size must be at least 1",
+     prog("  new int[-1] a\n")),
+    ("array size is zero", "Array size must be at least 1",
+     prog("  new int[0] a\n")),
+    ("delete with a non-positive size", "Array size must be at least 1",
+     prog("  new int[2] a\n  delete int[0] a\n")),
+    ("a condition that is not an integer", "Integer value expected in the condition",
+     prog("  new int[2] a\n  if a then\n   skip\n  fi a\n")),
+    ("a loop condition that is not an integer", "Integer value expected in the condition",
+     prog("  new int[2] a\n  from a loop\n   skip\n  until a\n")),
+    # ドットの右側の添字は呼び出し側のスコープで解決する
+    ("an out-of-bounds index through a field", "Array index xs[5] is out of bounds",
+     "class Box\n int[] xs\n int k\n method init()\n  new int[3] xs\n  k += 2\n  xs[0] += 100\n  xs[1] += 200\n  xs[2] += 300\n\nclass Program\n int r\n int k\n Box b\n method main()\n  new Box b\n  call b::init()\n  k += 1\n  r += b.xs[5]\n"),
+    # 内部的なメッセージが漏れていた経路
+    ("field access on an integer", "Field access needs an object on the left of the dot",
+     "class Box\n int f\n method noop()\n  skip\n\nclass Program\n int x\n method main()\n  x += x.f\n"),
+    ("delete on a nil object", "delete needs an allocated object",
+     "class Box\n int f\n method noop()\n  skip\n\nclass Program\n Box b\n method main()\n  delete Box b\n"),
+    ("uncopy of an integer variable with itself", "two different variables",
+     prog("  x += 1\n  uncopy int x x\n")),
+    ("uncopy of an object with itself", "two different variables",
+     "class Box\n int f\n method noop()\n  skip\n\n"
+     "class Program\n Box b\n method main()\n  new Box b\n  uncopy Box b b\n"),
+    ("delete with a different class", "the class must match",
+     "class A\n int f\n method noop()\n  skip\n\n"
+     "class B\n int g\n int h\n method noop()\n  skip\n\n"
+     "class Program\n A a\n method main()\n  new A a\n  delete B a\n"),
     # 参照渡しの別名（PyJanus の alias-1 / alias-2 に相当）。同じ変数を 2 つの
     # 仮引数へ渡すと名前は違っても同じ場所を指し、本体の a += b が実質 x += x になる
     ("the same variable passed to two reference parameters",

@@ -1,0 +1,10 @@
+class Box
+    int f
+    method noop()
+        skip
+
+class Program
+    int[] a
+    method main()
+        new int[2] a
+        new Box a
